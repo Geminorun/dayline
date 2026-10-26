@@ -145,6 +145,7 @@ describe('email and QR interfaces', () => {
     const id = '63a561bd-2302-485d-8d89-cea248ffbdf1';
     const fetch = vi.fn(async (path: string) =>
       Response.json({
+        meta: { requestId: 'qr-test', serverTime: '2026-10-26T04:00:00.000Z' },
         data: {
           id,
           purpose: 'login',

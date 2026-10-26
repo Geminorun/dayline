@@ -1,4 +1,11 @@
-import { EXPECTED_USER_HEADER } from '@dayline/contracts';
+import {
+  focusRemovalDetailsSchema,
+  versionConflictDetailsSchema,
+  dataVersionSchema,
+  EXPECTED_USER_HEADER,
+  apiMetaSchema,
+} from '@dayline/contracts';
+import type { ApiMeta } from '@dayline/contracts';
 
 export interface TransportRequest {
   path: string;
@@ -20,12 +27,14 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   account?: boolean;
   native?: boolean;
+  requireDataVersion?: boolean;
 }
 export class ClientError extends Error {
   constructor(
     readonly code: string,
     message: string,
     readonly status = 0,
+    readonly details?: unknown,
   ) {
     super(message);
     this.name = 'ClientError';
@@ -67,6 +76,9 @@ export class ApiClient {
     data: unknown;
     status: number;
     headers: Record<string, string>;
+    dataVersion?: string;
+    serverTime?: string;
+    meta?: ApiMeta;
   }>;
   request<T>(
     path: string,
@@ -75,6 +87,9 @@ export class ApiClient {
     data: T | undefined;
     status: number;
     headers: Record<string, string>;
+    dataVersion?: string;
+    serverTime?: string;
+    meta?: ApiMeta;
   }>;
   async request(
     path: string,
@@ -83,6 +98,9 @@ export class ApiClient {
     data: unknown;
     status: number;
     headers: Record<string, string>;
+    dataVersion?: string;
+    serverTime?: string;
+    meta?: ApiMeta;
   }> {
     const generation = this.generation;
     const userId = this.accountId;
@@ -111,6 +129,12 @@ export class ApiClient {
     }
     if (generation !== this.generation)
       throw new ClientError('STALE_RESPONSE', '账号已变化，请重新读取。');
+    if (response.status === 304 && options.requireDataVersion)
+      throw new ClientError(
+        'INVALID_RESPONSE',
+        '服务器未返回完整保存确认，请刷新后核对记录。',
+        response.status,
+      );
     if (response.status === 304)
       return { status: 304, data: undefined, headers: response.headers };
     if (response.status < 200 || response.status >= 300) {
@@ -132,6 +156,13 @@ export class ApiClient {
         QR_STATE_CONFLICT: '扫码请求已失效，请重新生成。',
         QR_SCANNER_CONFLICT: '二维码已被其他微信扫描，请重新生成。',
         WECHAT_NOT_CONFIGURED: '微信登录暂未配置，请使用邮箱登录。',
+        VERSION_CONFLICT: '记录已有更新，请保留输入并重新核对。',
+        FOCUS_VERSION_CONFLICT: '当天重点已有更新，请重新读取。',
+        FOCUS_REMOVAL_CONFIRMATION_REQUIRED:
+          '日期范围变化将移除重点，请确认具体日期。',
+        DATA_VERSION_CONFLICT: '数据已有变化，请刷新后重新确认。',
+        ENTRY_DELETED: '事项已在回收站。',
+        TRASH_EXPIRED: '事项已超过恢复期限。',
         RATE_LIMITED: '操作过于频繁，请稍后重试。',
       };
       throw new ClientError(
@@ -141,7 +172,29 @@ export class ApiClient {
             ? '登录状态失效，请重新登录。'
             : '操作未完成，请核对输入后重试。'),
         response.status,
+        code === 'FOCUS_REMOVAL_CONFIRMATION_REQUIRED'
+          ? focusRemovalDetailsSchema.safeParse(error.details).data
+          : code === 'VERSION_CONFLICT' || code === 'FOCUS_VERSION_CONFLICT'
+            ? versionConflictDetailsSchema.safeParse(error.details).data
+            : code === 'DATA_VERSION_CONFLICT' &&
+                typeof record(error.details).currentDataVersion === 'string'
+              ? {
+                  currentDataVersion: dataVersionSchema.safeParse(
+                    record(error.details).currentDataVersion,
+                  ).data,
+                }
+              : undefined,
       );
+    }
+    if (response.status === 204) {
+      if (options.requireDataVersion)
+        throw new ClientError(
+          'INVALID_RESPONSE',
+          '服务器未返回完整保存确认，请刷新后核对记录。',
+          response.status,
+        );
+      this.acceptCredentials?.(response.headers);
+      return { status: 204, data: undefined, headers: response.headers };
     }
     const raw = options.native ? response.body : record(response.body).data;
     let data: unknown = raw;
@@ -156,7 +209,33 @@ export class ApiClient {
         );
       }
     }
+    const rawMeta = record(response.body).meta;
+    const parsedMeta = options.native
+      ? undefined
+      : apiMetaSchema.safeParse(rawMeta);
+    if (parsedMeta && !parsedMeta.success)
+      throw new ClientError(
+        'INVALID_RESPONSE',
+        '服务器响应不完整，请稍后重试。',
+        response.status,
+      );
+    const meta = parsedMeta?.data;
+    if (options.requireDataVersion && !meta?.dataVersion)
+      throw new ClientError(
+        'INVALID_RESPONSE',
+        '服务器未返回完整保存确认，请刷新后核对记录。',
+        response.status,
+      );
     this.acceptCredentials?.(response.headers);
-    return { status: response.status, headers: response.headers, data };
+    const dataVersion = meta?.dataVersion;
+    const serverTime = meta?.serverTime;
+    return {
+      status: response.status,
+      headers: response.headers,
+      data,
+      ...(dataVersion ? { dataVersion } : {}),
+      ...(serverTime ? { serverTime } : {}),
+      ...(meta ? { meta } : {}),
+    };
   }
 }

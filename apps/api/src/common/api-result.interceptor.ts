@@ -24,6 +24,9 @@ export class ApiResultInterceptor implements NestInterceptor<
         data,
         meta: {
           requestId: request.requestId,
+          ...(request.committedDataVersion
+            ? { dataVersion: request.committedDataVersion }
+            : {}),
           serverTime: new Date().toISOString(),
         },
       })),

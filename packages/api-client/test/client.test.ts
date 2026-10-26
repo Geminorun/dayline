@@ -31,7 +31,10 @@ describe('platform-free account-aware transport', () => {
     complete?.({
       status: 200,
       headers: { token: 'private-A' },
-      body: { data: { id: 'A' } },
+      body: {
+        data: { id: 'A' },
+        meta: { requestId: 'late', serverTime: '2026-10-26T04:00:00.000Z' },
+      },
     });
     await expect(pending).rejects.toMatchObject({ code: 'STALE_RESPONSE' });
     expect(credentials).toEqual([]);
@@ -75,7 +78,13 @@ describe('platform-free account-aware transport', () => {
       async () => ({
         status: 200,
         headers: { 'set-auth-token': 'private' },
-        body: { data: { id: 'missing-fields' } },
+        body: {
+          data: { id: 'missing-fields' },
+          meta: {
+            requestId: 'invalid-dto',
+            serverTime: '2026-10-26T04:00:00.000Z',
+          },
+        },
       }),
       () => accept++,
     );
@@ -98,4 +107,126 @@ describe('platform-free account-aware transport', () => {
     ).rejects.toMatchObject({ status: 401 });
     expect(anonymous.getAccount()).toBeNull();
   });
+});
+
+it('preserves validated committed metadata and structured business conflicts', async () => {
+  const meta = {
+    requestId: 'test-request',
+    serverTime: '2026-10-26T04:00:00.000Z',
+    dataVersion: '9007199254740993',
+  };
+  const client = new ApiClient(async () => ({
+    status: 200,
+    headers: {},
+    body: { data: true, meta },
+  }));
+  const response = await client.request('/write', {
+    method: 'POST',
+    decode: (value: unknown) => value === true,
+  });
+  expect(response.meta).toEqual(meta);
+  expect(response.dataVersion).toBe(meta.dataVersion);
+  let accepted = false;
+  const invalid = new ApiClient(
+    async () => ({
+      status: 200,
+      headers: {},
+      body: { data: true, meta: { ...meta, dataVersion: 9007199254740992 } },
+    }),
+    () => {
+      accepted = true;
+    },
+  );
+  await expect(invalid.request('/write')).rejects.toMatchObject({
+    code: 'INVALID_RESPONSE',
+  });
+  expect(accepted).toBe(false);
+  const details = {
+    currentVersion: 3,
+    affectedFocusDays: [{ date: '2026-10-25', version: 2 }],
+  };
+  const conflict = new ApiClient(async () => ({
+    status: 409,
+    headers: {},
+    body: { error: { code: 'FOCUS_REMOVAL_CONFIRMATION_REQUIRED', details } },
+  }));
+  await expect(conflict.request('/write')).rejects.toMatchObject({
+    code: 'FOCUS_REMOVAL_CONFIRMATION_REQUIRED',
+    details,
+  });
+  const version = new ApiClient(async () => ({
+    status: 409,
+    headers: {},
+    body: {
+      error: {
+        code: 'FOCUS_VERSION_CONFLICT',
+        details: { expectedVersion: 1, currentVersion: 0 },
+      },
+    },
+  }));
+  await expect(version.request('/write')).rejects.toMatchObject({
+    details: { expectedVersion: 1, currentVersion: 0 },
+  });
+});
+
+it('requires business envelopes and explicit committed write versions before accepting credentials', async () => {
+  const meta = {
+    requestId: 'test-envelope',
+    serverTime: '2026-10-26T04:00:00.000Z',
+  };
+  let accepted = 0;
+  for (const body of [
+    { data: true },
+    { data: true, meta: null },
+    { data: true, meta },
+    { data: true, meta: { ...meta, dataVersion: '0' } },
+  ]) {
+    const client = new ApiClient(
+      async () => ({ status: 200, headers: { token: 'do-not-accept' }, body }),
+      () => accepted++,
+    );
+    await expect(
+      client.request('/write', {
+        method: 'POST',
+        requireDataVersion: true,
+        decode: (value: unknown) => value === true,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+  }
+  const missing = new ApiClient(
+    async () => ({ status: 200, headers: {}, body: { data: true } }),
+    () => accepted++,
+  );
+  await expect(missing.request('/me')).rejects.toMatchObject({
+    code: 'INVALID_RESPONSE',
+  });
+  expect(accepted).toBe(0);
+  const read = new ApiClient(async () => ({
+    status: 200,
+    headers: {},
+    body: { data: true, meta },
+  }));
+  expect((await read.request('/me')).meta).toEqual(meta);
+  const native = new ApiClient(async () => ({
+    status: 200,
+    headers: {},
+    body: { status: true },
+  }));
+  expect((await native.request('/native', { native: true })).data).toEqual({
+    status: true,
+  });
+  const decode = () => {
+    throw new Error('A bodyless response must not be decoded');
+  };
+  for (const status of [204, 304]) {
+    const bodyless = new ApiClient(async () => ({ status, headers: {} }));
+    expect((await bodyless.request('/read', { decode })).status).toBe(status);
+    await expect(
+      bodyless.request('/write', {
+        method: 'POST',
+        requireDataVersion: true,
+        decode,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+  }
 });

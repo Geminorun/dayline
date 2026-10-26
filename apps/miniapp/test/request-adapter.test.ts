@@ -31,7 +31,13 @@ describe('uni native request and isolated credential storage', () => {
       request(options: UniApp.RequestOptions) {
         requests.push(options);
         options.success?.({
-          data: { data: user },
+          data: {
+            data: user,
+            meta: {
+              requestId: 'uni-test',
+              serverTime: '2026-10-26T04:00:00.000Z',
+            },
+          },
           statusCode: 200,
           header: { 'Set-Auth-Token': 'signed.session.value' },
           cookies: [],
@@ -70,7 +76,13 @@ describe('uni native request and isolated credential storage', () => {
       setStorageSync: save,
       request(options: UniApp.RequestOptions) {
         options.success?.({
-          data: { data: { id: user.id } },
+          data: {
+            data: { id: user.id },
+            meta: {
+              requestId: 'invalid-dto',
+              serverTime: '2026-10-26T04:00:00.000Z',
+            },
+          },
           statusCode: 200,
           header: { 'set-auth-token': 'must-not-store' },
           cookies: [],

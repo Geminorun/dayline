@@ -21,6 +21,10 @@ model User {
   authEpoch        Int              @default(1) @map("auth_epoch")
   profileVersion   Int              @default(1) @map("profile_version")
   deletionDueAt    DateTime?        @map("deletion_due_at") @db.Timestamptz(3)
+  dataVersion      BigInt           @default(1) @map("data_version")
+  initializedAt    DateTime?        @map("initialized_at") @db.Timestamptz(3)
+  categories       Category[]
+  entries          Entry[]
   sessions         Session[]
   accounts         Account[]
   wechatIdentities WechatIdentity[]
@@ -112,4 +116,57 @@ model QrRequest {
 
   @@index([expiresAt])
   @@map("qr_requests")
+}
+
+model Category {
+  id        String   @id @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  color     String
+  seedKey   String?  @map("seed_key")
+  version   Int      @default(1)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  entries   Entry[]
+
+  @@unique([userId, name])
+  @@unique([id, userId])
+  @@unique([userId, seedKey])
+  @@map("categories")
+}
+
+model Entry {
+  id           String          @id @db.Uuid
+  userId       String          @map("user_id") @db.Uuid
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId   String          @map("category_id") @db.Uuid
+  category     Category        @relation(fields: [categoryId, userId], references: [id, userId], onDelete: NoAction)
+  title        String
+  startDate    DateTime        @map("start_date") @db.Date
+  endDate      DateTime?       @map("end_date") @db.Date
+  version      Int             @default(1)
+  focusVersion Int             @default(1) @map("focus_version")
+  deletedAt    DateTime?       @map("deleted_at") @db.Timestamptz(3)
+  purgeAfter   DateTime?       @map("purge_after") @db.Timestamptz(3)
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  focusDays    EntryFocusDay[]
+
+  @@index([userId, startDate, id])
+  @@index([userId, categoryId])
+  @@index([userId, deletedAt])
+  @@map("entries")
+}
+
+model EntryFocusDay {
+  entryId   String   @map("entry_id") @db.Uuid
+  entry     Entry    @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  focused   Boolean
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@id([entryId, date])
+  @@map("entry_focus_days")
 }

@@ -48,6 +48,7 @@ onMounted(load);
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <template v-if="current && !loading"
       ><h2>{{ current.displayName }}</h2>
+      <RouterLink to="/review">进入记录与每日回看</RouterLink>
       <dl>
         <dt>邮箱</dt>
         <dd>{{ current.email ?? '尚未绑定真实邮箱' }}</dd>

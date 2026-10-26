@@ -135,3 +135,21 @@ export const wechatLoginDtoSchema: z.ZodType<WechatLoginDto> = z.object({
 export const successDtoSchema = z.object({ success: z.literal(true) });
 export const nativeStatusSchema = z.object({ status: z.literal(true) });
 export const nativeUserSchema = z.object({ user: z.object({ id: z.uuid() }) });
+export * from './records.js';
+
+export const apiMetaSchema = z
+  .object({
+    requestId: z.string().min(1),
+    serverTime: z.iso.datetime(),
+    dataVersion: z
+      .string()
+      .regex(/^[1-9]\d*$/)
+      .optional(),
+  })
+  .transform((meta): ApiMeta => ({
+    requestId: meta.requestId,
+    serverTime: meta.serverTime,
+    ...(meta.dataVersion === undefined
+      ? {}
+      : { dataVersion: meta.dataVersion }),
+  }));

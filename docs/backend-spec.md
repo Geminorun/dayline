@@ -8,7 +8,7 @@
 | 需求基线 | [requirements.md](requirements.md) v1.0 |
 | 客户端 | Vue 网页与 uni-app 微信小程序 |
 | 核心技术 | Node.js、NestJS、TypeScript、PostgreSQL、Prisma、Better Auth、Resend |
-| 当前交付 | 后端框架、认证基础迁移及标准邮箱认证；业务功能待实现，实际范围与验证见 [README](../README.md) |
+| 当前交付 | 邮箱 / 微信统一认证、扫码登录，以及第 9 / 10 节记录核心与完整快照已实现；文件、绑定合并和注销维护待后续阶段，证据见 [阶段 2 交接](stage2-handoff.md) |
 
 阅读索引：
 
@@ -298,7 +298,7 @@ Better Auth 的 `user / account / session / verification` 模型由锁定版本�
 | `life` | 生活 | `#B88EAA` |
 | `other` | 其他 | `#A0A4B3` |
 
-默认值只用于首次建号，不在每次登录时重建或覆盖自定义内容。
+默认值只用于首次建号，不在每次登录时重建或覆盖自定义内容。阶段 2 使用 users AFTER INSERT 触发器实现跨邮箱 / 微信创建路径的同事务初始化不变量，六分类与 initialized_at 一起提交 / 回滚；迁移以显式 BEGIN / COMMIT 原子处理已有账号的分类与标记回填。此设计避开 Better Auth adapter 事务中通过根 Prisma hook 查询未提交用户造成的阻塞；登录和 GET 不执行初始化。
 
 ### 4.6 `entries`
 
@@ -709,6 +709,8 @@ review 和 commit 均提交 `expectedPlanRevision`，commit 另带 `planDigest`�
 }
 ```
 
+该 PATCH 的重点确认体使用独立、有界的 Express JSON 解析：普通事项请求仍为 64 KiB；包含 `focusRemovalAcknowledgement` 时最高 1 MiB、最多 20,000 个确认日期，超体积返回 413、超项数返回 422。该例外只适用于精确事项 PATCH 路径（包括小程序 method override），另对精确 `POST /trash/purge` 的部分清理提供 128 KiB / 1,000 项专用上限，无列表仍维持 64 KiB；服务在用户锁下批量读取归属 / 版本，校验全部通过才整体清理。不改变其他路由或原生认证的请求体处理。阶段 2 已以单事项 10,000 个重点验证完整确认及确认前版本变化。
+
 若缩短区间会移除重点，第一次调用不修改数据，返回 409 `FOCUS_REMOVAL_CONFIRMATION_REQUIRED`，包含当前内容版本以及受影响的 `{date, version}` 列表。前端展示后，用户确认才携带完整确认列表重新提交。
 
 ```json
@@ -770,6 +772,7 @@ review 和 commit 均提交 `expectedPlanRevision`，commit 另带 `planDigest`�
 - 恢复先检查服务器时间严格早于 `purgeAfter`，再清除删除字段并递增版本，保留重点和分类关系。
 - 到期但清理任务尚未运行的记录也不能恢复；权限检查后返回 `TRASH_EXPIRED`。
 - 快照可暂时包含等待物理清理的已到期回收站项，客户端按 `purgeAfter` 与服务器时间禁用恢复；不能因为清理计时器稍晚运行就延长恢复窗口。
+- 阶段 2 的指定清理请求为 `{entries:[{id,expectedVersion}]}`，清空请求为 `{expectedDataVersion:"十进制版本"}`；二者不能混用。
 - 清空全部回收站需 `expectedDataVersion`，事务中检查用户版本，避免把用户未看到的新删除事项一起清掉。
 - 指定部分清理时逐项检查版本；首版整体成功或整体失败，不静默清理有效项并略过冲突项。
 - 永久删除级联清理重点，后台和前端刷新都能反映结果；对缺失事项的旧 PATCH 不降级为创建。
@@ -1076,6 +1079,7 @@ active --申请并确认--> pending_deletion --未到期撤销--> active
 | `QR_ALREADY_CONSUMED` | 409 | 检查当前会话或重新扫码 |
 | `TRASH_EXPIRED` | 410 | 刷新回收站，不尝试恢复 |
 | `VALIDATION_ERROR` | 422 | 按字段提示修正 |
+| `ACCOUNT_NOT_INITIALIZED` | 503 | 业务初始化异常，稍后重试；账号读取 / 恢复通道保留 |
 | `RATE_LIMITED` | 429 | 按 Retry-After 等待，不无限重试 |
 | `WECHAT_UNAVAILABLE` | 503 | 提示微信登录暂不可用，不降级成未验证登录 |
 | `MAIL_UNAVAILABLE` | 503 | 在允许场景提示重发，不删除已经建立的账号 |

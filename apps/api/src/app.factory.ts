@@ -10,6 +10,7 @@ import type { WechatAdapter } from './wechat/wechat-adapter.js';
 import { AppModule } from './app.module.js';
 import type { AppConfig } from './config/environment.js';
 import { ApiExceptionFilter } from './common/api-exception.filter.js';
+import { businessConfirmationBodyParser } from './common/business-body-parser.js';
 import { ApiResultInterceptor } from './common/api-result.interceptor.js';
 
 export async function createApp(
@@ -41,6 +42,7 @@ export async function createApp(
     response.setHeader('Cache-Control', 'no-store');
     next();
   });
+  app.use(businessConfirmationBodyParser);
   app.enableCors({
     origin: config.trustedOrigins,
     credentials: true,

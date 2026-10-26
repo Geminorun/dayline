@@ -60,6 +60,12 @@ async function register(label: string, verify = true) {
     .expect(200);
   const id = userIdSchema.parse(response.body).user.id;
   expect(response.body.token).toBeNull();
+  // Both the library's user INSERT transaction and the shared default initializer
+  // must commit before any later login can issue a usable session.
+  expect(await database.category.count({ where: { userId: id } })).toBe(6);
+  expect(
+    (await database.user.findUniqueOrThrow({ where: { id } })).initializedAt,
+  ).not.toBeNull();
   if (verify) {
     const url = await mailUrl(email, '验证日序邮箱');
     const verification = await request(app.getHttpServer())
@@ -145,6 +151,36 @@ describe('authentication foundation with real PostgreSQL and HTTP', () => {
     expect(anonymous.body.error.code).toBe('UNAUTHENTICATED');
   });
 
+  it('keeps exactly one initialized default set during concurrent first email logins', async () => {
+    const user = await register('concurrent-first-login');
+    const sessions = await Promise.all(
+      Array.from({ length: 4 }, () => login(user.email)),
+    );
+    expect(sessions).toHaveLength(4);
+    expect(await database.category.count({ where: { userId: user.id } })).toBe(
+      6,
+    );
+    const state = await database.user.findUniqueOrThrow({
+      where: { id: user.id },
+    });
+    expect(state.initializedAt).not.toBeNull();
+    expect(state.dataVersion).toBe(1n);
+    const first = await database.category.findFirstOrThrow({
+      where: { userId: user.id },
+    });
+    await database.category.update({
+      where: { id: first.id },
+      data: { name: '邮箱自定分类' },
+    });
+    await login(user.email);
+    expect(
+      (await database.category.findUniqueOrThrow({ where: { id: first.id } }))
+        .name,
+    ).toBe('邮箱自定分类');
+    expect(await database.category.count({ where: { userId: user.id } })).toBe(
+      6,
+    );
+  });
   it('requires verification, resends email, and accepts Cookie and signed Bearer sessions', async () => {
     const user = await register('verification', false);
     await post('/api/auth/sign-in/email')
