@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatBeijingTime } from '@dayline/core';
 import { qrResolvedDtoSchema, qrStatusDtoSchema } from '@dayline/contracts';
 import { ref } from 'vue';
 import { onLoad, onUnload } from '@dcloudio/uni-app';
@@ -130,7 +131,7 @@ onUnload(() => {
       ><template v-if="state === 'scanned'"
         ><text class="text muted"
           >扫描尚未授权。请明确选择确认或取消。有效至
-          {{ new Date(expiresAt).toLocaleTimeString() }}。</text
+          {{ formatBeijingTime(expiresAt) }}。</text
         ><button :disabled="busy" @click="confirm">
           {{
             purpose === 'login'

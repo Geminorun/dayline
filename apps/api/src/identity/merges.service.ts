@@ -32,7 +32,7 @@ export class MergesService {
     work: (tx: Prisma.TransactionClient) => Promise<T>,
     options: { timeout?: number } = {},
   ) {
-    return this.db.$transaction(work, {
+    return this.db.transaction(work, {
       maxWait: 10000,
       timeout: 60000,
       ...options,

@@ -1,6 +1,6 @@
+import { SecurityService } from '../security/security.service.js';
 import { ApiTags, ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { dtoSchema, dataResponseSchema } from '../common/openapi.js';
-import { Clock } from '../records/clock.js';
 import {
   Body,
   Controller,
@@ -53,9 +53,8 @@ function actor(request: Request): Actor {
 @ApiTags('identity')
 @Controller()
 export class IdentityController {
-  private readonly failures = new Map<string, { count: number; at: number }>();
   constructor(
-    @Inject(Clock) private readonly clock: Clock,
+    @Inject(SecurityService) private readonly security: SecurityService,
     @Inject(IdentityService) private readonly identity: IdentityService,
     @Inject(MergesService) private readonly merges: MergesService,
     @Inject(ActionProofService) private readonly proofs: ActionProofService,
@@ -80,26 +79,18 @@ export class IdentityController {
     scope: string,
     work: () => Promise<T>,
   ): Promise<T> {
-    const key = scope + ':' + request.ip + ':' + actor(request).userId,
-      prior = this.failures.get(key),
-      now = this.clock.now().getTime();
-    if (prior && prior.at > now - 600000 && prior.count >= 5) {
-      request.res?.setHeader('Retry-After', '600');
-      throw new AppError(429, 'RATE_LIMITED', '验证失败次数过多，请稍后再试。');
-    }
+    const ip = request.ip ?? 'unknown',
+      userId = actor(request).userId;
+    this.security.checkFailures(scope, ip, userId, request.res);
     try {
       return await work();
     } catch (error) {
-      if (error instanceof AppError && error.code === 'REAUTH_REQUIRED') {
-        if (this.failures.size > 10000) this.failures.clear();
-        this.failures.set(key, {
-          at: now,
-          count: prior && prior.at > now - 600000 ? prior.count + 1 : 1,
-        });
-      }
+      if (error instanceof AppError && error.code === 'REAUTH_REQUIRED')
+        this.security.failure(scope, ip, userId);
       throw error;
     }
   }
+
   @ApiOperation({
     summary:
       '以当前密码或 fresh 微信 code 验证当前身份，签发指定用途五分钟 proof',
@@ -121,9 +112,10 @@ export class IdentityController {
       if (!input.code)
         return await this.identity.passwordReauth(current, input);
       const wx = await this.freshWechat(input.code);
-      return await this.db.$transaction(async (tx) => {
+      return await this.db.transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM users WHERE id=${current.userId}::uuid FOR UPDATE`;
-        await this.proofs.current(tx, current, true);
+        const user = await this.proofs.current(tx, current, true);
+        this.proofs.assertPurpose(user.status, input);
         if (
           !(await tx.wechatIdentity.findFirst({
             where: {

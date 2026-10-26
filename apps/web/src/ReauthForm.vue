@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatBeijingTime } from '@dayline/core';
 import { onBeforeUnmount, ref, watch } from 'vue';
 import {
   identityStatusLabel,
@@ -176,7 +177,7 @@ onBeforeUnmount(() => {
           请使用当前账号的微信扫描并明确确认。状态：{{
             identityStatusLabel(status)
           }}，有效至
-          {{ qr.expiresAt }}
+          {{ formatBeijingTime(qr.expiresAt) }}
         </p>
         <button v-if="status === 'confirmed'" :disabled="busy" @click="consume">
           领取本次验证证明</button

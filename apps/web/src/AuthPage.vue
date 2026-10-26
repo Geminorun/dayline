@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatBeijingTime } from '@dayline/core';
 import {
   qrCreatedDtoSchema,
   qrStatusDtoSchema,
@@ -46,6 +47,23 @@ const message = ref(
       : '',
 );
 const error = ref('');
+const retrySeconds = ref(0);
+let retryTimer: ReturnType<typeof setInterval> | undefined;
+function stopRetry() {
+  if (retryTimer) clearInterval(retryTimer);
+  retryTimer = undefined;
+  retrySeconds.value = 0;
+}
+function waitForRetry(seconds: number) {
+  stopRetry();
+  const until = Date.now() + seconds * 1000;
+  retrySeconds.value = seconds;
+  retryTimer = setInterval(() => {
+    retrySeconds.value = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+    if (!retrySeconds.value) stopRetry();
+  }, 1000);
+}
+const unsubscribeRetry = api.onIdentityChange(stopRetry);
 const qr = ref<QrCreatedDto | null>(null);
 const qrBusy = ref(false);
 const qrMessage = ref('');
@@ -66,6 +84,8 @@ function feedback(cause: unknown) {
     : '操作未完成，请稍后重试。';
 }
 async function submit() {
+  if (disposed || retrySeconds.value > 0) return;
+  const generation = api.getGeneration();
   error.value = '';
   message.value = '';
   if (busy.value) return;
@@ -96,7 +116,12 @@ async function submit() {
       await account.refresh(true);
       account.announce();
       await useWorkspace().switchMode('account');
-      await router.push('/day');
+      await router.push(
+        account.current.value?.status === 'pending_deletion' ||
+          route.query.returnTo === '/account-deletion'
+          ? '/account-deletion'
+          : '/day',
+      );
     } else if (mode.value === 'register') {
       await api.request('/api/auth/sign-up/email', {
         decode: nativeUserSchema.parse,
@@ -117,7 +142,8 @@ async function submit() {
         native: true,
         body: { email: email.value, callbackURL },
       });
-      message.value = '如邮箱需要验证，验证邮件已发送，请查收。';
+      message.value =
+        '验证邮件请求已受理；如该邮箱需要验证，我们会尝试发送。未收到可稍后重试。';
     } else if (mode.value === 'forgot-password') {
       await api.request('/api/auth/request-password-reset', {
         decode: nativeStatusSchema.parse,
@@ -161,8 +187,20 @@ async function submit() {
       message.value = '密码已修改，其他设备会话已退出。';
     }
   } catch (cause) {
+    if (disposed || generation !== api.getGeneration()) return;
     error.value = feedback(cause);
-    if (!api.getAccount()) account.clear();
+    if (
+      cause instanceof ClientError &&
+      cause.status === 429 &&
+      cause.retryAfterSeconds !== undefined
+    )
+      waitForRetry(cause.retryAfterSeconds);
+    if (
+      !api.getAccount() &&
+      cause instanceof ClientError &&
+      cause.status === 401
+    )
+      account.clear();
   } finally {
     busy.value = false;
     password.value = '';
@@ -255,7 +293,12 @@ async function consume() {
     await account.refresh(true);
     account.announce();
     await useWorkspace().switchMode('account');
-    await router.push('/day');
+    await router.push(
+      account.current.value?.status === 'pending_deletion' ||
+        route.query.returnTo === '/account-deletion'
+        ? '/account-deletion'
+        : '/day',
+    );
   } catch (cause) {
     error.value =
       feedback(cause) + ' 请先到当前账号页检查登录结果；未登录时重新扫码。';
@@ -272,6 +315,8 @@ async function cancelSafely() {
 }
 onBeforeUnmount(() => {
   disposed = true;
+  stopRetry();
+  unsubscribeRetry();
   stopPolling();
   resetToken = null;
   password.value = '';
@@ -285,6 +330,9 @@ onBeforeUnmount(() => {
     <h1>{{ titles[mode] ?? '账号' }}</h1>
     <p v-if="message" role="status" class="notice">{{ message }}</p>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
+    <p v-if="retrySeconds > 0" role="status">
+      服务器要求等待 {{ retrySeconds }} 秒后再试。
+    </p>
     <form v-if="mode !== 'verified'" @submit.prevent="submit">
       <label v-if="mode === 'register'"
         >显示名<input
@@ -330,7 +378,7 @@ onBeforeUnmount(() => {
           maxlength="128"
           required
       /></label>
-      <button type="submit" :disabled="busy">
+      <button type="submit" :disabled="busy || retrySeconds > 0">
         {{ busy ? '处理中…' : mode === 'login' ? '邮箱登录' : '提交' }}
       </button>
     </form>
@@ -358,7 +406,7 @@ onBeforeUnmount(() => {
           height="240"
         />
         <p role="status">{{ qrMessage }}</p>
-        <p>有效至 {{ new Date(qr.expiresAt).toLocaleTimeString() }}</p>
+        <p>有效至 {{ formatBeijingTime(qr.expiresAt) }}</p>
         <button
           v-if="qr.status === 'confirmed'"
           :disabled="qrBusy"

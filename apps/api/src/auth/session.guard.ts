@@ -1,3 +1,4 @@
+import { SecurityService } from '../security/security.service.js';
 import { Inject, Injectable } from '@nestjs/common';
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -13,6 +14,7 @@ import { forwardSessionHeaders } from './session-headers.js';
 @Injectable()
 export class SessionGuard implements CanActivate {
   constructor(
+    @Inject(SecurityService) private readonly security: SecurityService,
     @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(AuthAccessService) private readonly access: AuthAccessService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
@@ -20,9 +22,12 @@ export class SessionGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const targets = [context.getHandler(), context.getClass()];
-    if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets))
-      return true;
     const request = context.switchToHttp().getRequest<Request>();
+    const response = context.switchToHttp().getResponse<Response>();
+    if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, targets)) {
+      this.security.business(request, response);
+      return true;
+    }
     const allowPending =
       this.reflector.getAllAndOverride<boolean>(
         ALLOW_PENDING_DELETION,
@@ -34,6 +39,7 @@ export class SessionGuard implements CanActivate {
       allowPending,
     );
     request.actor = session.actor;
+    this.security.business(request, response);
     if (
       request.actor.transport === 'cookie' &&
       !['GET', 'HEAD', 'OPTIONS'].includes(request.method)

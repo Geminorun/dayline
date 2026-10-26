@@ -1,3 +1,4 @@
+import { SecurityService } from '../security/security.service.js';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '@thallesp/nestjs-better-auth';
 import { AuthAccessService } from './auth-access.service.js';
@@ -12,13 +13,17 @@ import { AuthController } from './auth.controller.js';
     AuthCoreModule,
     AuthModule.forRootAsync({
       imports: [AuthCoreModule],
-      inject: [AUTH_INSTANCE, AuthAccessService],
+      inject: [AUTH_INSTANCE, AuthAccessService, SecurityService],
       disableGlobalAuthGuard: true,
-      useFactory: (auth: DaylineAuth, access: AuthAccessService) => ({
+      useFactory: (
+        auth: DaylineAuth,
+        access: AuthAccessService,
+        security: SecurityService,
+      ) => ({
         auth,
         disableTrustedOriginsCors: true,
         bodyParser: { json: { limit: '64kb' }, urlencoded: { enabled: false } },
-        middleware: nativeAuthPolicy(access),
+        middleware: nativeAuthPolicy(access, security),
       }),
     }),
   ],

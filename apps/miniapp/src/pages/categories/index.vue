@@ -117,7 +117,8 @@ async function remove() {
       ><view v-if="!readonly" class="card"
         ><text class="heading">{{ edit ? '修改分类' : '新建分类' }}</text
         ><text class="text">分类名称</text
-        ><input v-model="name" aria-label="分类名称" /><text class="text"
+        ><input v-model="name" :maxlength="24" aria-label="分类名称" /><text
+          class="text"
           >颜色 #RRGGBB</text
         ><input v-model="color" aria-label="分类颜色" /><button
           :disabled="busy"

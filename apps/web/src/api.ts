@@ -2,61 +2,77 @@ import { ClientError, ApiClient } from '@dayline/api-client';
 import type { Transport } from '@dayline/api-client';
 
 async function downloadText(response: Response) {
+  const bytes = await response.arrayBuffer();
   try {
     return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(
-      await response.arrayBuffer(),
+      bytes,
     );
   } catch {
     throw new ClientError('INVALID_RESPONSE', '下载文件编码无效，请重试。');
   }
 }
 export const cookieTransport: Transport = async (request) => {
-  const response = await fetch(request.path, {
-    method: request.method,
-    credentials: 'include',
-    headers: {
-      ...request.headers,
+  const controller = new AbortController();
+  const timeout =
+    /^\/api\/v1\/(?:imports|guest-admissions|account-merges)(?:\/|$)/.test(
+      request.path,
+    )
+      ? 65000
+      : 20000;
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(request.path, {
+      signal: controller.signal,
+      method: request.method,
+      credentials: 'include',
+      headers: {
+        ...request.headers,
+        ...(request.body === undefined
+          ? {}
+          : {
+              'Content-Type': request.headers['X-Dayline-File-Format']
+                ? 'application/octet-stream'
+                : 'application/json',
+            }),
+      },
       ...(request.body === undefined
         ? {}
         : {
-            'Content-Type': request.headers['X-Dayline-File-Format']
-              ? 'application/octet-stream'
-              : 'application/json',
+            body:
+              request.headers['X-Dayline-File-Format'] &&
+              typeof request.body === 'string'
+                ? request.body
+                : JSON.stringify(request.body),
           }),
-    },
-    ...(request.body === undefined
-      ? {}
-      : {
-          body:
-            request.headers['X-Dayline-File-Format'] &&
-            typeof request.body === 'string'
-              ? request.body
-              : JSON.stringify(request.body),
-        }),
-  });
-  const download = request.path.startsWith('/api/v1/exports/');
-  if (
-    download &&
-    response.ok &&
-    (!response.headers.get('content-disposition')?.startsWith('attachment;') ||
-      !response.headers
-        .get('content-type')
-        ?.startsWith(
-          request.path.endsWith('json') ? 'application/json' : 'text/csv',
-        ))
-  )
-    throw new ClientError('INVALID_RESPONSE', '下载响应格式无效，请重试。');
-  const body: unknown =
-    response.status === 204 || response.status === 304
-      ? undefined
-      : download && response.ok
-        ? await downloadText(response)
-        : await response.json();
-  return {
-    status: response.status,
-    headers: Object.fromEntries(response.headers.entries()),
-    ...(body === undefined ? {} : { body }),
-  };
+    });
+    const download = request.path.startsWith('/api/v1/exports/');
+    if (
+      download &&
+      response.ok &&
+      (!response.headers
+        .get('content-disposition')
+        ?.startsWith('attachment;') ||
+        !response.headers
+          .get('content-type')
+          ?.startsWith(
+            request.path.endsWith('json') ? 'application/json' : 'text/csv',
+          ))
+    )
+      throw new ClientError('INVALID_RESPONSE', '下载响应格式无效，请重试。');
+    const body: unknown =
+      response.status === 204 || response.status === 304
+        ? undefined
+        : download && response.ok
+          ? await downloadText(response)
+          : await response.json();
+    return {
+      status: response.status,
+      headers: Object.fromEntries(response.headers.entries()),
+      ...(body === undefined ? {} : { body }),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 };
 // HttpOnly Cookie is the sole browser credential; bearer tokens are never stored.
 export const api = new ApiClient(cookieTransport);

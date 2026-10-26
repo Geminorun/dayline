@@ -1,0 +1,32 @@
+{$DAYLINE_HOST} {
+  encode zstd gzip
+  header {
+    -Server
+    Referrer-Policy no-referrer
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+  }
+  log {
+    output stdout
+    format filter {
+      wrap json
+      fields {
+        request>uri replace /redacted
+        request>headers delete
+        resp_headers delete
+      }
+    }
+  }
+  handle /api/* {
+    reverse_proxy api:3000
+  }
+  handle /health/* {
+    reverse_proxy api:3000
+  }
+  handle {
+    header Cache-Control no-cache
+    root * /srv/dayline
+    try_files {path} /index.html
+    file_server
+  }
+}

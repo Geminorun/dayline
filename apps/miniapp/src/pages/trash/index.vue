@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatBeijingTime } from '@dayline/core';
 import { ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import type { EntryDto } from '@dayline/contracts';
@@ -77,8 +78,9 @@ async function purge() {
             (entry.startDate > snapshot.businessToday ? '结束未定' : '至今')
           }}
           · {{ spanLabel(entry, snapshot.businessToday) }}</text
-        ><text class="text">删除：{{ entry.deletedAt }}</text
-        ><text class="text">到期：{{ entry.purgeAfter }}</text
+        ><text class="text">删除：{{ formatBeijingTime(entry.deletedAt) }}</text
+        ><text class="text"
+          >到期：{{ formatBeijingTime(entry.purgeAfter) }}</text
         ><text class="text"
           >重点：{{
             snapshot.focusDays

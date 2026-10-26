@@ -72,7 +72,12 @@ export const bearerTransport: Transport = (request) =>
       ...(request.body === undefined
         ? {}
         : { data: request.body as Record<string, unknown> }),
-      timeout: 10000,
+      timeout:
+        /^\/api\/v1\/(?:imports|guest-admissions|account-merges)(?:\/|$)/.test(
+          request.path,
+        )
+          ? 65000
+          : 20000,
       success(response) {
         const headers: Record<string, string> = {};
         for (const [key, value] of Object.entries(response.header))

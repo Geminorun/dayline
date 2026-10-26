@@ -26,6 +26,17 @@ export class ActionProofService {
   ) {
     this.key = new TextEncoder().encode(config.actionProofSecret);
   }
+  assertPurpose(status: string, action: ActionRequest) {
+    if (
+      status === 'pending_deletion' &&
+      !['delete_account', 'cancel_deletion'].includes(action.purpose)
+    )
+      throw new AppError(
+        403,
+        'ACCOUNT_PENDING_DELETION',
+        '注销期间仅可验证注销或撤销操作。',
+      );
+  }
   async issue(actor: Actor, action: ActionRequest) {
     const exp = Math.floor(this.clock.now().getTime() / 1000) + 300;
     const proof = await new SignJWT({
@@ -88,7 +99,10 @@ export class ActionProofService {
       !user ||
       !session ||
       user.authEpoch !== actor.authEpoch ||
-      user.status === 'merged'
+      user.status === 'merged' ||
+      (user.status === 'pending_deletion' &&
+        user.deletionDueAt !== null &&
+        user.deletionDueAt <= this.clock.now())
     )
       throw new AppError(401, 'SESSION_REVOKED', '请重新登录。');
     if (!allowPending && user.status !== 'active')

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AccountExports from './AccountExports.vue';
+import { useAccount } from './account';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { createImportsClient, ClientError } from '@dayline/api-client';
 import {
@@ -27,6 +29,7 @@ import { useWorkspace } from './records/workspace';
 import { guestRepository } from './adapters/guest-repository';
 import { localRepository, localEnvironment } from './adapters/local-repository';
 import { errorMessage } from './records/record-service';
+const account = useAccount();
 const space = useWorkspace(),
   client = createImportsClient(api),
   operation = ref<FileOperation | null>(null),
@@ -629,376 +632,387 @@ const fieldLabel: Record<string, string> = {
 };
 </script>
 <template>
-  <section class="records-page">
-    <p class="eyebrow">DAYLINE · 数据管理</p>
-    <h1>导入与导出</h1>
-    <p v-if="scopeKey">
-      {{
-        space.mode.value === 'guest'
-          ? '游客 · 仅本机保存'
-          : '当前已验证账号 · 云端记录'
-      }}
-    </p>
-    <p v-if="initializing || recovering" role="status" class="notice">
-      {{
-        initializing
-          ? '正在确认数据空间，请稍候。'
-          : '正在恢复本空间的文件任务，请稍候。'
-      }}
-    </p>
-    <div v-else-if="!scopeKey" role="status" class="notice">
-      <p>当前数据空间尚未准备完成。请先确认身份或重新读取记录。</p>
-      <button class="secondary" @click="initialize">重新准备数据管理</button>
-    </div>
-    <p>
-      CSV 包含全部活动事项；完整 JSON
-      包含分类配色、重点及仍保留的回收站。缺少文件行不会删除现有记录。
-    </p>
-    <p v-if="error" role="alert" class="error">{{ error }}</p>
-    <p v-if="notice" role="status" class="notice">{{ notice }}</p>
-    <section class="record-panel">
-      <h2>文件</h2>
-      <button class="secondary" @click="download(csvTemplate(), 'csv', true)">
-        下载 CSV 模板
-      </button>
-      <button :disabled="blocked" @click="exportFile('csv')">导出 CSV</button
-      ><button :disabled="blocked" @click="exportFile('json')">
-        导出完整 JSON
-      </button>
-      <label
-        >选择 CSV / JSON 文件（UTF-8，最多 10 MiB）<input
-          type="file"
-          accept=".csv,.json,text/csv,application/json"
-          :disabled="blocked || space.readonly.value"
-          @change="select"
-      /></label>
-      <p>
-        日期填写
-        YYYY-MM-DD，多重点日用分号隔开。先预览并处理所有错误与冲突，确认后整笔保存。
-      </p>
-      <div v-if="draftWarning" role="status">
-        <p>
-          有尚未提交的本机草稿。可先去草稿页手动保存，或继续只导出云端已保存记录。
-        </p>
-        <RouterLink to="/drafts">查看草稿</RouterLink
-        ><button :disabled="blocked" @click="exportFile(downloadFormat, true)">
-          继续只导出云端记录
-        </button>
-      </div>
-      <button class="secondary" :disabled="blocked" @click="recover">
-        查询或恢复原任务
-      </button>
-      <button v-if="operation && !plan" :disabled="blocked" @click="retry">
-        用原文件重试准备
-      </button>
-      <button
-        v-if="operation && !plan"
-        class="secondary"
-        :disabled="blocked"
-        @click="repreview"
-      >
-        保留原文件，重新建立预览
-      </button>
-    </section>
-    <section v-if="plan" class="record-panel">
-      <h2>
+  <AccountExports
+    v-if="
+      account.current.value?.status === 'pending_deletion' &&
+      space.mode.value === 'account'
+    "
+  />
+  <template v-else>
+    <section class="records-page">
+      <p class="eyebrow">DAYLINE · 数据管理</p>
+      <h1>导入与导出</h1>
+      <p v-if="scopeKey">
         {{
-          plan.status === 'committed'
-            ? '导入完成'
-            : plan.status === 'preview'
-              ? '核对导入预览'
-              : plan.status === 'expired'
-                ? '预览已过期'
-                : '任务已取消'
+          space.mode.value === 'guest'
+            ? '游客 · 仅本机保存'
+            : '当前已验证账号 · 云端记录'
         }}
-      </h2>
-      <button
-        v-if="operation"
-        class="secondary"
-        :disabled="blocked"
-        @click="download(operation.text, operation.format)"
-      >
-        下载本次原文件
-      </button>
+      </p>
+      <p v-if="initializing || recovering" role="status" class="notice">
+        {{
+          initializing
+            ? '正在确认数据空间，请稍候。'
+            : '正在恢复本空间的文件任务，请稍候。'
+        }}
+      </p>
+      <div v-else-if="!scopeKey" role="status" class="notice">
+        <p>当前数据空间尚未准备完成。请先确认身份或重新读取记录。</p>
+        <button class="secondary" @click="initialize">重新准备数据管理</button>
+      </div>
       <p>
-        共 {{ plan.sourceSummary.entries }} 条；新增
-        {{ plan.counts?.create ?? 0 }}、更新
-        {{ plan.counts?.update ?? 0 }}、不变
-        {{ plan.counts?.unchanged ?? 0 }}、待核对
-        {{ plan.counts?.needsReview ?? 0 }}、错误
-        {{ plan.counts?.errors ?? 0 }}、跳过 {{ plan.counts?.skip ?? 0 }}。
+        CSV 包含全部活动事项；完整 JSON
+        包含分类配色、重点及仍保留的回收站。缺少文件行不会删除现有记录。
       </p>
-      <p v-if="plan.result">
-        已新增 {{ plan.result.created }} 条，更新
-        {{ plan.result.updated ?? 0 }} 条，跳过
-        {{ plan.result.skipped }} 条。原始文件及未出现在文件中的记录均保留。
-      </p>
-      <template v-if="plan.status === 'preview'">
-        <h3>分类映射</h3>
-        <div
-          v-for="(c, index) in categories"
-          :key="c.sourceId"
-          class="file-category"
-        >
-          <label
-            >目标分类<select
-              :value="c.targetId ?? ''"
-              :disabled="blocked"
-              @change="mapCategory(index, $event)"
-            >
-              <option value="">新增分类</option>
-              <option
-                v-for="t in space.snapshot.value?.categories ?? []"
-                :key="t.id"
-                :value="t.id"
-              >
-                {{ t.name }}
-              </option>
-            </select></label
-          ><label
-            >分类名称<input
-              v-model="c.name"
-              :disabled="blocked || !!c.targetId" /></label
-          ><label
-            >颜色<input
-              v-model="c.color"
-              type="color"
-              :disabled="blocked || !!c.targetId"
-          /></label>
-          <p v-if="plan.categoryMappings[index]?.restoreDefault">
-            空白空间的默认分类将按备份恢复：{{
-              plan.categoryMappings[index]?.restoreDefault?.name
-            }}
-            / {{ plan.categoryMappings[index]?.restoreDefault?.color }} →
-            {{ c.name }} / {{ c.color }}。默认分类身份保留。
-          </p>
-          <p v-if="plan.categoryMappings[index]?.action === 'skip'">
-            本次保持已处理的分类，不重建或覆盖当前分类。
-          </p>
-          <label v-if="!c.targetId && plan.categoryMappings[index]?.seedKey"
-            ><input
-              v-model="c.asCustom"
-              type="checkbox"
-              :disabled="blocked"
-            />明确作为自定义分类保留名称与颜色（不迁移默认分类身份）</label
-          >
-          <span v-if="plan.categoryMappings[index]?.needsReview"
-            >需要明确核对</span
-          >
-        </div>
-        <h3>逐项差异</h3>
-        <article v-for="row in rows" :key="row.sourceKey" class="file-row">
-          <h4>
-            {{ row.file?.location }} · {{ row.source.title }} ·
-            {{ actionLabel(row) }}
-          </h4>
+      <p v-if="error" role="alert" class="error">{{ error }}</p>
+      <p v-if="notice" role="status" class="notice">{{ notice }}</p>
+      <section class="record-panel">
+        <h2>文件</h2>
+        <button class="secondary" @click="download(csvTemplate(), 'csv', true)">
+          下载 CSV 模板
+        </button>
+        <button :disabled="blocked" @click="exportFile('csv')">导出 CSV</button
+        ><button :disabled="blocked" @click="exportFile('json')">
+          导出完整 JSON
+        </button>
+        <label
+          >选择 CSV / JSON 文件（UTF-8，最多 10 MiB）<input
+            type="file"
+            accept=".csv,.json,text/csv,application/json"
+            :disabled="blocked || space.readonly.value"
+            @change="select"
+        /></label>
+        <p>
+          日期填写
+          YYYY-MM-DD，多重点日用分号隔开。先预览并处理所有错误与冲突，确认后整笔保存。
+        </p>
+        <div v-if="draftWarning" role="status">
           <p>
-            文件：{{ row.source.startDate }} 至
-            {{
-              row.file?.endPresent
-                ? (row.source.endDate ?? '未结束')
-                : '保持当前结束日期'
-            }}；重点
-            {{
-              row.file?.focusPresent
-                ? row.focusDays
-                    .filter((f) => f.focused)
-                    .map((f) => f.date)
-                    .join('、') || '清空'
-                : '保持当前重点'
-            }}
+            有尚未提交的本机草稿。可先去草稿页手动保存，或继续只导出云端已保存记录。
           </p>
-          <table v-if="row.file?.current" class="file-diff">
-            <caption>
-              核对当前记录与拟应用内容
-            </caption>
-            <thead>
-              <tr>
-                <th>字段</th>
-                <th>当前已保存</th>
-                <th>拟应用文件内容</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th>名称</th>
-                <td>{{ row.file.current.title }}</td>
-                <td>{{ row.source.title }}</td>
-              </tr>
-              <tr>
-                <th>开始日期</th>
-                <td>{{ row.file.current.startDate }}</td>
-                <td>{{ row.source.startDate }}</td>
-              </tr>
-              <tr>
-                <th>结束日期</th>
-                <td>{{ row.file.current.endDate ?? '未结束' }}</td>
-                <td>
-                  {{
-                    (row.file.endPresent
-                      ? row.source.endDate
-                      : row.file.current.endDate) ?? '未结束'
-                  }}{{ !row.file.endPresent ? '（保持当前）' : '' }}
-                </td>
-              </tr>
-              <tr>
-                <th>分类</th>
-                <td>
-                  <span
-                    class="category-dot"
-                    :style="{ backgroundColor: currentCategory(row)?.color }"
-                  ></span
-                  >{{ currentCategory(row)?.name ?? '请重新读取分类' }}
-                </td>
-                <td>
-                  <span
-                    class="category-dot"
-                    :style="{ backgroundColor: desiredCategory(row)?.color }"
-                  ></span
-                  >{{ desiredCategory(row)?.name ?? '需要选择映射'
-                  }}{{ !row.file.categoryPresent ? '（保持当前）' : '' }}
-                </td>
-              </tr>
-              <tr>
-                <th>记录状态</th>
-                <td>
-                  {{ row.file.current.deletedAt ? '在回收站' : '活动记录' }}
-                </td>
-                <td>
-                  {{
-                    row.action === 'restore'
-                      ? '明确恢复为活动记录'
-                      : row.source.deletedAt
-                        ? '来源在回收站'
-                        : '活动内容；不会自动恢复'
-                  }}
-                </td>
-              </tr>
-              <tr>
-                <th>重点日期</th>
-                <td>{{ focusDates(row, 'current').length }} 天</td>
-                <td>
-                  {{ focusDates(row, 'desired').length }} 天{{
-                    !row.file.focusPresent ? '（保持当前）' : ''
-                  }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <details v-if="row.file?.current">
-            <summary>查看当前与拟应用的具体重点日期</summary>
-            <div v-for="side in ['current', 'desired'] as const" :key="side">
-              <p>
-                {{ side === 'current' ? '当前已保存' : '拟应用' }}：{{
-                  focusDates(row, side).length
-                }}
-                个重点日
-              </p>
-              <p>{{ focusSlice(row, side).join('、') || '无重点日期' }}</p>
-              <button
-                class="secondary"
-                :disabled="!(focusPages[row.sourceKey + side] ?? 0)"
-                @click="focusMove(row, side, -1)"
-              >
-                前 50 个日期</button
-              ><button
-                class="secondary"
-                :disabled="
-                  ((focusPages[row.sourceKey + side] ?? 0) + 1) * 50 >=
-                  focusDates(row, side).length
-                "
-                @click="focusMove(row, side, 1)"
-              >
-                后 50 个日期
-              </button>
-            </div>
-          </details>
-          <p v-if="row.file?.differences.length">
-            差异：{{
-              row.file.differences.map((f) => fieldLabel[f] ?? f).join('、')
-            }}
-          </p>
-          <p v-if="row.reason">{{ row.reason }}</p>
-          <p v-for="e in row.file?.errors ?? []" :key="e" class="error">
-            {{ e }}
-          </p>
-          <template v-if="!row.file?.errors.length"
-            ><button
-              class="secondary"
-              :disabled="blocked"
-              @click="choose(row, 'skip')"
-            >
-              跳过此项</button
-            ><button
-              class="secondary"
-              :disabled="blocked"
-              @click="choose(row, 'create_copy')"
-            >
-              保留为新副本</button
-            ><button
-              v-if="row.file?.current && !row.source.deletedAt"
-              :disabled="blocked"
-              @click="
-                choose(
-                  row,
-                  row.file.current.deletedAt ? 'restore' : 'apply_update',
-                )
-              "
-            >
-              {{
-                row.file.current.deletedAt
-                  ? '已核对当前内容，恢复并更新'
-                  : '已核对当前内容，更新此项'
-              }}</button
-            ><span v-if="choices[row.sourceKey]"
-              >已选择，需保存核对</span
-            ></template
-          >
-        </article>
-        <div class="toolbar">
-          <button class="secondary" :disabled="page === 0" @click="page--">
-            上一页</button
-          ><span
-            >{{ page + 1 }} /
-            {{ Math.max(1, Math.ceil(plan.rows.length / 50)) }}</span
+          <RouterLink to="/drafts">查看草稿</RouterLink
           ><button
-            class="secondary"
-            :disabled="(page + 1) * 50 >= plan.rows.length"
-            @click="page++"
+            :disabled="blocked"
+            @click="exportFile(downloadFormat, true)"
           >
-            下一页
+            继续只导出云端记录
           </button>
         </div>
-        <button :disabled="blocked || space.readonly.value" @click="review">
-          保存核对并更新预览</button
-        ><button
-          :disabled="
-            blocked ||
-            !plan.canCommit ||
-            unreviewedSelections ||
-            space.readonly.value
-          "
-          @click="commit"
-        >
-          确认整体导入</button
-        ><button class="secondary" :disabled="blocked" @click="cancel">
-          取消本次导入
+        <button class="secondary" :disabled="blocked" @click="recover">
+          查询或恢复原任务
         </button>
-        <p v-if="unreviewedSelections" role="status">
-          分类或逐项选择尚未保存核对，请先保存核对并更新预览。
+        <button v-if="operation && !plan" :disabled="blocked" @click="retry">
+          用原文件重试准备
+        </button>
+        <button
+          v-if="operation && !plan"
+          class="secondary"
+          :disabled="blocked"
+          @click="repreview"
+        >
+          保留原文件，重新建立预览
+        </button>
+      </section>
+      <section v-if="plan" class="record-panel">
+        <h2>
+          {{
+            plan.status === 'committed'
+              ? '导入完成'
+              : plan.status === 'preview'
+                ? '核对导入预览'
+                : plan.status === 'expired'
+                  ? '预览已过期'
+                  : '任务已取消'
+          }}
+        </h2>
+        <button
+          v-if="operation"
+          class="secondary"
+          :disabled="blocked"
+          @click="download(operation.text, operation.format)"
+        >
+          下载本次原文件
+        </button>
+        <p>
+          共 {{ plan.sourceSummary.entries }} 条；新增
+          {{ plan.counts?.create ?? 0 }}、更新
+          {{ plan.counts?.update ?? 0 }}、不变
+          {{ plan.counts?.unchanged ?? 0 }}、待核对
+          {{ plan.counts?.needsReview ?? 0 }}、错误
+          {{ plan.counts?.errors ?? 0 }}、跳过 {{ plan.counts?.skip ?? 0 }}。
         </p>
-        <p v-if="!plan.canCommit">
-          请先修正文件错误、分类映射或逐项冲突。错误行不能静默跳过。
+        <p v-if="plan.result">
+          已新增 {{ plan.result.created }} 条，更新
+          {{ plan.result.updated ?? 0 }} 条，跳过
+          {{ plan.result.skipped }} 条。原始文件及未出现在文件中的记录均保留。
         </p>
-      </template>
-      <button
-        v-if="plan.status !== 'committed'"
-        class="secondary"
-        :disabled="blocked"
-        @click="repreview"
-      >
-        保留原文件，重新建立预览
-      </button>
+        <template v-if="plan.status === 'preview'">
+          <h3>分类映射</h3>
+          <div
+            v-for="(c, index) in categories"
+            :key="c.sourceId"
+            class="file-category"
+          >
+            <label
+              >目标分类<select
+                :value="c.targetId ?? ''"
+                :disabled="blocked"
+                @change="mapCategory(index, $event)"
+              >
+                <option value="">新增分类</option>
+                <option
+                  v-for="t in space.snapshot.value?.categories ?? []"
+                  :key="t.id"
+                  :value="t.id"
+                >
+                  {{ t.name }}
+                </option>
+              </select></label
+            ><label
+              >分类名称<input
+                v-model="c.name"
+                :disabled="blocked || !!c.targetId" /></label
+            ><label
+              >颜色<input
+                v-model="c.color"
+                type="color"
+                :disabled="blocked || !!c.targetId"
+            /></label>
+            <p v-if="plan.categoryMappings[index]?.restoreDefault">
+              空白空间的默认分类将按备份恢复：{{
+                plan.categoryMappings[index]?.restoreDefault?.name
+              }}
+              / {{ plan.categoryMappings[index]?.restoreDefault?.color }} →
+              {{ c.name }} / {{ c.color }}。默认分类身份保留。
+            </p>
+            <p v-if="plan.categoryMappings[index]?.action === 'skip'">
+              本次保持已处理的分类，不重建或覆盖当前分类。
+            </p>
+            <label v-if="!c.targetId && plan.categoryMappings[index]?.seedKey"
+              ><input
+                v-model="c.asCustom"
+                type="checkbox"
+                :disabled="blocked"
+              />明确作为自定义分类保留名称与颜色（不迁移默认分类身份）</label
+            >
+            <span v-if="plan.categoryMappings[index]?.needsReview"
+              >需要明确核对</span
+            >
+          </div>
+          <h3>逐项差异</h3>
+          <article v-for="row in rows" :key="row.sourceKey" class="file-row">
+            <h4>
+              {{ row.file?.location }} · {{ row.source.title }} ·
+              {{ actionLabel(row) }}
+            </h4>
+            <p>
+              文件：{{ row.source.startDate }} 至
+              {{
+                row.file?.endPresent
+                  ? (row.source.endDate ?? '未结束')
+                  : '保持当前结束日期'
+              }}；重点
+              {{
+                row.file?.focusPresent
+                  ? row.focusDays
+                      .filter((f) => f.focused)
+                      .map((f) => f.date)
+                      .join('、') || '清空'
+                  : '保持当前重点'
+              }}
+            </p>
+            <table v-if="row.file?.current" class="file-diff">
+              <caption>
+                核对当前记录与拟应用内容
+              </caption>
+              <thead>
+                <tr>
+                  <th>字段</th>
+                  <th>当前已保存</th>
+                  <th>拟应用文件内容</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th>名称</th>
+                  <td>{{ row.file.current.title }}</td>
+                  <td>{{ row.source.title }}</td>
+                </tr>
+                <tr>
+                  <th>开始日期</th>
+                  <td>{{ row.file.current.startDate }}</td>
+                  <td>{{ row.source.startDate }}</td>
+                </tr>
+                <tr>
+                  <th>结束日期</th>
+                  <td>{{ row.file.current.endDate ?? '未结束' }}</td>
+                  <td>
+                    {{
+                      (row.file.endPresent
+                        ? row.source.endDate
+                        : row.file.current.endDate) ?? '未结束'
+                    }}{{ !row.file.endPresent ? '（保持当前）' : '' }}
+                  </td>
+                </tr>
+                <tr>
+                  <th>分类</th>
+                  <td>
+                    <span
+                      class="category-dot"
+                      :style="{ backgroundColor: currentCategory(row)?.color }"
+                    ></span
+                    >{{ currentCategory(row)?.name ?? '请重新读取分类' }}
+                  </td>
+                  <td>
+                    <span
+                      class="category-dot"
+                      :style="{ backgroundColor: desiredCategory(row)?.color }"
+                    ></span
+                    >{{ desiredCategory(row)?.name ?? '需要选择映射'
+                    }}{{ !row.file.categoryPresent ? '（保持当前）' : '' }}
+                  </td>
+                </tr>
+                <tr>
+                  <th>记录状态</th>
+                  <td>
+                    {{ row.file.current.deletedAt ? '在回收站' : '活动记录' }}
+                  </td>
+                  <td>
+                    {{
+                      row.action === 'restore'
+                        ? '明确恢复为活动记录'
+                        : row.source.deletedAt
+                          ? '来源在回收站'
+                          : '活动内容；不会自动恢复'
+                    }}
+                  </td>
+                </tr>
+                <tr>
+                  <th>重点日期</th>
+                  <td>{{ focusDates(row, 'current').length }} 天</td>
+                  <td>
+                    {{ focusDates(row, 'desired').length }} 天{{
+                      !row.file.focusPresent ? '（保持当前）' : ''
+                    }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <details v-if="row.file?.current">
+              <summary>查看当前与拟应用的具体重点日期</summary>
+              <div v-for="side in ['current', 'desired'] as const" :key="side">
+                <p>
+                  {{ side === 'current' ? '当前已保存' : '拟应用' }}：{{
+                    focusDates(row, side).length
+                  }}
+                  个重点日
+                </p>
+                <p>{{ focusSlice(row, side).join('、') || '无重点日期' }}</p>
+                <button
+                  class="secondary"
+                  :disabled="!(focusPages[row.sourceKey + side] ?? 0)"
+                  @click="focusMove(row, side, -1)"
+                >
+                  前 50 个日期</button
+                ><button
+                  class="secondary"
+                  :disabled="
+                    ((focusPages[row.sourceKey + side] ?? 0) + 1) * 50 >=
+                    focusDates(row, side).length
+                  "
+                  @click="focusMove(row, side, 1)"
+                >
+                  后 50 个日期
+                </button>
+              </div>
+            </details>
+            <p v-if="row.file?.differences.length">
+              差异：{{
+                row.file.differences.map((f) => fieldLabel[f] ?? f).join('、')
+              }}
+            </p>
+            <p v-if="row.reason">{{ row.reason }}</p>
+            <p v-for="e in row.file?.errors ?? []" :key="e" class="error">
+              {{ e }}
+            </p>
+            <template v-if="!row.file?.errors.length"
+              ><button
+                class="secondary"
+                :disabled="blocked"
+                @click="choose(row, 'skip')"
+              >
+                跳过此项</button
+              ><button
+                class="secondary"
+                :disabled="blocked"
+                @click="choose(row, 'create_copy')"
+              >
+                保留为新副本</button
+              ><button
+                v-if="row.file?.current && !row.source.deletedAt"
+                :disabled="blocked"
+                @click="
+                  choose(
+                    row,
+                    row.file.current.deletedAt ? 'restore' : 'apply_update',
+                  )
+                "
+              >
+                {{
+                  row.file.current.deletedAt
+                    ? '已核对当前内容，恢复并更新'
+                    : '已核对当前内容，更新此项'
+                }}</button
+              ><span v-if="choices[row.sourceKey]"
+                >已选择，需保存核对</span
+              ></template
+            >
+          </article>
+          <div class="toolbar">
+            <button class="secondary" :disabled="page === 0" @click="page--">
+              上一页</button
+            ><span
+              >{{ page + 1 }} /
+              {{ Math.max(1, Math.ceil(plan.rows.length / 50)) }}</span
+            ><button
+              class="secondary"
+              :disabled="(page + 1) * 50 >= plan.rows.length"
+              @click="page++"
+            >
+              下一页
+            </button>
+          </div>
+          <button :disabled="blocked || space.readonly.value" @click="review">
+            保存核对并更新预览</button
+          ><button
+            :disabled="
+              blocked ||
+              !plan.canCommit ||
+              unreviewedSelections ||
+              space.readonly.value
+            "
+            @click="commit"
+          >
+            确认整体导入</button
+          ><button class="secondary" :disabled="blocked" @click="cancel">
+            取消本次导入
+          </button>
+          <p v-if="unreviewedSelections" role="status">
+            分类或逐项选择尚未保存核对，请先保存核对并更新预览。
+          </p>
+          <p v-if="!plan.canCommit">
+            请先修正文件错误、分类映射或逐项冲突。错误行不能静默跳过。
+          </p>
+        </template>
+        <button
+          v-if="plan.status !== 'committed'"
+          class="secondary"
+          :disabled="blocked"
+          @click="repreview"
+        >
+          保留原文件，重新建立预览
+        </button>
+      </section>
     </section>
-  </section>
+  </template>
 </template>

@@ -1,3 +1,4 @@
+import { Clock } from '../records/clock.js';
 import { Inject, Injectable } from '@nestjs/common';
 import { EXPECTED_USER_HEADER } from '@dayline/contracts';
 import { AppError } from '../common/app-error.js';
@@ -15,6 +16,7 @@ interface AuthenticatedSession {
 @Injectable()
 export class AuthAccessService {
   constructor(
+    @Inject(Clock) private readonly clock: Clock,
     @Inject(AuthAdapter) private readonly auth: AuthAdapter,
     @Inject(PrismaService) private readonly database: PrismaService,
   ) {}
@@ -55,6 +57,9 @@ export class AuthAccessService {
     if (
       !user ||
       user.status === 'merged' ||
+      (user.status === 'pending_deletion' &&
+        user.deletionDueAt !== null &&
+        user.deletionDueAt <= this.clock.now()) ||
       user.authEpoch !== session.session.authEpoch
     ) {
       throw new AppError(

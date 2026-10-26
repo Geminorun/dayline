@@ -1,3 +1,5 @@
+import { SecurityService } from '../security/security.service.js';
+import { Clock } from '../records/clock.js';
 import { ActionProofService } from './action-proof.service.js';
 import { Global, Module } from '@nestjs/common';
 import { APP_CONFIG } from '../config/environment.js';
@@ -16,12 +18,14 @@ import { AUTH_INSTANCE, createAuth } from './create-auth.js';
   providers: [
     {
       provide: AUTH_INSTANCE,
-      inject: [APP_CONFIG, PrismaService, MailService],
+      inject: [APP_CONFIG, PrismaService, MailService, Clock, SecurityService],
       useFactory: (
         config: AppConfig,
         database: PrismaService,
         mail: MailService,
-      ) => createAuth(config, database, mail),
+        clock: Clock,
+        security: SecurityService,
+      ) => createAuth(config, database, mail, clock, security),
     },
     ActionProofService,
     AuthAdapter,

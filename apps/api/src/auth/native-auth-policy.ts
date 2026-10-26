@@ -1,3 +1,5 @@
+import { requestBudget } from '../common/request-budget.js';
+import type { SecurityService } from '../security/security.service.js';
 import type { NextFunction, Request, Response } from 'express';
 import { fromNodeHeaders } from 'better-auth/node';
 import { AppError } from '../common/app-error.js';
@@ -14,15 +16,43 @@ const anonymousPaths = new Set([
 ]);
 const sessionPaths = new Set(['/change-password', '/sign-out']);
 
-export function nativeAuthPolicy(access: AuthAccessService) {
+export function nativeAuthPolicy(
+  access: AuthAccessService,
+  security: SecurityService,
+) {
   return async (
     request: Request,
     response: Response,
     next: NextFunction,
   ): Promise<void> => {
+    // Replace, never trust a client supplied internal IP header.
+    request.headers['x-dayline-internal-ip'] = request.ip ?? 'unknown';
+    const scope = requestBudget.getStore(),
+      ip = request.ip ?? 'unknown';
+    response.on('finish', () => {
+      if (
+        scope?.authPath === '/sign-in/email' &&
+        [401, 403].includes(response.statusCode) &&
+        scope.authEmail
+      )
+        security.failure('password', ip, scope.authEmail);
+    });
     const path = new URL(request.originalUrl, 'http://localhost').pathname
       .slice('/api/auth'.length)
       .replace(/\/$/, '');
+    try {
+      security.native(request, response);
+    } catch (error) {
+      if (error instanceof AppError)
+        response
+          .status(error.getStatus())
+          .json({ code: error.code, message: error.message });
+      else
+        response
+          .status(503)
+          .json({ code: 'AUTH_UNAVAILABLE', message: '认证服务暂时不可用。' });
+      return;
+    }
     if (
       anonymousPaths.has(path) ||
       (request.method === 'GET' && /^\/reset-password\/[^/]+$/.test(path))

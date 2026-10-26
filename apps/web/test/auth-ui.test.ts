@@ -174,3 +174,29 @@ describe('email and QR interfaces', () => {
     );
   });
 });
+
+it('uses server Retry-After for email resend, disables repeated requests, then permits an explicit retry and clears its timer on leave', async () => {
+  vi.useFakeTimers();
+  const fetch = vi.fn(async () =>
+    Response.json(
+      { code: 'TOO_MANY_REQUESTS', message: 'private provider value' },
+      { status: 429, headers: { 'Retry-After': '2' } },
+    ),
+  );
+  vi.stubGlobal('fetch', fetch);
+  const wrapper = await page('verify');
+  await wrapper.get('input[name="email"]').setValue('test@example.com');
+  await wrapper.get('form').trigger('submit');
+  await flushPromises();
+  expect(wrapper.text()).toContain('等待 2 秒');
+  expect(wrapper.get('form button').attributes('disabled')).toBeDefined();
+  await wrapper.get('form').trigger('submit');
+  expect(fetch).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(wrapper.get('form button').attributes('disabled')).toBeUndefined();
+  await wrapper.get('form').trigger('submit');
+  await flushPromises();
+  expect(fetch).toHaveBeenCalledTimes(2);
+  wrapper.unmount();
+  expect(vi.getTimerCount()).toBe(0);
+});

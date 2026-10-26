@@ -1,3 +1,4 @@
+import { MaintenanceService } from '../maintenance/maintenance.service.js';
 import { Controller, Get, Inject } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../auth/auth.decorators.js';
@@ -9,6 +10,8 @@ import { PrismaService } from '../database/prisma.service.js';
 @Controller('health')
 export class HealthController {
   constructor(
+    @Inject(MaintenanceService)
+    private readonly maintenance: MaintenanceService,
     @Inject(PrismaService) private readonly database: PrismaService,
   ) {}
 
@@ -21,10 +24,17 @@ export class HealthController {
   @Get('ready')
   @ApiOperation({ summary: '数据库及基础模型可用性检查' })
   async ready() {
+    this.maintenance.assertReady();
     try {
       await Promise.all([
         this.database.user.findFirst({
-          select: { id: true, emailKind: true, authEpoch: true, status: true },
+          select: {
+            id: true,
+            emailKind: true,
+            authEpoch: true,
+            status: true,
+            deletionRequestedAt: true,
+          },
         }),
         this.database.session.findFirst({
           select: { id: true, authEpoch: true, authMethod: true },

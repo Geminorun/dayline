@@ -33,7 +33,6 @@ import {
   dateSchema,
   successDtoSchema,
 } from '@dayline/contracts';
-import { AllowPendingDeletion } from '../auth/auth.decorators.js';
 import { AppError } from '../common/app-error.js';
 import { dataResponseSchema, dtoSchema } from '../common/openapi.js';
 import { RecordsService } from './records.service.js';
@@ -73,7 +72,6 @@ export class RecordsController {
     return committed.data;
   }
   @Get('categories')
-  @AllowPendingDeletion()
   @ApiOperation({ summary: '读取全部分类' })
   @ApiResponse({
     status: 200,
@@ -153,7 +151,6 @@ export class RecordsController {
     );
   }
   @Get('entries/:id')
-  @AllowPendingDeletion()
   @ApiOperation({ summary: '读取事项及全部重点状态' })
   @ApiResponse({ status: 200, schema: dataResponseSchema(entryResultSchema) })
   entry(@Req() request: Request, @Param('id') value: string) {
@@ -234,7 +231,6 @@ export class RecordsController {
     );
   }
   @Get('trash')
-  @AllowPendingDeletion()
   @ApiOperation({ summary: '读取仍可恢复的回收站事项' })
   @ApiResponse({
     status: 200,
@@ -277,7 +273,6 @@ export class RecordsController {
     );
   }
   @Get('snapshot')
-  @AllowPendingDeletion()
   @ApiOperation({ summary: '一致完整快照；先鉴权后评估 ETag' })
   @ApiResponse({ status: 200, schema: dataResponseSchema(snapshotDtoSchema) })
   @ApiResponse({ status: 304, description: '当前用户的完整快照未变化' })

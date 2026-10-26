@@ -16,7 +16,11 @@ import { ResendMailTransport } from './resend-mail.transport.js';
           return new FileMailTransport(config.mailPreviewDirectory);
         if (!config.resendApiKey)
           throw new Error('Resend configuration is missing.');
-        return new ResendMailTransport(config.resendApiKey, config.mailFrom);
+        return new ResendMailTransport(
+          config.resendApiKey,
+          config.mailFrom,
+          config.externalTimeoutMs,
+        );
       },
     },
     MailService,

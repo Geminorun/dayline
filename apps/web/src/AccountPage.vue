@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatBeijingTime } from '@dayline/core';
 import { useAdmission } from './admission';
 import { ClientError } from '@dayline/api-client';
 import { onMounted, ref } from 'vue';
@@ -120,7 +121,8 @@ onMounted(load);
         }}
       </p>
       <p v-if="current.status !== 'active'">
-        账号正在注销中，仅可读取；到期 {{ current.deletionDueAt }}
+        账号正在注销中，仅可读取；到期
+        {{ formatBeijingTime(current.deletionDueAt) }}
       </p>
       <form @submit.prevent="save">
         <label>显示名<input v-model="name" required /></label
@@ -128,7 +130,9 @@ onMounted(load);
           保存显示名
         </button>
       </form>
-      <RouterLink v-if="current.passwordEnabled" to="/change-password"
+      <RouterLink
+        v-if="current.passwordEnabled && current.status === 'active'"
+        to="/change-password"
         >修改密码</RouterLink
       ><button class="secondary" :disabled="busy" @click="load">
         重新读取账号</button
@@ -142,7 +146,9 @@ onMounted(load);
       <RouterLink v-if="current" to="/identity"
         >添加邮箱 / 绑定微信 / 合并账号</RouterLink
       >
-      <p>自助注销在阶段 7 开放。</p>
+      <RouterLink v-if="current" to="/account-deletion"
+        >注销账号 / 查看状态与撤销</RouterLink
+      >
       <p>游客数据仅保存在此设备，清除浏览器存储后无法找回。</p>
     </section>
   </section>

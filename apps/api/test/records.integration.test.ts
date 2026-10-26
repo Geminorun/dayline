@@ -932,7 +932,7 @@ describe('record core: real PostgreSQL and protected HTTP', () => {
     });
     await call(a, 'get', '/snapshot')
       .set('If-None-Match', z.string().parse(nextDay.headers.etag))
-      .expect(304);
+      .expect(403);
     await call(a, 'patch', `/entries/${entry.id}`)
       .send({ expectedVersion: 2, title: 'blocked' })
       .expect(403);

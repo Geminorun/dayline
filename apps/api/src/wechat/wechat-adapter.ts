@@ -31,7 +31,7 @@ export class ProductionWechatAdapter implements WechatAdapter {
     try {
       const response = await fetch(url, {
         ...options,
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(this.config.externalTimeoutMs),
       });
       if (!response.ok) throw new Error('upstream');
       return response;

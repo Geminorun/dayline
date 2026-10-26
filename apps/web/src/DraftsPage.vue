@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatBeijingTime } from '@dayline/core';
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import ReauthForm from './ReauthForm.vue';
 import { createIdentityClient } from '@dayline/api-client';
@@ -226,9 +227,10 @@ onBeforeUnmount(unsubscribe);
       <h2>{{ draft.fields.title || '未命名草稿' }}</h2>
       <p>
         {{ draft.baseEntryVersion === null ? '新建' : '编辑' }} · 最后暂存
-        {{ draft.savedLocallyAt }}
+        {{ formatBeijingTime(draft.savedLocallyAt) }}
       </p>
       <RouterLink
+        v-if="account.current.value?.status === 'active'"
         :to="{ path: '/entries/new', query: { draftId: draft.draftId } }"
         @click="resume(draft)"
         >继续编辑</RouterLink
@@ -237,7 +239,10 @@ onBeforeUnmount(unsubscribe);
       ><button class="secondary" @click="discard(draft)">放弃草稿</button>
     </article>
     <section
-      v-if="workspace.mode.value === 'account' && account.current.value"
+      v-if="
+        workspace.mode.value === 'account' &&
+        account.current.value?.status === 'active'
+      "
       class="record-panel"
     >
       <h2>合并后的旧账号草稿</h2>
@@ -249,8 +254,7 @@ onBeforeUnmount(unsubscribe);
         >选择合并<select v-model="selectedMerge" @change="resetRecovery">
           <option value="">请选择</option>
           <option v-for="j in mergeJobs" :key="j.id" :value="j.id">
-            {{ new Date(j.completedAt ?? j.createdAt).toLocaleString() }} ·
-            已完成合并
+            {{ formatBeijingTime(j.completedAt ?? j.createdAt) }} · 已完成合并
           </option>
         </select></label
       ><ReauthForm

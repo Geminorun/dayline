@@ -150,7 +150,7 @@ export class AuthAdapter {
     const context = await this.auth.$context;
     const hash = await context.password.hash(password);
     try {
-      await this.database.$transaction(async (transaction) => {
+      await this.database.transaction(async (transaction) => {
         const updated = await transaction.user.updateMany({
           where: { id: userId, emailKind: 'internal', status: 'active' },
           data: {

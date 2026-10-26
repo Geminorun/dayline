@@ -197,7 +197,7 @@ export class ImportsService {
         sourceDigest: hash({ entry, focus }),
       };
     });
-    return this.db.$transaction(
+    return this.db.transaction(
       async (tx) => {
         const user = await this.user(tx, actor);
         const old = await tx.importJob.findUnique({
@@ -342,7 +342,7 @@ export class ImportsService {
     );
   }
   async get(actor: Actor, id: string, operation = false) {
-    return this.db.$transaction(async (tx) => {
+    return this.db.transaction(async (tx) => {
       await this.user(tx, actor);
       const row = operation
         ? await tx.importJob.findUnique({
@@ -364,7 +364,7 @@ export class ImportsService {
     });
   }
   async review(actor: Actor, id: string, input: ImportReviewInput) {
-    return this.db.$transaction(async (tx) => {
+    return this.db.transaction(async (tx) => {
       const user = await this.user(tx, actor),
         { plan } = await this.lockedJob(tx, actor, id);
       if (
@@ -498,7 +498,7 @@ export class ImportsService {
     });
   }
   async commit(actor: Actor, id: string, input: ImportCommitInput) {
-    return this.db.$transaction(
+    return this.db.transaction(
       async (tx) => {
         const user = await this.user(tx, actor),
           { plan } = await this.lockedJob(tx, actor, id);
@@ -814,7 +814,7 @@ export class ImportsService {
     return plan;
   }
   async cancel(actor: Actor, id: string) {
-    return this.db.$transaction(async (tx) => {
+    return this.db.transaction(async (tx) => {
       await this.user(tx, actor);
       const { plan } = await this.lockedJob(tx, actor, id);
       if (plan.status === 'committed') throw conflict();

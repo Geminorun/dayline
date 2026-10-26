@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { admissionStatusLabel } from '@dayline/contracts';
+import { formatBeijingTime } from '@dayline/core';
 import { reviewSelectionKey } from '@dayline/contracts';
 import { computed, ref, watch } from 'vue';
 import { useAdmission } from './admission';
@@ -107,7 +109,8 @@ function chooseRow(index: number, event: Event) {
         {{ job.sourceSummary.categories }} 类；云端
         {{ job.targetSummary.entries }} 条 /
         {{ job.targetSummary.categories }}
-        类。默认保留双方，同名事项不合并。过期 {{ job.expiresAt }}
+        类。默认保留双方，同名事项不合并。过期
+        {{ formatBeijingTime(job.expiresAt) }}
       </p>
       <h3>逐项分类映射</h3>
       <div v-for="(c, index) in categories" :key="c.sourceId" class="form-grid">
@@ -115,7 +118,7 @@ function chooseRow(index: number, event: Event) {
           >分类名称<input
             v-model="c.name"
             :disabled="busy"
-            maxlength="12" /></label
+            maxlength="24" /></label
         ><label
           >颜色<input v-model="c.color" :disabled="busy" type="color" /></label
         ><label
@@ -204,7 +207,7 @@ function chooseRow(index: number, event: Event) {
   <section v-if="operation" class="record-panel">
     <p>
       冻结本机修订 {{ operation.package.packageRevision }} ·
-      {{ operation.status }}
+      {{ admissionStatusLabel(operation.status) }}
     </p>
     <button class="secondary" :disabled="busy" @click="action('query')">
       查询保留的原任务</button

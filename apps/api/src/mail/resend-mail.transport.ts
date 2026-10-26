@@ -7,6 +7,7 @@ export class ResendMailTransport implements MailTransport {
   constructor(
     apiKey: string,
     private readonly from: string,
+    private readonly timeoutMs = 8000,
   ) {
     this.client = new Resend(apiKey);
   }
@@ -15,7 +16,7 @@ export class ResendMailTransport implements MailTransport {
     try {
       const { error } = await this.client.emails.send(
         { from: this.from, ...mail },
-        { signal: AbortSignal.timeout(8_000) },
+        { signal: AbortSignal.timeout(this.timeoutMs) },
       );
       if (!error) return;
     } catch {

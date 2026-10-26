@@ -274,3 +274,34 @@ it('keeps valid actor on wrong or expired purpose proof and only invalidates a g
   ).rejects.toMatchObject({ code: 'SESSION_REVOKED' });
   expect(client.getAccount()).toBeNull();
 });
+
+it('normalizes every native/business 429 and accepts only bounded numeric Retry-After without leaking provider text', async () => {
+  for (const body of [
+    { code: 'TOO_MANY_REQUESTS', message: 'private provider token' },
+    { error: { code: 'RATE_LIMITED', message: 'private SQL' } },
+  ]) {
+    const api = new ApiClient(async () => ({
+      status: 429,
+      headers: { 'Retry-After': '7' },
+      body,
+    }));
+    await expect(api.request('/auth', { native: true })).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+      status: 429,
+      retryAfterSeconds: 7,
+      message: '操作过于频繁，请等待 7 秒后再试。',
+    });
+  }
+  for (const value of ['-1', '999999999999', 'tomorrow', 'Infinity']) {
+    const api = new ApiClient(async () => ({
+      status: 429,
+      headers: { 'retry-after': value },
+      body: { code: 'UNKNOWN', message: 'secret' },
+    }));
+    await expect(api.request('/auth')).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+      retryAfterSeconds: undefined,
+      message: '操作过于频繁，请稍后重试。',
+    });
+  }
+});

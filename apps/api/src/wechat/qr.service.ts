@@ -35,7 +35,7 @@ export class QrService {
     work: (tx: Prisma.TransactionClient) => Promise<T>,
     options: { timeout?: number } = {},
   ) {
-    return this.database.$transaction(work, {
+    return this.database.transaction(work, {
       maxWait: 10000,
       timeout: 60000,
       ...options,
@@ -340,7 +340,8 @@ export class QrService {
     const miniappCode = await this.wechat.createMiniappCode(scene);
     const row = await this.transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM users WHERE id=${actor.userId}::uuid FOR UPDATE`;
-      await this.proofs.current(tx, actor, purpose === 'reauth');
+      const user = await this.proofs.current(tx, actor, purpose === 'reauth');
+      this.proofs.assertPurpose(user.status, action);
       return tx.qrRequest.create({
         data: {
           id,

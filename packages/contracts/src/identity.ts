@@ -205,3 +205,14 @@ export function mergeReviewInput(plan: MergePlan): MergeReviewInput {
     displayNameFrom: plan.displayNameFrom,
   };
 }
+
+export const deletionInputSchema = z
+  .object({ operationId: z.uuid(), proof: z.string().min(20).max(4096) })
+  .strict();
+export const deletionResultSchema = z.object({
+  status: z.enum(['pending_deletion', 'active']),
+  requestedAt: z.iso.datetime().nullable(),
+  dueAt: z.iso.datetime().nullable(),
+  reauthenticate: z.boolean(),
+});
+export type DeletionResult = z.infer<typeof deletionResultSchema>;

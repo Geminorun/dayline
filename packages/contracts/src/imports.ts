@@ -286,3 +286,15 @@ export function importSourceReceipt(
 export function reviewSelectionKey(selection: object): string {
   return JSON.stringify(selection);
 }
+
+export function admissionStatusLabel(
+  status: AdmissionOperation['status'],
+): string {
+  return {
+    pending: '等待查询或核对，原本机记录保留',
+    committed: '这份冻结修订已接入云端',
+    cancelled: '已取消，原本机记录保留',
+    expired: '计划已过期，请明确重新预览',
+    missing: '服务器尚未找到原任务，请先查询',
+  }[status];
+}

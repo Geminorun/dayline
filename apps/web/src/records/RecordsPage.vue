@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatBeijingTime } from '@dayline/core';
 import {
   computed,
   nextTick,
@@ -637,7 +638,11 @@ onMounted(async () => {
               }}
               · {{ spanLabel(entry, today) }}
             </p>
-            <p>删除：{{ entry.deletedAt }}<br />到期：{{ entry.purgeAfter }}</p>
+            <p>
+              删除：{{ formatBeijingTime(entry.deletedAt) }}<br />到期：{{
+                formatBeijingTime(entry.purgeAfter)
+              }}
+            </p>
             <p>
               重点：{{
                 snapshot.focusDays

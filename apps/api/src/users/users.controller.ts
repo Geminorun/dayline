@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Inject, Patch, Req } from '@nestjs/common';
+import { DeletionService } from './deletion.service.js';
+import { deletionInputSchema, deletionResultSchema } from '@dayline/contracts';
+import {
+  Body,
+  Post,
+  Delete,
+  HttpCode,
+  Controller,
+  Get,
+  Inject,
+  Patch,
+  Req,
+} from '@nestjs/common';
 import { ApiBody, ApiOperation, ApiTags, ApiResponse } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { userDtoSchema, patchProfileSchema } from '@dayline/contracts';
@@ -10,7 +22,43 @@ import { UsersService } from './users.service.js';
 @ApiTags('users')
 @Controller('me')
 export class UsersController {
-  constructor(@Inject(UsersService) private readonly users: UsersService) {}
+  constructor(
+    @Inject(UsersService) private readonly users: UsersService,
+    @Inject(DeletionService) private readonly deletion: DeletionService,
+  ) {}
+
+  @Post('deletion')
+  @HttpCode(200)
+  @AllowPendingDeletion()
+  @ApiBody({ schema: dtoSchema(deletionInputSchema) })
+  @ApiResponse({
+    status: 200,
+    schema: dataResponseSchema(deletionResultSchema),
+  })
+  requestDeletion(@Req() request: Request, @Body() body: unknown) {
+    return this.changeDeletion(request, body, false);
+  }
+
+  @Delete('deletion')
+  @HttpCode(200)
+  @AllowPendingDeletion()
+  @ApiBody({ schema: dtoSchema(deletionInputSchema) })
+  @ApiResponse({
+    status: 200,
+    schema: dataResponseSchema(deletionResultSchema),
+  })
+  cancelDeletion(@Req() request: Request, @Body() body: unknown) {
+    return this.changeDeletion(request, body, true);
+  }
+
+  private changeDeletion(request: Request, body: unknown, cancel: boolean) {
+    if (!request.actor)
+      throw new AppError(401, 'UNAUTHENTICATED', '请先登录。');
+    const parsed = deletionInputSchema.safeParse(body);
+    if (!parsed.success)
+      throw new AppError(422, 'VALIDATION_ERROR', '请重新验证本次注销操作。');
+    return this.deletion.change(request.actor, parsed.data, cancel);
+  }
 
   @Patch()
   @ApiOperation({ summary: '按资料版本修改显示名' })

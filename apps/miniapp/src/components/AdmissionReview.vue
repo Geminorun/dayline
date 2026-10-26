@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { admissionStatusLabel } from '@dayline/contracts';
 import { reviewSelectionKey } from '@dayline/contracts';
 import { computed, ref, watch } from 'vue';
 import { useAdmission } from '../admission';
@@ -113,7 +114,7 @@ function chooseRow(
         {{ job.targetSummary.categories }} 类。默认保留双方。</text
       ><view v-for="(c, index) in categories" :key="c.sourceId" class="card"
         ><text class="text">分类名称与颜色</text
-        ><input v-model="c.name" :disabled="busy" :maxlength="12" /><input
+        ><input v-model="c.name" :disabled="busy" :maxlength="24" /><input
           v-model="c.color"
           :disabled="busy"
         /><picker
@@ -181,7 +182,7 @@ function chooseRow(
   ><view v-if="operation" class="card"
     ><text class="text"
       >冻结本机修订 {{ operation.package.packageRevision }} ·
-      {{ operation.status }}</text
+      {{ admissionStatusLabel(operation.status) }}</text
     ><button class="secondary" :disabled="busy" @click="action('query')">
       查询保留的原任务</button
     ><button class="secondary" :disabled="busy" @click="restart">

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatBeijingTime } from '@dayline/core';
 import AdmissionReview from '../../components/AdmissionReview.vue';
 import { useAdmission } from '../../admission';
 import { ref, watch } from 'vue';
@@ -113,8 +114,10 @@ function navigate(url: string) {
       ><text class="text muted"
         >游客与账号记录分别保留；接入只确认被冻结修订，原游客包保留。</text
       ></view
-    ><AdmissionReview v-if="mode === 'account'" /><button
-      v-if="mode === 'account'"
+    ><AdmissionReview
+      v-if="mode === 'account' && current?.status === 'active'"
+    /><button
+      v-if="mode === 'account' && current?.status === 'active'"
       class="secondary"
       @click="useAdmission().begin(true)"
     >
@@ -130,9 +133,10 @@ function navigate(url: string) {
       ><text class="text"
         >密码：{{ current.passwordEnabled ? '已启用' : '未启用' }}</text
       ><text v-if="current.status !== 'active'" class="text notice"
-        >账号受限 · 注销到期 {{ current.deletionDueAt }}</text
+        >账号受限 · 注销到期
+        {{ formatBeijingTime(current.deletionDueAt) }}</text
       ><text class="text">显示名</text
-      ><input v-model="name" aria-label="显示名" /><button
+      ><input v-model="name" :maxlength="80" aria-label="显示名" /><button
         :disabled="busy || current.status !== 'active'"
         @click="save"
       >
@@ -141,19 +145,23 @@ function navigate(url: string) {
         退出当前账号
       </button></view
     ><view class="card"
+      ><button
+        v-if="current"
+        class="secondary"
+        @click="navigate('/pages/account/deletion')"
+      >
+        注销账号 / 查看状态与撤销</button
       ><button class="secondary" @click="navigate('/pages/categories/index')">
         分类管理</button
       ><button class="secondary" @click="navigate('/pages/trash/index')">
         回收站</button
       ><button
-        v-if="current"
+        v-if="current?.status === 'active'"
         class="secondary"
         @click="navigate('/pages/account/identity')"
       >
         添加邮箱 / 绑定微信 / 合并账号</button
-      ><text class="text muted"
-        >CSV / JSON 文件请在网页端操作；自助注销将在阶段 7 开放。</text
-      ></view
+      ><text class="text muted">CSV / JSON 文件请在网页端操作。</text></view
     ></view
   >
 </template>

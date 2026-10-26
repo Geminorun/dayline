@@ -101,3 +101,13 @@ export function summarizeEntries<T extends DateRange & { categoryId: string }>(
   };
 }
 export * from './views.js';
+
+/** Display instants in the fixed product timezone, including on hosts without Intl. */
+export function formatBeijingTime(value: string | null | undefined): string {
+  if (!value) return '未设置';
+  const instant = Date.parse(value);
+  if (!Number.isFinite(instant)) return '时间待确认';
+  const date = new Date(instant + 8 * 3600000);
+  const two = (n: number) => String(n).padStart(2, '0');
+  return `${String(date.getUTCFullYear()).padStart(4, '0')}-${two(date.getUTCMonth() + 1)}-${two(date.getUTCDate())} ${two(date.getUTCHours())}:${two(date.getUTCMinutes())}:${two(date.getUTCSeconds())}（北京时间）`;
+}

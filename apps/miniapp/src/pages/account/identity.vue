@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatBeijingTime } from '@dayline/core';
 import { computed, ref, watch } from 'vue';
 import { onShow, onUnload } from '@dcloudio/uni-app';
 import { createIdentityClient } from '@dayline/api-client';
@@ -168,6 +169,8 @@ async function refresh() {
 async function handle(data: BindingResult | undefined, current: () => boolean) {
   if (!current()) return;
   if (data?.status === 'merge_required' && data.mergeContext) {
+    await refresh();
+    if (!current()) return;
     const response = await client.preview(data.mergeContext, operationId.value);
     if (!current()) return;
     publishPlan(response.data ?? null);
@@ -419,6 +422,7 @@ onUnload(() => {
         ><input
           v-if="mode === 'bind_email'"
           v-model="email"
+          :maxlength="254"
           placeholder="待绑定邮箱"
           aria-label="待绑定邮箱"
           @input="proof = ''"
@@ -478,7 +482,7 @@ onUnload(() => {
           @click="query(j.id)"
         >
           查询合并
-          {{ new Date(j.completedAt ?? j.createdAt).toLocaleString() }} ·
+          {{ formatBeijingTime(j.completedAt ?? j.createdAt) }} ·
           {{ identityStatusLabel(j.status) }}
         </button></view
       ></template
@@ -528,6 +532,7 @@ onUnload(() => {
             ></picker
           ><input
             v-model="c.name"
+            :maxlength="24"
             :disabled="busy || !!c.targetId"
             placeholder="新分类名称（最多12字）" /><input
             v-model="c.color"
@@ -558,7 +563,9 @@ onUnload(() => {
         :key="e.id"
         ><text class="text"
           >{{ e.title }} · {{ e.startDate }}—{{ e.endDate ?? '未结束' }} ·
-          {{ e.deletedAt ? '回收站至 ' + e.purgeAfter : '活动' }}</text
+          {{
+            e.deletedAt ? '回收站至 ' + formatBeijingTime(e.purgeAfter) : '活动'
+          }}</text
         ><button class="secondary" @click="openFocus(e.id)">
           核对 {{ groupedFocus.get(e.id)?.length ?? 0 }} 个重点状态
         </button></view
@@ -577,7 +584,9 @@ onUnload(() => {
         :key="e.id"
         ><text class="text"
           >{{ e.title }} · {{ e.startDate }}—{{ e.endDate ?? '未结束' }} ·
-          {{ e.deletedAt ? '回收站至 ' + e.purgeAfter : '活动' }}</text
+          {{
+            e.deletedAt ? '回收站至 ' + formatBeijingTime(e.purgeAfter) : '活动'
+          }}</text
         ><button class="secondary" @click="openFocus(e.id)">
           核对 {{ groupedFocus.get(e.id)?.length ?? 0 }} 个重点状态
         </button></view

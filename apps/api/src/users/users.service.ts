@@ -32,7 +32,7 @@ export class UsersService {
   ) {}
 
   async update(actor: Actor, input: PatchProfileInput): Promise<UserDto> {
-    return this.database.$transaction(async (tx) => {
+    return this.database.transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM users WHERE id = ${actor.userId}::uuid FOR UPDATE`;
       const user = await tx.user.findUnique({ where: { id: actor.userId } });
       if (

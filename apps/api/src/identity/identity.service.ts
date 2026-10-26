@@ -30,7 +30,7 @@ export class IdentityService {
     work: (tx: Prisma.TransactionClient) => Promise<T>,
     options: { timeout?: number } = {},
   ) {
-    return this.db.$transaction(work, {
+    return this.db.transaction(work, {
       maxWait: 10000,
       timeout: 60000,
       ...options,
@@ -450,7 +450,8 @@ export class IdentityService {
       );
     return this.transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM users WHERE id=${actor.userId}::uuid FOR UPDATE`;
-      await this.proofs.current(tx, actor, true);
+      const user = await this.proofs.current(tx, actor, true);
+      this.proofs.assertPurpose(user.status, input);
       return this.proofs.issue(actor, input);
     });
   }

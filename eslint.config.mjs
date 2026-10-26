@@ -13,6 +13,10 @@ export default tseslint.config(
     ],
   },
   js.configs.recommended,
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: { globals: { fetch: 'readonly', URL: 'readonly' } },
+  },
   ...tseslint.configs.recommended,
   ...vue.configs['flat/essential'],
   prettier,

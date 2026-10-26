@@ -8,6 +8,8 @@ import type {
   PatchEntryInput,
   SetFocusInput,
   PurgeTrashInput,
+  FocusDayDto,
+  EntryDto,
 } from '@dayline/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
@@ -55,7 +57,7 @@ export class RecordsService {
     action: (tx: Transaction) => Promise<{ data: T; changed: boolean }>,
   ) {
     try {
-      return await this.database.$transaction(async (tx) => {
+      return await this.database.transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM users WHERE id = ${actor.userId}::uuid FOR UPDATE`;
         const user = await this.readyUser(tx, actor.userId);
         if (
@@ -119,7 +121,7 @@ export class RecordsService {
     return { entry: entryDto(entry), focusDays: focusDays.map(focusDto) };
   }
   categories(userId: string) {
-    return this.database.$transaction(
+    return this.database.transaction(
       async (tx) => {
         await this.readyUser(tx, userId);
         const values = await tx.category.findMany({
@@ -277,7 +279,7 @@ export class RecordsService {
       throw new AppError(422, 'VALIDATION_ERROR', '结束日期不能早于开始日期。');
   }
   readEntry(userId: string, id: string) {
-    return this.database.$transaction(
+    return this.database.transaction(
       async (tx) => {
         await this.readyUser(tx, userId);
         return this.entryResult(tx, await this.entry(tx, userId, id));
@@ -468,7 +470,7 @@ export class RecordsService {
     });
   }
   trash(userId: string) {
-    return this.database.$transaction(
+    return this.database.transaction(
       async (tx) => {
         await this.readyUser(tx, userId);
         const values = await tx.entry.findMany({
@@ -553,7 +555,7 @@ export class RecordsService {
     });
   }
   snapshot(actor: Actor, ifNoneMatch?: string) {
-    return this.database.$transaction(
+    return this.database.transaction(
       async (tx) => {
         const user = await this.readyUser(tx, actor.userId);
         if (
@@ -575,14 +577,14 @@ export class RecordsService {
           where: { userId: actor.userId },
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         });
-        const entries = await tx.entry.findMany({
-          where: { userId: actor.userId },
-          orderBy: [{ startDate: 'asc' }, { id: 'asc' }],
-        });
-        const focus = await tx.entryFocusDay.findMany({
-          where: { entry: { userId: actor.userId } },
-          orderBy: [{ entryId: 'asc' }, { date: 'asc' }],
-        });
+        const entries = await tx.$queryRaw<
+          { active: EntryDto[]; trash: EntryDto[] }[]
+        >`WITH public_entries AS (SELECT start_date, id, deleted_at, json_build_object('id',id,'categoryId',category_id,'title',title,'startDate',to_char(start_date,'YYYY-MM-DD'),'endDate',to_char(end_date,'YYYY-MM-DD'),'version',version,'focusVersion',focus_version,'deletedAt',to_char(deleted_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),'purgeAfter',to_char(purge_after AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),'createdAt',to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),'updatedAt',to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) AS dto FROM entries WHERE user_id=${actor.userId}::uuid) SELECT COALESCE(json_agg(dto ORDER BY start_date,id) FILTER(WHERE deleted_at IS NULL),'[]'::json) AS active, COALESCE(json_agg(dto ORDER BY start_date,id) FILTER(WHERE deleted_at IS NOT NULL),'[]'::json) AS trash FROM public_entries`;
+        // Aggregate only public focus fields in PG. Large snapshots avoid materializing
+        // thousands of Prisma Date/updatedAt records before producing the same DTO.
+        const focus = await tx.$queryRaw<
+          { days: FocusDayDto[] }[]
+        >`SELECT COALESCE(json_agg(json_build_object('entryId', f.entry_id, 'date', to_char(f.date, 'YYYY-MM-DD'), 'focused', f.focused, 'version', f.version) ORDER BY f.entry_id, f.date), '[]'::json) AS days FROM entry_focus_days f JOIN entries e ON e.id=f.entry_id WHERE e.user_id=${actor.userId}::uuid`;
         return {
           etag,
           data: {
@@ -593,11 +595,9 @@ export class RecordsService {
             businessToday: today,
             complete: true as const,
             categories: categories.map(categoryDto),
-            entries: entries.filter((entry) => !entry.deletedAt).map(entryDto),
-            trashEntries: entries
-              .filter((entry) => entry.deletedAt)
-              .map(entryDto),
-            focusDays: focus.map(focusDto),
+            entries: entries[0]?.active ?? [],
+            trashEntries: entries[0]?.trash ?? [],
+            focusDays: focus[0]?.days ?? [],
           },
         };
       },

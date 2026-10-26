@@ -11,6 +11,28 @@ export const APP_CONFIG = Symbol('APP_CONFIG');
 const httpUrl = z.url({ protocol: /^https?$/ });
 
 const environmentSchema = z.object({
+  RATE_LIMIT_ENABLED: z.enum(['true', 'false']).optional(),
+  EXTERNAL_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .max(30000)
+    .default(8000),
+  MAINTENANCE_ENABLED: z.enum(['true', 'false']).default('true'),
+  TRUST_PROXY: z.string().default(''),
+  LOG_LEVEL: z.enum(['error', 'warn', 'info']).default('info'),
+  REQUEST_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .max(60000)
+    .default(15000),
+  BATCH_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .max(120000)
+    .default(60000),
   NODE_ENV: z
     .enum(['development', 'test', 'production'])
     .default('development'),
@@ -70,6 +92,13 @@ export function parseEnvironment(input: Record<string, string | undefined>) {
       'RESEND_API_KEY is required for the Resend mail transport.',
     );
   }
+  if (
+    env.TRUST_PROXY &&
+    env.TRUST_PROXY.split(',').some(
+      (v) => !/^(?:[0-9a-fA-F:.]+)(?:\/\d{1,3})?$/.test(v.trim()),
+    )
+  )
+    throw new Error('TRUST_PROXY requires explicit IP addresses or CIDRs.');
   if (env.NODE_ENV === 'production') {
     if (
       !env.ACTION_PROOF_SECRET ||
@@ -98,6 +127,17 @@ export function parseEnvironment(input: Record<string, string | undefined>) {
   }
 
   return {
+    rateLimitEnabled: env.RATE_LIMIT_ENABLED
+      ? env.RATE_LIMIT_ENABLED === 'true'
+      : env.NODE_ENV !== 'test',
+    externalTimeoutMs: env.EXTERNAL_TIMEOUT_MS,
+    maintenanceEnabled: env.MAINTENANCE_ENABLED === 'true',
+    trustProxy: env.TRUST_PROXY.split(',')
+      .map((v) => v.trim())
+      .filter(Boolean),
+    logLevel: env.LOG_LEVEL,
+    requestTimeoutMs: env.REQUEST_TIMEOUT_MS,
+    batchTimeoutMs: env.BATCH_TIMEOUT_MS,
     environment: env.NODE_ENV,
     host: env.HOST,
     port: env.PORT,

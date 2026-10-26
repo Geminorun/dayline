@@ -1,9 +1,40 @@
 <script setup lang="ts">
 import AdmissionReview from './AdmissionReview.vue';
-import { onMounted, onBeforeUnmount } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
+import { watch, onMounted, onBeforeUnmount } from 'vue';
 import { useWorkspace } from './records/workspace';
 import { useAccount } from './account';
 const workspace = useWorkspace();
+const router = useRouter(),
+  route = useRoute();
+watch(
+  () =>
+    `${workspace.mode.value}:${useAccount().current.value?.status}:${route.path}`,
+  () => {
+    if (
+      workspace.mode.value !== 'account' ||
+      useAccount().current.value?.status !== 'pending_deletion'
+    )
+      return;
+    if (
+      [
+        '/account-deletion',
+        '/data',
+        '/drafts',
+        '/settings',
+        '/login',
+        '/register',
+        '/verify',
+        '/verified',
+        '/forgot-password',
+        '/reset-password',
+      ].includes(route.path) ||
+      route.path.startsWith('/auth/')
+    )
+      return;
+    void router.replace('/account-deletion');
+  },
+);
 const { mode, identityState, switchMode, cacheError } = workspace,
   { current } = useAccount();
 function visible() {
@@ -82,7 +113,20 @@ onBeforeUnmount(() => {
             明确继续游客
           </button>
         </section>
-        <AdmissionReview v-if="mode === 'account'" />
+        <section
+          v-if="current?.status === 'pending_deletion'"
+          class="notice"
+          role="status"
+        >
+          <p>账号正在注销中，普通登录不会撤销。业务写入已暂停。</p>
+          <RouterLink to="/account-deletion"
+            >查看到期时间 / 明确撤销</RouterLink
+          >
+          · <RouterLink to="/data">导出已保存记录</RouterLink>
+        </section>
+        <AdmissionReview
+          v-if="mode === 'account' && current?.status === 'active'"
+        />
         <p v-if="cacheError" class="error" role="status">{{ cacheError }}</p>
         <RouterView v-slot="{ Component, route }"
           ><component

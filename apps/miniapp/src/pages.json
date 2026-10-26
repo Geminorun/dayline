@@ -59,6 +59,12 @@
       "style": {
         "navigationBarTitleText": "登录方式与合并"
       }
+    },
+    {
+      "path": "pages/account/deletion",
+      "style": {
+        "navigationBarTitleText": "账号注销与撤销"
+      }
     }
   ],
   "globalStyle": {

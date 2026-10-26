@@ -1,3 +1,4 @@
+import { Clock } from '../records/clock.js';
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service.js';
@@ -8,11 +9,12 @@ import type { WechatIdentityProof } from './wechat-adapter.js';
 @Injectable()
 export class WechatService {
   constructor(
+    @Inject(Clock) private readonly clock: Clock,
     @Inject(PrismaService) private readonly database: PrismaService,
   ) {}
 
   async findOrCreate(proof: WechatIdentityProof): Promise<string> {
-    return this.database.$transaction((transaction) =>
+    return this.database.transaction((transaction) =>
       this.findOrCreateInTransaction(proof, transaction),
     );
   }
@@ -28,7 +30,12 @@ export class WechatService {
       include: { user: true },
     });
     if (existing) {
-      if (existing.user.status === 'merged')
+      if (
+        existing.user.status === 'merged' ||
+        (existing.user.status === 'pending_deletion' &&
+          existing.user.deletionDueAt &&
+          existing.user.deletionDueAt <= this.clock.now())
+      )
         throw new AppError(403, 'ACCOUNT_UNAVAILABLE', '账号暂不可登录。');
       return existing.userId;
     }

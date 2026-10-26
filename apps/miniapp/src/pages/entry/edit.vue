@@ -244,6 +244,7 @@ function back() {
       ><text class="text">标题（{{ [...title].length }} / 100 字）</text
       ><input
         v-model="title"
+        :maxlength="200"
         aria-label="事项标题"
         :disabled="saving || readonly"
         placeholder="一段值得记录的经历"

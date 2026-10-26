@@ -96,6 +96,7 @@ function readProfile() {
   return work;
 }
 let identityWritePending = false;
+let pendingNavigation = false;
 async function identityWrite<T>(work: () => Promise<T>): Promise<T> {
   if (identityWritePending)
     throw new ClientError('OPERATION_BUSY', '身份操作正在处理中。');
@@ -123,7 +124,7 @@ function schedule() {
     !identityWritePending &&
     foreground &&
     mode.value === 'account' &&
-    current.value
+    current.value?.status === 'active'
   )
     timer = setTimeout(() => {
       coordinator.tick();
@@ -131,6 +132,7 @@ function schedule() {
     }, 30000);
 }
 api.onIdentityChange(() => {
+  pendingNavigation = false;
   scopeGeneration++;
   spaceRevision.value = scopeGeneration;
   stop();
@@ -149,6 +151,23 @@ api.onIdentityChange(() => {
 api.onWrite((data, version, time) => {
   if (mode.value === 'account') coordinator.written(data, version, time);
 });
+function navigatePending() {
+  if (pendingNavigation || typeof uni.navigateTo !== 'function') return;
+  const pages = typeof getCurrentPages === 'function' ? getCurrentPages() : [];
+  if (
+    ['pages/account/deletion', 'pages/scan/confirm'].includes(
+      pages.at(-1)?.route ?? '',
+    )
+  )
+    return;
+  pendingNavigation = true;
+  uni.navigateTo({
+    url: '/pages/account/deletion',
+    complete: () => {
+      pendingNavigation = false;
+    },
+  });
+}
 export function useWorkspace() {
   async function reload() {
     if (identityWritePending) return;
@@ -170,9 +189,9 @@ export function useWorkspace() {
       guest.value = data;
       snapshot.value = guestSnapshot(data, businessToday());
       serverTime.value = new Date().toISOString();
-    } else {
+    } else if (current.value?.status === 'active') {
       await coordinator.refresh();
-    }
+    } else snapshot.value = null;
   }
 
   function load(): Promise<void> {
@@ -226,12 +245,16 @@ export function useWorkspace() {
       identityState.value = 'verified';
       coordinator.reset(user.id);
       if (time) coordinator.setServerTime(time);
-      await coordinator.cache();
+      if (user.status === 'active') await coordinator.cache();
     }
     if (intent !== switchIntent) return;
     if (next === 'guest') identityState.value = 'guest';
     await load();
-    if (intent === switchIntent) schedule();
+    if (intent === switchIntent) {
+      schedule();
+      if (next === 'account' && current.value?.status === 'pending_deletion')
+        navigatePending();
+    }
   }
   async function mutate(
     mutation: GuestMutation,
@@ -340,7 +363,17 @@ export function useWorkspace() {
     }
   }
   function ensure(): Promise<void> {
-    if (initialized) return Promise.resolve();
+    if (initialized) {
+      if (
+        mode.value === 'account' &&
+        current.value?.status === 'pending_deletion'
+      ) {
+        const pages =
+          typeof getCurrentPages === 'function' ? getCurrentPages() : [];
+        if (pages.at(-1)?.route !== 'pages/me/index') navigatePending();
+      }
+      return Promise.resolve();
+    }
     if (bootWork) return bootWork;
     const work = (async () => {
       try {

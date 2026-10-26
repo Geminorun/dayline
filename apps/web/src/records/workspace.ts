@@ -84,7 +84,7 @@ function schedule() {
     !identityWritePending &&
     foreground &&
     mode.value === 'account' &&
-    current.value
+    current.value?.status === 'active'
   )
     timer = setTimeout(() => {
       coordinator.tick();
@@ -126,7 +126,8 @@ export function useWorkspace() {
       guest.value = data;
       snapshot.value = guestSnapshot(data, businessToday());
       serverTime.value = new Date().toISOString();
-    } else await coordinator.refresh();
+    } else if (current.value?.status === 'active') await coordinator.refresh();
+    else snapshot.value = null;
   }
   function load(): Promise<void> {
     if (identityWritePending) return Promise.resolve();
@@ -181,7 +182,7 @@ export function useWorkspace() {
         coordinator.reset(current.value.id);
         if (useAccount().serverTime.value)
           coordinator.setServerTime(useAccount().serverTime.value);
-        await coordinator.cache();
+        if (current.value.status === 'active') await coordinator.cache();
         if (intent !== switchIntent) return;
       }
       if (intent !== switchIntent) return;

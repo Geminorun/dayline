@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { formatBeijingTime } from '@dayline/core';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import {
@@ -230,6 +231,8 @@ async function stopQr() {
 async function result(data: BindingResult | undefined, current: () => boolean) {
   if (!data || !current()) return;
   if (data.status === 'merge_required' && data.mergeContext) {
+    await refreshJobs();
+    if (!current()) return;
     const response = await client.preview(data.mergeContext, operationId.value);
     if (!current()) return;
     publishPlan(response.data ?? null);
@@ -614,7 +617,7 @@ onBeforeUnmount(() => {
           @click="query(j.id)"
         >
           查询原合并 ·
-          {{ new Date(j.completedAt ?? j.createdAt).toLocaleString() }} ·
+          {{ formatBeijingTime(j.completedAt ?? j.createdAt) }} ·
           {{ identityStatusLabel(j.status) }}</button
         ><button v-if="recoveryId" :disabled="busy" @click="query()">
           查询本次提交结果
@@ -650,7 +653,7 @@ onBeforeUnmount(() => {
       <p>
         同标题事项全部保留；回收站删除期限和取消的重点也保留。计划有效至
         {{
-          plan.expiresAt
+          formatBeijingTime(plan.expiresAt)
         }}。验证到期时，点击重新验证双方，将保留已保存的核对计划。
       </p>
       <p v-for="conflict in plan.conflicts" :key="conflict" class="error">
@@ -713,7 +716,10 @@ onBeforeUnmount(() => {
       >
         <p>
           {{ e.title }} · {{ e.startDate }}—{{ e.endDate ?? '未结束' }} ·
-          {{ e.deletedAt ? `回收站至 ${e.purgeAfter}` : '活动' }} · 分类
+          {{
+            e.deletedAt ? `回收站至 ${formatBeijingTime(e.purgeAfter)}` : '活动'
+          }}
+          · 分类
           {{
             plan.categoryMappings.find((c) => c.sourceId === e.categoryId)
               ?.sourceName
@@ -739,7 +745,9 @@ onBeforeUnmount(() => {
         :key="e.id"
       >
         {{ e.title }} · {{ e.startDate }}—{{ e.endDate ?? '未结束' }} ·
-        {{ e.deletedAt ? `回收站至 ${e.purgeAfter}` : '活动' }}
+        {{
+          e.deletedAt ? `回收站至 ${formatBeijingTime(e.purgeAfter)}` : '活动'
+        }}
         <button class="secondary" @click="openFocus(e.id)">
           核对 {{ groupedFocus.get(e.id)?.length ?? 0 }} 个重点状态
         </button>

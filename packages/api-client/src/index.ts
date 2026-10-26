@@ -35,6 +35,7 @@ export class ClientError extends Error {
     message: string,
     readonly status = 0,
     readonly details?: unknown,
+    readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = 'ClientError';
@@ -172,7 +173,21 @@ export class ApiClient {
       const body = record(response.body);
       const error = record(body.error ?? body);
       const code =
-        typeof error.code === 'string' ? error.code : 'REQUEST_FAILED';
+        response.status === 429
+          ? 'RATE_LIMITED'
+          : typeof error.code === 'string'
+            ? error.code
+            : 'REQUEST_FAILED';
+      const retryHeader = Object.entries(response.headers).find(
+        ([key]) => key.toLowerCase() === 'retry-after',
+      )?.[1];
+      const retryAfterSeconds =
+        response.status === 429 &&
+        retryHeader &&
+        /^\d{1,5}$/.test(retryHeader) &&
+        Number(retryHeader) <= 86400
+          ? Number(retryHeader)
+          : undefined;
       if (
         (response.status === 401 && options.account) ||
         code === 'ACTOR_CONTEXT_MISMATCH'
@@ -202,6 +217,11 @@ export class ApiClient {
         ENTRY_DELETED: '事项已在回收站。',
         TRASH_EXPIRED: '事项已超过恢复期限。',
         RATE_LIMITED: '操作过于频繁，请稍后重试。',
+        ACCOUNT_PENDING_DELETION: '账号正在注销中，请查看注销状态或明确撤销。',
+        DELETION_EXPIRED: '注销撤销期限已过，账号不能恢复。',
+        REQUEST_TIMEOUT:
+          '请求未在时限内完成，请先读取当前记录或原任务状态确认结果。',
+        MAINTENANCE_PENDING: '服务正在完成启动维护，请稍后重试。',
         PREVIEW_STALE:
           '记录或计划已有变化，请保留原文件，重新建立预览并核对当前内容。',
         IMPORT_REVIEW_REQUIRED:
@@ -217,7 +237,9 @@ export class ApiClient {
       };
       throw new ClientError(
         code,
-        messages[code] ??
+        (code === 'RATE_LIMITED' && retryAfterSeconds !== undefined
+          ? `操作过于频繁，请等待 ${retryAfterSeconds} 秒后再试。`
+          : messages[code]) ??
           (response.status === 401
             ? '登录状态失效，请重新登录。'
             : '操作未完成，请核对输入后重试。'),
@@ -234,6 +256,7 @@ export class ApiClient {
                   ).data,
                 }
               : undefined,
+        retryAfterSeconds,
       );
     }
     if (response.status === 204) {

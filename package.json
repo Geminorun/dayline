@@ -21,7 +21,10 @@
     "db:deploy": "pnpm --filter @dayline/api db:deploy",
     "db:studio": "pnpm --filter @dayline/api db:studio",
     "dev:web": "pnpm build:shared && pnpm --filter @dayline/web dev",
-    "dev:miniapp": "pnpm build:shared && pnpm --filter @dayline/miniapp dev"
+    "dev:miniapp": "pnpm build:shared && pnpm --filter @dayline/miniapp dev",
+    "verify:capacity": "pnpm build && node scripts/verify-capacity.mjs",
+    "verify:backup-restore": "pnpm build && node scripts/verify-backup-restore.mjs",
+    "verify:containers": "pnpm build && node scripts/verify-containers.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
