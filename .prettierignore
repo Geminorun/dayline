@@ -1,0 +1,8 @@
+pnpm-lock.yaml
+node_modules
+dist
+coverage
+apps/api/src/generated
+.local
+docs
+AGENTS.md

@@ -1,0 +1,34 @@
+{
+  "name": "dayline",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24.11 <25"
+  },
+  "scripts": {
+    "dev": "pnpm build:shared && pnpm --filter @dayline/api dev",
+    "build:shared": "pnpm --filter './packages/*' -r build",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm build:shared && pnpm -r typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "pnpm build:shared && pnpm -r test",
+    "test:integration": "pnpm build && pnpm db:test:deploy && pnpm --filter @dayline/api test:integration",
+    "db:test:deploy": "pnpm --filter @dayline/api exec prisma migrate deploy --config prisma.test.config.ts",
+    "db:generate": "pnpm --filter @dayline/api db:generate",
+    "db:migrate": "pnpm --filter @dayline/api db:migrate",
+    "db:deploy": "pnpm --filter @dayline/api db:deploy",
+    "db:studio": "pnpm --filter @dayline/api db:studio"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.0.0",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^5.0.5"
+  }
+}

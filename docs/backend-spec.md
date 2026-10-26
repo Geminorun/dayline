@@ -8,7 +8,7 @@
 | 需求基线 | [requirements.md](requirements.md) v1.0 |
 | 客户端 | Vue 网页与 uni-app 微信小程序 |
 | 核心技术 | Node.js、NestJS、TypeScript、PostgreSQL、Prisma、Better Auth、Resend |
-| 当前交付 | 规格文档；尚未初始化后端工程、迁移或执行第三方集成验证 |
+| 当前交付 | 后端框架、认证基础迁移及标准邮箱认证；业务功能待实现，实际范围与验证见 [README](../README.md) |
 
 阅读索引：
 

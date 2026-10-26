@@ -147,3 +147,7 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Local development mail previews contain one-time verification links.
+.local/
+apps/api/src/generated/

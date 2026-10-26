@@ -1,0 +1,54 @@
+name: Backend
+
+on:
+  push:
+    paths:
+      - 'apps/api/**'
+      - 'packages/**'
+      - 'infra/**'
+      - '*.json'
+      - '*.yaml'
+      - '*.mjs'
+      - '.prettierignore'
+      - '.node-version'
+      - '.github/workflows/backend.yml'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: dayline
+          POSTGRES_PASSWORD: dayline_ci_only
+          POSTGRES_DB: dayline_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dayline -d dayline_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://dayline:dayline_ci_only@127.0.0.1:5432/dayline_test
+      TEST_DATABASE_URL: postgresql://dayline:dayline_ci_only@127.0.0.1:5432/dayline_test
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm test:integration
