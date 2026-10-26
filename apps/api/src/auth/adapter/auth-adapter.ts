@@ -42,6 +42,96 @@ export class AuthAdapter {
     }
   }
 
+  async passwordValid(userId: string, password: string) {
+    const account = await this.database.account.findFirst({
+      where: { userId, providerId: 'credential' },
+    });
+    if (!account?.password) return false;
+    const context = await this.auth.$context;
+    return context.password.verify({ hash: account.password, password });
+  }
+  async hashPassword(password: string) {
+    if (password.length < 8 || password.length > 128)
+      throw new AppError(422, 'VALIDATION_ERROR', '密码须为 8–128 字符。');
+    return (await this.auth.$context).password.hash(password);
+  }
+  async bindEmail(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    email: string,
+    passwordHash: string,
+  ) {
+    await tx.user.update({
+      where: { id: userId },
+      data: {
+        email: realEmailSchema.parse(email),
+        emailKind: 'real',
+        emailVerified: true,
+        authEpoch: { increment: 1 },
+      },
+    });
+    await tx.account.create({
+      data: {
+        userId,
+        accountId: userId,
+        providerId: 'credential',
+        password: passwordHash,
+      },
+    });
+    await tx.session.deleteMany({ where: { userId } });
+  }
+  async migrateCredentials(
+    tx: Prisma.TransactionClient,
+    sourceId: string,
+    targetId: string,
+    verifiedEmail?: string,
+  ) {
+    const source = await tx.user.findUniqueOrThrow({ where: { id: sourceId } });
+    const target = await tx.user.findUniqueOrThrow({ where: { id: targetId } });
+    if (source.emailKind === 'real') {
+      if (target.emailKind === 'real')
+        throw new AppError(
+          409,
+          'IDENTITY_COMBINATION_UNSUPPORTED',
+          '首版只支持一个邮箱和一个微信；双方账号保持独立。',
+        );
+      await tx.user.update({
+        where: { id: sourceId },
+        data: {
+          email: `merged-${sourceId}@identity.dayline.invalid`,
+          emailKind: 'internal',
+          emailVerified: false,
+        },
+      });
+      await tx.user.update({
+        where: { id: targetId },
+        data: {
+          email: source.email,
+          emailKind: 'real',
+          emailVerified: source.emailVerified || verifiedEmail === source.email,
+        },
+      });
+    }
+    await tx.account.updateMany({
+      where: { userId: sourceId, providerId: 'credential' },
+      data: { userId: targetId, accountId: targetId },
+    });
+    await tx.wechatIdentity.updateMany({
+      where: { userId: sourceId },
+      data: { userId: targetId },
+    });
+    // Tokens issued before ownership changed must never verify or reset a source shell.
+    await tx.verification.deleteMany({
+      where: {
+        OR: [
+          { identifier: { contains: sourceId } },
+          { identifier: source.email },
+          { value: { contains: sourceId } },
+        ],
+      },
+    });
+  }
+
   /** Service-only primitive for a future binding flow AFTER both proofs are verified.
    * No HTTP endpoint exposes this primitive. Gate-A exercises it directly. */
   async setVerifiedEmailAndPassword(

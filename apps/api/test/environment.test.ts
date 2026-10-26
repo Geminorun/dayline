@@ -7,6 +7,7 @@ const environment = {
   AUTH_BASE_URL: 'http://localhost:3000',
   AUTH_TRUSTED_ORIGINS: 'http://localhost:5173,http://localhost:3000',
   WEB_BASE_URL: 'http://localhost:5173',
+  ACTION_PROOF_SECRET: 'test-only-action-proof-secret-independent-32-chars',
   BETTER_AUTH_SECRET:
     'test-only-authentication-secret-with-more-than-32-characters',
   MAIL_TRANSPORT: 'file',
@@ -39,6 +40,8 @@ describe('configuration boundaries', () => {
         ...production,
         AUTH_BASE_URL: 'https://api.example.com',
         WEB_BASE_URL: 'https://example.com',
+        ACTION_PROOF_SECRET:
+          'test-only-action-proof-secret-independent-32-chars',
         BETTER_AUTH_SECRET: 'local-development-only-replace-before-production',
       }),
     ).toThrow('Replace the development');

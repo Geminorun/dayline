@@ -4,6 +4,7 @@ import { ref } from 'vue';
 import { onLoad, onUnload } from '@dcloudio/uni-app';
 import { ClientError } from '@dayline/api-client';
 import { api, wechatCode } from '../../api';
+const purpose = ref('login');
 const requestId = ref('');
 const proof = ref('');
 const busy = ref(false);
@@ -26,6 +27,7 @@ async function load(scene: string) {
       body: { scene, code },
     });
     if (!disposed && data) {
+      purpose.value = data.purpose;
       requestId.value = data.id;
       proof.value = data.scannerProof;
       expiresAt.value = data.expiresAt;
@@ -107,28 +109,47 @@ onUnload(() => {
   <view class="page"
     ><view class="card"
       ><text class="subtitle">DAYLINE · 网页登录</text
-      ><text class="title">确认登录网页</text
+      ><text class="title">{{
+        purpose === 'login'
+          ? '确认登录网页'
+          : purpose === 'reauth'
+            ? '确认当前身份重新验证'
+            : '确认绑定微信'
+      }}</text
       ><text class="text"
-        >本次操作将让发起扫码的电脑网页进入此微信对应的账号。请确认是你本人正在登录。</text
+        >{{
+          purpose === 'login'
+            ? '本次操作将让发起扫码的网页进入此微信对应的账号。'
+            : purpose === 'reauth'
+              ? '本次仅为网页当前账号的指定操作重新验证，不会切换账号。'
+              : '将此微信添加到网页当前账号；已有独立账号时仅允许受验证预览合并，双方数据保留。'
+        }}请确认是你本人发起。</text
       ><text v-if="state === 'loading'" class="text muted"
         >正在验证本次扫码…</text
       ><text v-if="error" class="text error" role="alert">{{ error }}</text
       ><template v-if="state === 'scanned'"
         ><text class="text muted"
-          >扫描尚未登录。请明确选择确认或取消。有效至
+          >扫描尚未授权。请明确选择确认或取消。有效至
           {{ new Date(expiresAt).toLocaleTimeString() }}。</text
-        ><button :disabled="busy" @click="confirm">确认登录网页</button
+        ><button :disabled="busy" @click="confirm">
+          {{
+            purpose === 'login'
+              ? '确认登录网页'
+              : purpose === 'reauth'
+                ? '确认本次重新验证'
+                : '确认本次微信绑定'
+          }}</button
         ><button class="secondary" :disabled="busy" @click="cancel">
-          取消本次登录
+          取消本次操作
         </button></template
       ><template v-if="state === 'confirmed'"
         ><text class="text notice"
-          >已确认。请回到电脑网页点击完成登录；网页领取前仍可取消。</text
+          >已确认。请回到原网页领取本次操作结果；领取前仍可取消。</text
         ><button class="secondary" :disabled="busy" @click="cancel">
           取消已确认的登录
         </button></template
       ><text v-if="state === 'cancelled'" class="text notice"
-        >本次登录已取消。</text
+        >本次操作已取消。</text
       ></view
     ></view
   >

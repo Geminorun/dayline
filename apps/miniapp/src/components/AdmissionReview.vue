@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { reviewSelectionKey } from '@dayline/contracts';
 import { computed, ref, watch } from 'vue';
 import { useAdmission } from '../admission';
 import { useWorkspace } from '../workspace';
@@ -22,8 +23,14 @@ const categories = ref<
     { sourceId: string; targetId: string | null; name: string; color: string }[]
   >([]),
   rows = ref<{ sourceKey: string; action: 'create_copy' | 'skip' }[]>([]);
+const reviewBaseline = ref('');
+const unreviewedSelections = computed(
+  () =>
+    reviewSelectionKey({ categories: categories.value, rows: rows.value }) !==
+    reviewBaseline.value,
+);
 watch(
-  () => [job.value?.id, job.value?.planRevision],
+  () => `${job.value?.id ?? ''}:${job.value?.planRevision ?? ''}`,
   () => {
     page.value = 0;
     categories.value =
@@ -38,10 +45,15 @@ watch(
         sourceKey: r.sourceKey,
         action: r.action === 'skip' ? 'skip' : 'create_copy',
       })) ?? [];
+    reviewBaseline.value = reviewSelectionKey({
+      categories: categories.value,
+      rows: rows.value,
+    });
   },
   { immediate: true },
 );
 function target(index: number, event: { detail: { value: string | number } }) {
+  if (busy.value) return;
   const c = categories.value[index],
     n = Number(event.detail.value),
     t = workspace.snapshot.value?.categories[n - 1];
@@ -54,8 +66,18 @@ function target(index: number, event: { detail: { value: string | number } }) {
   }
 }
 async function commit() {
+  if (busy.value || !job.value?.canCommit || unreviewedSelections.value) return;
   await action('commit');
   if (job.value?.status === 'committed') await workspace.load();
+}
+async function review() {
+  const p = job.value;
+  if (!p || busy.value) return;
+  await action('review', {
+    expectedPlanRevision: p.planRevision,
+    categories: categories.value.map((c) => ({ ...c })),
+    rows: rows.value.map((r) => ({ ...r })),
+  });
 }
 function restart() {
   uni.showModal({
@@ -71,6 +93,7 @@ function chooseRow(
   index: number,
   event: { detail: { value: string | number } },
 ) {
+  if (busy.value) return;
   const choice = rows.value[index];
   if (choice)
     choice.action = Number(event.detail.value) === 0 ? 'skip' : 'create_copy';
@@ -90,9 +113,11 @@ function chooseRow(
         {{ job.targetSummary.categories }} 类。默认保留双方。</text
       ><view v-for="(c, index) in categories" :key="c.sourceId" class="card"
         ><text class="text">分类名称与颜色</text
-        ><input v-model="c.name" :maxlength="12" /><input
+        ><input v-model="c.name" :disabled="busy" :maxlength="12" /><input
           v-model="c.color"
+          :disabled="busy"
         /><picker
+          :disabled="busy"
           :range="[
             '保留为新分类',
             ...(workspace.snapshot.value?.categories.map(
@@ -115,6 +140,7 @@ function chooseRow(
         }}</text
         ><picker
           v-if="rows[row.index]"
+          :disabled="busy"
           :range="['跳过来源', '明确保留新副本']"
           :value="rows[row.index]?.action === 'skip' ? 0 : 1"
           @change="chooseRow(row.index, $event)"
@@ -135,21 +161,16 @@ function chooseRow(
         >
           下一页记录
         </button></view
+      ><button :disabled="busy" @click="review">更新并核对计划</button
       ><button
-        :disabled="busy"
-        @click="
-          action('review', {
-            expectedPlanRevision: job.planRevision,
-            categories,
-            rows,
-          })
-        "
+        :disabled="busy || !job.canCommit || unreviewedSelections"
+        @click="commit"
       >
-        更新并核对计划</button
-      ><button :disabled="busy || !job.canCommit" @click="commit">
         确认接入</button
       ><button class="secondary" :disabled="busy" @click="action('cancel')">
         暂不导入</button
+      ><text v-if="unreviewedSelections" class="text notice"
+        >分类或来源选择尚未保存核对，请先更新并核对计划。</text
       ><text v-if="!job.canCommit" class="text"
         >请处理分类重名、20 类上限及需要核对的来源后更新计划。</text
       ></template

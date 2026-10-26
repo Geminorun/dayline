@@ -30,6 +30,7 @@
     "dotenv": "^17.0.0",
     "express": "^5.1.0",
     "helmet": "^8.0.0",
+    "jose": "6.2.13",
     "pg": "^8.0.0",
     "reflect-metadata": "^0.2.2",
     "resend": "6.34.1",

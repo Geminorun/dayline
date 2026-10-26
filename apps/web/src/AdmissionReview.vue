@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { reviewSelectionKey } from '@dayline/contracts';
 import { computed, ref, watch } from 'vue';
 import { useAdmission } from './admission';
 import { useWorkspace } from './records/workspace';
@@ -22,8 +23,14 @@ const categories = ref<
     { sourceId: string; targetId: string | null; name: string; color: string }[]
   >([]),
   rows = ref<{ sourceKey: string; action: 'create_copy' | 'skip' }[]>([]);
+const reviewBaseline = ref('');
+const unreviewedSelections = computed(
+  () =>
+    reviewSelectionKey({ categories: categories.value, rows: rows.value }) !==
+    reviewBaseline.value,
+);
 watch(
-  () => [job.value?.id, job.value?.planRevision],
+  () => `${job.value?.id ?? ''}:${job.value?.planRevision ?? ''}`,
   () => {
     page.value = 0;
     categories.value =
@@ -38,14 +45,20 @@ watch(
         sourceKey: r.sourceKey,
         action: r.action === 'skip' ? 'skip' : 'create_copy',
       })) ?? [];
+    reviewBaseline.value = reviewSelectionKey({
+      categories: categories.value,
+      rows: rows.value,
+    });
   },
   { immediate: true },
 );
 async function commit() {
+  if (busy.value || !job.value?.canCommit || unreviewedSelections.value) return;
   await action('commit');
   if (job.value?.status === 'committed') await workspace.load();
 }
 function target(index: number, event: Event) {
+  if (busy.value) return;
   const selected = (event.target as HTMLSelectElement).value,
     c = categories.value[index];
   if (!c) return;
@@ -56,6 +69,15 @@ function target(index: number, event: Event) {
     c.color = t.color;
   }
 }
+async function review() {
+  const p = job.value;
+  if (!p || busy.value) return;
+  await action('review', {
+    expectedPlanRevision: p.planRevision,
+    categories: categories.value.map((c) => ({ ...c })),
+    rows: rows.value.map((r) => ({ ...r })),
+  });
+}
 function restart() {
   if (
     window.confirm(
@@ -65,6 +87,7 @@ function restart() {
     void begin(true, true);
 }
 function chooseRow(index: number, event: Event) {
+  if (busy.value) return;
   const value = (event.target as HTMLSelectElement).value,
     choice = rows.value[index];
   if (choice && (value === 'skip' || value === 'create_copy'))
@@ -88,11 +111,17 @@ function chooseRow(index: number, event: Event) {
       </p>
       <h3>逐项分类映射</h3>
       <div v-for="(c, index) in categories" :key="c.sourceId" class="form-grid">
-        <label>分类名称<input v-model="c.name" maxlength="12" /></label
-        ><label>颜色<input v-model="c.color" type="color" /></label
+        <label
+          >分类名称<input
+            v-model="c.name"
+            :disabled="busy"
+            maxlength="12" /></label
+        ><label
+          >颜色<input v-model="c.color" :disabled="busy" type="color" /></label
         ><label
           >目标<select
             :value="c.targetId ?? ''"
+            :disabled="busy"
             @change="target(index, $event)"
           >
             <option value="">保留为新分类</option>
@@ -127,6 +156,7 @@ function chooseRow(index: number, event: Event) {
         <label
           >处理<select
             v-if="rows[row.index]"
+            :disabled="busy"
             :value="rows[row.index]?.action"
             @change="chooseRow(row.index, $event)"
           >
@@ -149,22 +179,18 @@ function chooseRow(index: number, event: Event) {
           下一页记录
         </button>
       </div>
-      <button
-        :disabled="busy"
-        @click="
-          action('review', {
-            expectedPlanRevision: job.planRevision,
-            categories,
-            rows,
-          })
-        "
+      <button :disabled="busy" @click="review">更新并核对计划</button
+      ><button
+        :disabled="busy || !job.canCommit || unreviewedSelections"
+        @click="commit"
       >
-        更新并核对计划</button
-      ><button :disabled="busy || !job.canCommit" @click="commit">
         确认接入此计划</button
       ><button class="secondary" :disabled="busy" @click="action('cancel')">
         暂不导入
       </button>
+      <p v-if="unreviewedSelections" role="status">
+        分类或来源选择尚未保存核对，请先更新并核对计划。
+      </p>
       <p v-if="!job.canCommit">
         请处理分类名称、20 类上限及需要核对的记录后更新计划。
       </p></template

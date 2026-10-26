@@ -181,6 +181,13 @@ export class ApiClient {
       // Never echo an upstream body, credential or internal SDK message into a UI.
       const messages: Record<string, string> = {
         ACTOR_CONTEXT_MISMATCH: '当前账号已变化，请重新登录。',
+        REAUTH_REQUIRED:
+          '本次身份验证未通过或已过期，请重新验证；当前会话仍保留。',
+        IDENTITY_COMBINATION_UNSUPPORTED:
+          '首版支持一个邮箱和一个微信；此组合不能合并，双方账号保持独立。',
+        IDENTITY_ALREADY_LINKED: '登录方式关联已变化，请重新验证后核对。',
+        BINDING_LINK_INVALID: '邮箱验证链接已失效，请回原设备重新申请。',
+        BINDING_ENDED: '此绑定操作已结束，请重新读取账号。',
         EMAIL_NOT_VERIFIED: '请先验证邮箱，可重新发送验证邮件。',
         INVALID_EMAIL_OR_PASSWORD: '邮箱或密码不正确。',
         QR_EXPIRED: '二维码已过期，请重新生成。',
@@ -292,3 +299,5 @@ export { SnapshotCoordinator } from './snapshot-coordinator.js';
 export { createImportsClient } from './imports.js';
 export { AdmissionCoordinator } from './admission-coordinator.js';
 export type { AdmissionState } from './admission-coordinator.js';
+
+export * from './identity.js';

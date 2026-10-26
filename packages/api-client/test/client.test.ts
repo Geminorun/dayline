@@ -251,3 +251,26 @@ it('keeps a fresh valid actor when an older-epoch import task is stale and gives
   expect(client.getAccount()).toBe('current');
   expect(client.getGeneration()).toBe(generation);
 });
+
+it('keeps valid actor on wrong or expired purpose proof and only invalidates a genuinely revoked session', async () => {
+  let status = 403;
+  const client = new ApiClient(async () => ({
+    status,
+    headers: {},
+    body: {
+      error: { code: status === 401 ? 'SESSION_REVOKED' : 'REAUTH_REQUIRED' },
+    },
+  }));
+  client.setAccount('current');
+  const generation = client.getGeneration();
+  await expect(
+    client.request('/api/v1/auth/reauth', { method: 'POST', account: true }),
+  ).rejects.toMatchObject({ code: 'REAUTH_REQUIRED', status: 403 });
+  expect(client.getAccount()).toBe('current');
+  expect(client.getGeneration()).toBe(generation);
+  status = 401;
+  await expect(
+    client.request('/api/v1/auth/reauth', { method: 'POST', account: true }),
+  ).rejects.toMatchObject({ code: 'SESSION_REVOKED' });
+  expect(client.getAccount()).toBeNull();
+});

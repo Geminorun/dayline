@@ -55,13 +55,37 @@ const coordinator = new SnapshotCoordinator(
   },
   () => performance.now(),
 );
+let identityWritePending = false;
+async function identityWrite<T>(work: () => Promise<T>): Promise<T> {
+  if (identityWritePending)
+    throw new ClientError('OPERATION_BUSY', '身份操作正在处理中。');
+  identityWritePending = true;
+  stop();
+  const generation = api.getGeneration();
+  const resumeProbes = await useAccount().pauseProbes();
+  try {
+    await loadWork?.catch(() => {});
+    if (generation !== api.getGeneration())
+      throw new ClientError('STALE_RESPONSE', '账号已变化，请重新验证。');
+    return await work();
+  } finally {
+    resumeProbes();
+    identityWritePending = false;
+    schedule();
+  }
+}
 function stop() {
   if (timer) clearTimeout(timer);
   timer = undefined;
 }
 function schedule() {
   stop();
-  if (foreground && mode.value === 'account' && current.value)
+  if (
+    !identityWritePending &&
+    foreground &&
+    mode.value === 'account' &&
+    current.value
+  )
     timer = setTimeout(() => {
       coordinator.tick();
       void useWorkspace().load().finally(schedule);
@@ -90,6 +114,7 @@ api.onWrite((data, version, time) => {
 });
 export function useWorkspace() {
   async function reload() {
+    if (identityWritePending) return;
     const generation = scopeGeneration;
     if (mode.value === 'guest') {
       const data = await loadGuest(
@@ -104,6 +129,7 @@ export function useWorkspace() {
     } else await coordinator.refresh();
   }
   function load(): Promise<void> {
+    if (identityWritePending) return Promise.resolve();
     if (loadWork) return loadWork;
     const generation = scopeGeneration;
     loading.value = true;
@@ -229,7 +255,7 @@ export function useWorkspace() {
       void load().finally(schedule);
   }
   async function reprobe() {
-    if (mode.value !== 'account') return;
+    if (identityWritePending || mode.value !== 'account') return;
     try {
       await refresh();
     } catch {
@@ -285,6 +311,7 @@ export function useWorkspace() {
         void load().finally(schedule);
       }
     },
+    identityWrite,
     generation: () => scopeGeneration,
   };
 }

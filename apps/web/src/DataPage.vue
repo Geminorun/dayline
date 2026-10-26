@@ -16,7 +16,11 @@ import type {
   ImportReviewInput,
   ImportRow,
 } from '@dayline/contracts';
-import { GuestError, importJobSchema } from '@dayline/contracts';
+import {
+  GuestError,
+  importJobSchema,
+  reviewSelectionKey,
+} from '@dayline/contracts';
 import { api } from './api';
 import { parseWebFile } from './adapters/file-parser';
 import { useWorkspace } from './records/workspace';
@@ -43,6 +47,14 @@ const rows = computed(
 );
 const choices = ref<Record<string, ImportReviewInput['rows'][number]>>({});
 const categories = ref<ImportReviewInput['categories']>([]);
+const categoryReviewBaseline = ref('');
+const unreviewedSelections = computed(() =>
+  Boolean(
+    plan.value?.status === 'preview' &&
+    (Object.keys(choices.value).length > 0 ||
+      reviewSelectionKey(categories.value) !== categoryReviewBaseline.value),
+  ),
+);
 let intent = 0;
 function owner() {
   return space.mode.value === 'account'
@@ -71,6 +83,7 @@ function clear() {
   plan.value = null;
   choices.value = {};
   categories.value = [];
+  categoryReviewBaseline.value = '';
   busy.value = false;
   error.value = '';
   notice.value = '';
@@ -164,6 +177,7 @@ function show(p: ImportJobDto) {
     color: c.color,
     asCustom: c.asCustom ?? false,
   }));
+  categoryReviewBaseline.value = reviewSelectionKey(categories.value);
 }
 async function run(work: (c: ReturnType<typeof capture>) => Promise<void>) {
   if (blocked.value) return;
@@ -418,7 +432,7 @@ async function commit() {
   await run(async (c) => {
     const p = plan.value,
       op = operation.value;
-    if (!p || !op) return;
+    if (!p || !op || !p.canCommit || unreviewedSelections.value) return;
     notice.value = '正在整体保存，结果可查询。';
     const next =
       op.scope === 'account'
@@ -959,9 +973,9 @@ const fieldLabel: Record<string, string> = {
           保存核对并更新预览</button
         ><button
           :disabled="
-            busy ||
+            blocked ||
             !plan.canCommit ||
-            Object.keys(choices).length > 0 ||
+            unreviewedSelections ||
             space.readonly.value
           "
           @click="commit"
@@ -970,6 +984,9 @@ const fieldLabel: Record<string, string> = {
         ><button class="secondary" :disabled="blocked" @click="cancel">
           取消本次导入
         </button>
+        <p v-if="unreviewedSelections" role="status">
+          分类或逐项选择尚未保存核对，请先保存核对并更新预览。
+        </p>
         <p v-if="!plan.canCommit">
           请先修正文件错误、分类映射或逐项冲突。错误行不能静默跳过。
         </p>

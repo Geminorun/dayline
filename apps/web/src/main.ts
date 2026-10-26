@@ -1,5 +1,6 @@
 import { createApp } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
+import IdentityPage from './IdentityPage.vue';
 import DataPage from './DataPage.vue';
 import DraftsPage from './DraftsPage.vue';
 import App from './App.vue';
@@ -27,6 +28,8 @@ const router = createRouter({
     { path: '/settings', component: AccountPage },
     { path: '/drafts', component: DraftsPage },
     { path: '/data', component: DataPage },
+    { path: '/identity', component: IdentityPage },
+    { path: '/auth/email-binding', component: IdentityPage },
     {
       path: '/auth/:mode(login|register|verify-email|forgot-password|reset-password)',
       component: AuthPage,

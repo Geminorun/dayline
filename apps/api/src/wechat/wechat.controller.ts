@@ -21,6 +21,9 @@ import {
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import {
+  actionProofDtoSchema,
+  bindingResultSchema,
+  realEmailSchema,
   qrConfirmSchema,
   qrCreateSchema,
   qrResolveSchema,
@@ -30,6 +33,8 @@ import {
   qrResolvedDtoSchema,
   wechatLoginDtoSchema,
 } from '@dayline/contracts';
+import { fromNodeHeaders } from 'better-auth/node';
+import { AuthAccessService } from '../auth/auth-access.service.js';
 import { Public } from '../auth/auth.decorators.js';
 import { AuthAdapter } from '../auth/adapter/auth-adapter.js';
 import { forwardSessionHeaders } from '../auth/session-headers.js';
@@ -64,6 +69,7 @@ export class WechatController {
     @Inject(AuthAdapter) private readonly auth: AuthAdapter,
     @Inject(UsersService) private readonly users: UsersService,
     @Inject(QrService) private readonly qr: QrService,
+    @Inject(AuthAccessService) private readonly access: AuthAccessService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -135,7 +141,9 @@ export class WechatController {
 
   @Post('qr-requests')
   @HttpCode(201)
-  @ApiOperation({ summary: '创建网页登录小程序码；bind_wechat 尚未开放' })
+  @ApiOperation({
+    summary: '创建登录、绑定微信或专用重新验证小程序码；后两者固定当前会话',
+  })
   @ApiBody({ schema: dtoSchema(qrCreateSchema) })
   @ApiResponse({
     status: 201,
@@ -149,7 +157,22 @@ export class WechatController {
   ) {
     this.protect(request, response, true);
     const input = parse(qrCreateSchema, body);
-    const result = await this.qr.create(input.id, input.purpose);
+    if (input.action?.purpose === 'bind_email')
+      input.action.target = parse(realEmailSchema, input.action.target);
+    const session =
+      input.purpose === 'login'
+        ? null
+        : await this.access.require(
+            fromNodeHeaders(request.headers),
+            'POST',
+            input.purpose === 'reauth',
+          );
+    const result = await this.qr.create(
+      input.id,
+      input.purpose,
+      session?.actor,
+      input.action,
+    );
     response.cookie(`dayline_qr_${input.id}`, result.secret, {
       httpOnly: true,
       secure: this.config.environment === 'production',
@@ -179,7 +202,9 @@ export class WechatController {
 
   @Post('qr-requests/:id/confirm')
   @HttpCode(200)
-  @ApiOperation({ summary: '扫码者明确确认本次网页登录' })
+  @ApiOperation({
+    summary: '扫码者明确确认本次登录、绑定或重新验证；不替换已固定意图',
+  })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiBody({ schema: dtoSchema(qrConfirmSchema) })
   @ApiResponse({ status: 200, schema: dataResponseSchema(qrStatusDtoSchema) })
@@ -211,11 +236,19 @@ export class WechatController {
   @Post('qr-requests/:id/consume')
   @HttpCode(200)
   @ApiOperation({
-    summary: '原浏览器一次性领取已确认的登录，失败也不恢复领取权',
+    summary: '原浏览器一次性领取对应目的的登录会话、短期操作证明或绑定结果',
   })
   @ApiResponse({
     status: 200,
-    schema: dataResponseSchema(wechatLoginDtoSchema),
+    description:
+      '仅 login 建立登录会话；reauth 只返回短期 purpose proof；bind 只返回绑定或受证合并上下文，不切换为扫码账号。',
+    schema: {
+      oneOf: [
+        dataResponseSchema(wechatLoginDtoSchema),
+        dataResponseSchema(actionProofDtoSchema),
+        dataResponseSchema(bindingResultSchema),
+      ],
+    },
   })
   async consume(
     @Param('id') id: string,
@@ -223,6 +256,22 @@ export class WechatController {
     @Res({ passthrough: true }) response: Response,
   ) {
     this.protect(request, response, true);
+    const status = await this.qr.status(
+      this.requestId(id),
+      this.browserSecret(request, id),
+    );
+    if (status.purpose !== 'login') {
+      const session = await this.access.require(
+        fromNodeHeaders(request.headers),
+        'POST',
+        status.purpose === 'reauth',
+      );
+      return this.qr.consumeAction(
+        this.requestId(id),
+        this.browserSecret(request, id),
+        session.actor,
+      );
+    }
     const userId = await this.qr.consume(
       this.requestId(id),
       this.browserSecret(request, id),

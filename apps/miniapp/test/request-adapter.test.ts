@@ -119,3 +119,50 @@ describe('uni native request and isolated credential storage', () => {
     });
   });
 });
+
+it('a failed purpose-specific reauth does not remove the current signed credential or actor', async () => {
+  const storage = new Map<string, unknown>();
+  let status = 200;
+  vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.test');
+  vi.stubGlobal('uni', {
+    getStorageSync: (key: string) => storage.get(key),
+    setStorageSync: (key: string, value: unknown) => storage.set(key, value),
+    removeStorageSync: (key: string) => storage.delete(key),
+    request(options: UniApp.RequestOptions) {
+      options.success?.({
+        data:
+          status === 200
+            ? {
+                data: user,
+                meta: {
+                  requestId: 'proof',
+                  serverTime: '2026-10-26T04:00:00.000Z',
+                },
+              }
+            : { error: { code: 'REAUTH_REQUIRED' } },
+        statusCode: status,
+        header:
+          status === 200
+            ? { 'Set-Auth-Token': 'current-signed-credential' }
+            : {},
+        cookies: [],
+      });
+    },
+  });
+  const { api } = await import('../src/api');
+  await api.request('/api/v1/me', { decode: userDtoSchema.parse });
+  api.setAccount(user.id);
+  const before = [...storage.entries()],
+    generation = api.getGeneration();
+  status = 403;
+  await expect(
+    api.request('/api/v1/auth/reauth', {
+      method: 'POST',
+      account: true,
+      body: { password: 'wrong' },
+    }),
+  ).rejects.toMatchObject({ code: 'REAUTH_REQUIRED' });
+  expect(api.getAccount()).toBe(user.id);
+  expect(api.getGeneration()).toBe(generation);
+  expect([...storage.entries()]).toEqual(before);
+});

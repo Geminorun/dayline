@@ -30,6 +30,8 @@ describe('miniapp account cold restore and foreground truth', () => {
     vi.useFakeTimers();
     const storage = new Map<string, string>(),
       calls: string[] = [];
+    let holdProfile = false,
+      finishProfile: (() => void) | undefined;
     let network: ((status: { isConnected: boolean }) => void) | undefined;
     const source = createGuestPackage(randomUUID, time),
       snapshot = { ...guestSnapshot(source, '2026-10-26'), userId };
@@ -75,11 +77,14 @@ describe('miniapp account cold restore and foreground truth', () => {
               timeZone: 'Asia/Shanghai',
             }
           : snapshot;
-        options.success({
-          statusCode: 200,
-          header: { etag: 'test' },
-          data: { data, meta: { requestId: 'test', serverTime: time } },
-        });
+        const finish = () =>
+          options.success({
+            statusCode: 200,
+            header: { etag: 'test' },
+            data: { data, meta: { requestId: 'test', serverTime: time } },
+          });
+        if (holdProfile && options.url.endsWith('/me')) finishProfile = finish;
+        else finish();
       },
     });
     const wrapper = mount(App);
@@ -99,6 +104,33 @@ describe('miniapp account cold restore and foreground truth', () => {
     await flushPromises();
     expect(calls).toHaveLength(4);
     expect(calls.every((c) => c.startsWith('GET '))).toBe(true);
+    const beforePause = calls.length;
+    holdProfile = true;
+    const oldProbe = useWorkspace().restoreSession();
+    let entered = false,
+      finishWrite: (() => void) | undefined;
+    const mutation = useWorkspace().identityWrite(async () => {
+      entered = true;
+      await new Promise<void>((resolve) => (finishWrite = resolve));
+      return 'committed';
+    });
+    await flushPromises();
+    expect(entered).toBe(false);
+    hooks.show?.();
+    network?.({ isConnected: true });
+    await useWorkspace().restoreSession();
+    expect(calls).toHaveLength(beforePause + 1);
+    expect(finishProfile).toBeTypeOf('function');
+    holdProfile = false;
+    finishProfile?.();
+    await oldProbe;
+    await flushPromises();
+    expect(entered).toBe(true);
+    hooks.show?.();
+    await flushPromises();
+    expect(calls).toHaveLength(beforePause + 1);
+    finishWrite?.();
+    expect(await mutation).toBe('committed');
     hooks.hide?.();
     wrapper.unmount();
   });

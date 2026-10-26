@@ -61,6 +61,13 @@ export class ImportsService {
       throw new AppError(503, 'ACCOUNT_NOT_INITIALIZED', '账号尚未准备完成。');
     return user;
   }
+  private async receiptOwners(tx: Tx, userId: string) {
+    const sources = await tx.user.findMany({
+      where: { status: 'merged', mergedIntoUserId: userId },
+      select: { id: true },
+    });
+    return [userId, ...sources.map((s) => s.id)];
+  }
   private async cloud(tx: Tx, userId: string) {
     const [categories, entries, focus] = await Promise.all([
       tx.category.findMany({ where: { userId }, orderBy: { id: 'asc' } }),
@@ -208,7 +215,11 @@ export class ImportsService {
         }
         const cloud = await this.cloud(tx, actor.userId);
         const previous = await tx.importJob.findMany({
-          where: { userId: actor.userId, kind, status: 'committed' },
+          where: {
+            userId: { in: await this.receiptOwners(tx, actor.userId) },
+            kind,
+            status: 'committed',
+          },
           orderBy: { completedAt: 'asc' },
           select: { receipt: true },
         });
@@ -514,7 +525,11 @@ export class ImportsService {
     version: bigint,
   ) {
     const history = await tx.importJob.findMany({
-      where: { userId: actor.userId, kind: plan.kind, status: 'committed' },
+      where: {
+        userId: { in: await this.receiptOwners(tx, actor.userId) },
+        kind: plan.kind,
+        status: 'committed',
+      },
       select: { receipt: true },
     });
     const completed = importReceiptIndex(

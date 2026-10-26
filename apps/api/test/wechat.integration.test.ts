@@ -264,11 +264,11 @@ describe('wechat identity and QR with real PostgreSQL and HTTP', () => {
       .expect(409);
   });
 
-  it('locks scanner identity and handles cancellation, expiry and disabled binding without new accounts', async () => {
+  it('locks scanner identity and handles cancellation, expiry and unauthenticated binding without new accounts', async () => {
     const before = await database.wechatIdentity.count({ where: { appId } });
     await post('/api/v1/auth/qr-requests')
       .send({ id: randomUUID(), purpose: 'bind_wechat' })
-      .expect(409);
+      .expect(401);
     await post('/api/v1/auth/qr-requests')
       .send({ id: randomUUID(), purpose: 'unknown' })
       .expect(400);

@@ -281,3 +281,8 @@ export function importSourceReceipt(
 ) {
   return index.get(key + '@' + digest) ?? index.get(key);
 }
+
+/** Bounded JSON selections only: a local UI baseline, never a server authorization or plan digest. */
+export function reviewSelectionKey(selection: object): string {
+  return JSON.stringify(selection);
+}

@@ -349,3 +349,50 @@ describe('Web file preview and explicit confirmation', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
+
+it('requires category edits to be reviewed, keeps failed review input and locks category controls during commit', async () => {
+  await pending(
+    'title,start_date,category_name,category_color\n分类核对,2026-10-01,新增分类,#123456\n',
+  );
+  const w = page();
+  await flushPromises();
+  const commit = button(w, '确认整体导入'),
+    name = w.get('.file-category input');
+  expect(commit.attributes('disabled')).toBeUndefined();
+  await name.setValue('已核对新分类');
+  expect(commit.attributes('disabled')).toBeDefined();
+  const originalCommit = guestRepository.commitFile.bind(guestRepository),
+    write = vi.spyOn(guestRepository, 'commitFile');
+  await commit.trigger('click');
+  expect(write).not.toHaveBeenCalled();
+  vi.spyOn(guestRepository, 'read').mockRejectedValueOnce(
+    new Error('controlled read failure'),
+  );
+  await button(w, '保存核对并更新预览').trigger('click');
+  await flushPromises();
+  expect((name.element as HTMLInputElement).value).toBe('已核对新分类');
+  expect(commit.attributes('disabled')).toBeDefined();
+  await button(w, '保存核对并更新预览').trigger('click');
+  await flushPromises();
+  await vi.waitFor(() =>
+    expect(commit.attributes('disabled'), w.text()).toBeUndefined(),
+  );
+  let finish: (() => void) | undefined;
+  write.mockImplementationOnce(async (...args) => {
+    await new Promise<void>((resolve) => (finish = resolve));
+    return originalCommit(...args);
+  });
+  await commit.trigger('click');
+  await flushPromises();
+  expect(name.attributes('disabled')).toBeDefined();
+  expect(w.get('.file-category select').attributes('disabled')).toBeDefined();
+  expect(finish).toBeTypeOf('function');
+  finish?.();
+  await flushPromises();
+  expect(
+    (await guestRepository.read())?.categories.some(
+      (c) => c.name === '已核对新分类',
+    ),
+  ).toBe(true);
+  expect(write).toHaveBeenCalledTimes(1);
+});

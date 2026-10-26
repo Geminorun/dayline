@@ -20,6 +20,7 @@ const environmentSchema = z.object({
   AUTH_BASE_URL: httpUrl,
   AUTH_TRUSTED_ORIGINS: z.string().min(1),
   WEB_BASE_URL: httpUrl,
+  ACTION_PROOF_SECRET: z.string().min(32).optional(),
   BETTER_AUTH_SECRET: z.string().min(32),
   MAIL_TRANSPORT: z.enum(['resend', 'file']),
   MAIL_PREVIEW_DIR: z.string().default('.local/mail'),
@@ -70,6 +71,13 @@ export function parseEnvironment(input: Record<string, string | undefined>) {
     );
   }
   if (env.NODE_ENV === 'production') {
+    if (
+      !env.ACTION_PROOF_SECRET ||
+      env.ACTION_PROOF_SECRET === env.BETTER_AUTH_SECRET
+    )
+      throw new Error(
+        'Production requires an independent ACTION_PROOF_SECRET.',
+      );
     if (env.MAIL_TRANSPORT !== 'resend')
       throw new Error('Production requires the Resend mail transport.');
     if (
@@ -78,6 +86,10 @@ export function parseEnvironment(input: Record<string, string | undefined>) {
     ) {
       throw new Error('Production public URLs must use HTTPS.');
     }
+    if (/local-development|replace|change-me/i.test(env.ACTION_PROOF_SECRET))
+      throw new Error(
+        'Replace the development action proof secret before production.',
+      );
     if (/local-development|replace|change-me/i.test(env.BETTER_AUTH_SECRET)) {
       throw new Error(
         'Replace the development authentication secret before production.',
@@ -94,6 +106,9 @@ export function parseEnvironment(input: Record<string, string | undefined>) {
     trustedOrigins,
     webBaseUrl: env.WEB_BASE_URL,
     authSecret: env.BETTER_AUTH_SECRET,
+    actionProofSecret:
+      env.ACTION_PROOF_SECRET ??
+      `dayline-action-proof:${env.BETTER_AUTH_SECRET}`,
     mailTransport: env.MAIL_TRANSPORT,
     mailPreviewDirectory: resolve(WORKSPACE_ROOT, env.MAIL_PREVIEW_DIR),
     mailFrom: env.MAIL_FROM,

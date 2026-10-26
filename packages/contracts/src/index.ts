@@ -1,3 +1,4 @@
+import { realEmailSchema } from './email.js';
 import { z } from 'zod';
 
 export const EXPECTED_USER_HEADER = 'x-dayline-expected-user';
@@ -45,7 +46,26 @@ export const wechatLoginSchema = z
   .object({ code: z.string().min(1).max(512) })
   .strict();
 export const qrCreateSchema = z
-  .object({ id: z.uuid(), purpose: z.enum(['login', 'bind_wechat']) })
+  .object({
+    id: z.uuid(),
+    purpose: z.enum(['login', 'bind_wechat', 'reauth']),
+    action: z
+      .object({
+        purpose: z.enum([
+          'bind_email',
+          'bind_wechat',
+          'merge',
+          'delete_account',
+          'cancel_deletion',
+          'recover_drafts',
+        ]),
+        operationId: z.uuid(),
+        target: z.string().min(1).max(254),
+        proof: z.string().max(4096).optional(),
+      })
+      .strict()
+      .optional(),
+  })
   .strict();
 export const qrResolveSchema = z
   .object({
@@ -67,7 +87,7 @@ export const QR_STATUSES = [
 export type QrStatus = (typeof QR_STATUSES)[number];
 export interface QrStatusDto {
   id: string;
-  purpose: 'login';
+  purpose: 'login' | 'bind_wechat' | 'reauth';
   status: QrStatus;
   expiresAt: string;
 }
@@ -82,16 +102,7 @@ export interface WechatLoginDto {
   expiresAt: string;
 }
 
-export const realEmailSchema = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .pipe(z.email())
-  .refine(
-    (email) => !email.endsWith('.invalid'),
-    '请使用可接收邮件的真实邮箱。',
-  );
-
+export { realEmailSchema } from './email.js';
 export const userDtoSchema: z.ZodType<UserDto> = z
   .object({
     id: z.uuid(),
@@ -108,13 +119,13 @@ export const userDtoSchema: z.ZodType<UserDto> = z
   .refine((user) => user.email !== null || !user.emailVerified);
 export const qrStatusDtoSchema: z.ZodType<QrStatusDto> = z.object({
   id: z.uuid(),
-  purpose: z.literal('login'),
+  purpose: z.enum(['login', 'bind_wechat', 'reauth']),
   status: z.enum(QR_STATUSES),
   expiresAt: z.iso.datetime(),
 });
 export const qrCreatedDtoSchema: z.ZodType<QrCreatedDto> = z.object({
   id: z.uuid(),
-  purpose: z.literal('login'),
+  purpose: z.enum(['login', 'bind_wechat', 'reauth']),
   status: z.enum(QR_STATUSES),
   expiresAt: z.iso.datetime(),
   miniappCode: z
@@ -123,7 +134,7 @@ export const qrCreatedDtoSchema: z.ZodType<QrCreatedDto> = z.object({
 });
 export const qrResolvedDtoSchema: z.ZodType<QrResolvedDto> = z.object({
   id: z.uuid(),
-  purpose: z.literal('login'),
+  purpose: z.enum(['login', 'bind_wechat', 'reauth']),
   status: z.literal('scanned'),
   expiresAt: z.iso.datetime(),
   scannerProof: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
@@ -166,3 +177,5 @@ export * from './guest-manifest.js';
 
 export * from './local.js';
 export * from './imports.js';
+
+export * from './identity.js';

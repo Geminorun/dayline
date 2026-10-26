@@ -84,13 +84,47 @@ const coordinator = new SnapshotCoordinator(
   },
   monotonicNow,
 );
+const profileProbes = new Set<Promise<unknown>>();
+function readProfile() {
+  if (identityWritePending)
+    return Promise.reject(
+      new ClientError('OPERATION_BUSY', '身份操作正在处理中。'),
+    );
+  const work = api.request('/api/v1/me', { decode: userDtoSchema.parse });
+  profileProbes.add(work);
+  void work.finally(() => profileProbes.delete(work)).catch(() => {});
+  return work;
+}
+let identityWritePending = false;
+async function identityWrite<T>(work: () => Promise<T>): Promise<T> {
+  if (identityWritePending)
+    throw new ClientError('OPERATION_BUSY', '身份操作正在处理中。');
+  identityWritePending = true;
+  stop();
+  const generation = api.getGeneration();
+  try {
+    await Promise.allSettled([...profileProbes]);
+    await loadWork?.catch(() => {});
+    if (generation !== api.getGeneration())
+      throw new ClientError('STALE_RESPONSE', '账号已变化，请重新验证。');
+    return await work();
+  } finally {
+    identityWritePending = false;
+    schedule();
+  }
+}
 function stop() {
   if (timer) clearTimeout(timer);
   timer = undefined;
 }
 function schedule() {
   stop();
-  if (foreground && mode.value === 'account' && current.value)
+  if (
+    !identityWritePending &&
+    foreground &&
+    mode.value === 'account' &&
+    current.value
+  )
     timer = setTimeout(() => {
       coordinator.tick();
       void useWorkspace().load().finally(schedule);
@@ -117,6 +151,7 @@ api.onWrite((data, version, time) => {
 });
 export function useWorkspace() {
   async function reload() {
+    if (identityWritePending) return;
     const generation = scopeGeneration;
     if (mode.value === 'guest') {
       const ids = await uuidBatch(7),
@@ -141,6 +176,7 @@ export function useWorkspace() {
   }
 
   function load(): Promise<void> {
+    if (identityWritePending) return Promise.resolve();
     if (loadWork) return loadWork;
     const generation = scopeGeneration;
     loading.value = true;
@@ -270,16 +306,24 @@ export function useWorkspace() {
     }
   }
   async function restoreSession() {
+    if (identityWritePending) return;
     const intent = ++switchIntent;
     error.value = '';
     try {
-      const response = await api.request('/api/v1/me', {
-        decode: userDtoSchema.parse,
-      });
+      const response = await readProfile();
       if (intent !== switchIntent) return;
       if (!response.data) throw new Error('Missing profile');
+      const same =
+        current.value?.id === response.data.id &&
+        mode.value === 'account' &&
+        api.getAccount() === response.data.id;
       api.confirmAccount(response.data.id);
       current.value = response.data;
+      if (same) {
+        if (response.serverTime) coordinator.setServerTime(response.serverTime);
+        await load();
+        return;
+      }
       await switchMode('account', response.serverTime, false);
     } catch (cause) {
       if (intent !== switchIntent) return;
@@ -364,6 +408,7 @@ export function useWorkspace() {
           void load().finally(schedule);
       }
     },
+    identityWrite,
     generation: () => scopeGeneration,
     readonly: computed(
       () => mode.value === 'account' && current.value?.status !== 'active',

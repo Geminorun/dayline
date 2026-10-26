@@ -25,3 +25,10 @@ minimumReleaseAgeExclude:
   - auth@1.7.13
   - better-auth@1.7.13
   - eslint-plugin-vue@10.12.0
+
+# uni-mp-vite requires the CommonJS walker in independentMain.js but omits it
+# from its manifest. Declare it so clean installs never depend on hoist order.
+packageExtensions:
+  '@dcloudio/uni-mp-vite@3.0.0-5030320261023001':
+    dependencies:
+      estree-walker: 2.0.2

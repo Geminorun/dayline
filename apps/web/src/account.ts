@@ -8,6 +8,7 @@ const current = ref<UserDto | null>(null),
   serverTime = ref('');
 let probe: Promise<void> | null = null;
 let probeSequence = 0;
+let probesPaused = false;
 api.onIdentityChange(() => {
   probe = null;
   probeSequence++;
@@ -29,6 +30,11 @@ if (typeof BroadcastChannel !== 'undefined') {
 }
 export function useAccount() {
   async function refresh(relogin = false) {
+    if (probesPaused)
+      throw new ClientError(
+        'OPERATION_BUSY',
+        '身份操作正在处理中，请完成后重新读取。',
+      );
     if (probe && !relogin) return probe;
     if (relogin) api.setAccount(api.getAccount());
     const generation = api.getGeneration(),
@@ -66,6 +72,13 @@ export function useAccount() {
       if (probe === work) probe = null;
     }
   }
+  async function pauseProbes() {
+    probesPaused = true;
+    await probe?.catch(() => {});
+    return () => {
+      probesPaused = false;
+    };
+  }
   function clear() {
     current.value = null;
     api.invalidate();
@@ -75,6 +88,7 @@ export function useAccount() {
     channel?.postMessage({ type: 'identity-may-have-changed' });
   }
   return {
+    pauseProbes,
     serverTime: readonly(serverTime),
     current: readonly(current),
     loading: readonly(loading),

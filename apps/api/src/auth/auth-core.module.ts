@@ -1,3 +1,4 @@
+import { ActionProofService } from './action-proof.service.js';
 import { Global, Module } from '@nestjs/common';
 import { APP_CONFIG } from '../config/environment.js';
 import type { AppConfig } from '../config/environment.js';
@@ -22,9 +23,10 @@ import { AUTH_INSTANCE, createAuth } from './create-auth.js';
         mail: MailService,
       ) => createAuth(config, database, mail),
     },
+    ActionProofService,
     AuthAdapter,
     AuthAccessService,
   ],
-  exports: [AUTH_INSTANCE, AuthAdapter, AuthAccessService],
+  exports: [AUTH_INSTANCE, AuthAdapter, AuthAccessService, ActionProofService],
 })
 export class AuthCoreModule {}

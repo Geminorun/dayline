@@ -1,3 +1,4 @@
+import { ClockModule } from './common/clock.module.js';
 import { Module } from '@nestjs/common';
 import type { DynamicModule } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
@@ -23,6 +24,7 @@ export class AppModule {
       module: AppModule,
       imports: [
         RuntimeConfigModule.register(config),
+        ClockModule,
         DatabaseModule,
         IdentityModule,
         UsersModule,

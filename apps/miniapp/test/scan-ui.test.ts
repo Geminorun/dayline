@@ -69,7 +69,7 @@ describe('miniapp explicit scan intent', () => {
       method: 'DELETE',
       headers: { 'X-Dayline-Scanner-Proof': proof },
     });
-    expect(wrapper.text()).toContain('本次登录已取消');
+    expect(wrapper.text()).toContain('本次操作已取消');
     hooks.unload?.();
     wrapper.unmount();
   });
@@ -78,6 +78,7 @@ describe('miniapp explicit scan intent', () => {
       .mockResolvedValueOnce({
         data: {
           id: '63a561bd-2302-485d-8d89-cea248ffbdf1',
+          purpose: 'login',
           status: 'scanned',
           scannerProof: 'p'.repeat(43),
           expiresAt: '2026-10-26T23:59:59.000Z',

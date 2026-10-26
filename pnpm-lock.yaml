@@ -7,6 +7,8 @@ settings:
 overrides:
   webpack: ^5.112.2
 
+packageExtensionsChecksum: sha256-+jygPWTSnBFQ+Quwyq1JnvE/7psGZXx7H24DmVOnKhc=
+
 importers:
 
   .:
@@ -86,6 +88,9 @@ importers:
       helmet:
         specifier: ^8.0.0
         version: 8.3.0
+      jose:
+        specifier: 6.2.13
+        version: 6.2.13
       pg:
         specifier: ^8.0.0
         version: 8.23.1
@@ -7186,6 +7191,7 @@ snapshots:
       '@vue/compiler-sfc': 3.4.21
       '@vue/shared': 3.4.21
       debug: 4.3.7(supports-color@8.1.1)
+      estree-walker: 2.0.2
     transitivePeerDependencies:
       - '@nuxt/kit'
       - '@vueuse/core'

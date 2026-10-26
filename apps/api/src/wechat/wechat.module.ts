@@ -1,3 +1,7 @@
+import { IdentityController } from '../identity/identity.controller.js';
+import { IdentityService } from '../identity/identity.service.js';
+import { MergesService } from '../identity/merges.service.js';
+import { MailModule } from '../mail/mail.module.js';
 import { Module } from '@nestjs/common';
 import type { DynamicModule } from '@nestjs/common';
 import type { WechatAdapter } from './wechat-adapter.js';
@@ -11,8 +15,8 @@ export class WechatModule {
   static register(adapter?: WechatAdapter): DynamicModule {
     return {
       module: WechatModule,
-      imports: [UsersModule],
-      controllers: [WechatController],
+      imports: [UsersModule, MailModule],
+      controllers: [WechatController, IdentityController],
       providers: [
         {
           provide: WECHAT_ADAPTER,
@@ -20,6 +24,8 @@ export class WechatModule {
             ? { useValue: adapter }
             : { useClass: ProductionWechatAdapter }),
         },
+        IdentityService,
+        MergesService,
         WechatService,
         QrService,
       ],

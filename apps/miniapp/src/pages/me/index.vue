@@ -145,9 +145,14 @@ function navigate(url: string) {
         分类管理</button
       ><button class="secondary" @click="navigate('/pages/trash/index')">
         回收站</button
+      ><button
+        v-if="current"
+        class="secondary"
+        @click="navigate('/pages/account/identity')"
+      >
+        添加邮箱 / 绑定微信 / 合并账号</button
       ><text class="text muted"
-        >CSV / JSON 文件请在网页端操作（阶段 5
-        开放）；绑定合并与自助注销将在后续阶段开放。</text
+        >CSV / JSON 文件请在网页端操作；自助注销将在阶段 7 开放。</text
       ></view
     ></view
   >

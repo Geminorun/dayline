@@ -8,7 +8,7 @@
 | 需求基线 | [requirements.md](requirements.md) v1.0 |
 | 客户端 | Vue 网页与 uni-app 微信小程序 |
 | 核心技术 | Node.js、NestJS、TypeScript、PostgreSQL、Prisma、Better Auth、Resend |
-| 当前交付 | 邮箱 / 微信统一认证、扫码登录、第 6.6 节资料版本修改，以及第 9 / 10 节记录核心与完整快照已实现；第 12 / 13 节游客接入与持久导入任务核心已实现，CSV / JSON 文件解析、版本化 review / commit、导出和 Web 游客本机往返已实现；绑定合并和注销维护待后续阶段，证据见 [阶段 5 交接](stage5-handoff.md) |
+| 当前交付 | 邮箱 / 微信统一认证、扫码登录、第 6.6 节资料版本修改，以及第 9 / 10 节记录核心与完整快照已实现；第 12 / 13 节游客接入与持久导入任务核心已实现，CSV / JSON 文件解析、版本化 review / commit、导出和 Web 游客本机往返已实现；第 6.5–8 节绑定 / 重新验证 / 合并及草稿授权映射已实现，注销维护待阶段 7，证据见 [阶段 6 交接](stage6-handoff.md) |
 
 阅读索引：
 
@@ -336,7 +336,7 @@ Better Auth 的 `user / account / session / verification` 模型由锁定版本�
 
 ### 4.8 `qr_requests`
 
-主要字段：`id`、`purpose=login|bind_wechat`、`initiator_user_id?`、`initiator_auth_epoch?`、`browser_binding_hash`、`scan_token_hash`、`status`、`candidate_user_id?`、仅服务端可读的已验证微信身份、确认凭据摘要、`expires_at`、`confirmed_at?`、`consumed_at?`、`created_at`。
+主要字段：`id`、`purpose=login|bind_wechat|reauth`、`initiator_user_id?`、`initiator_auth_epoch?`、`browser_binding_hash`、`scan_token_hash`、`status`、`candidate_user_id?`、仅服务端可读的已验证微信身份、确认凭据摘要、`expires_at`、`confirmed_at?`、`consumed_at?`、`created_at`。
 
 状态及消费规则见第 7 节。扫码 scene 使用短随机 token，例如 16 随机字节的 base64url，满足微信 scene 长度限制；不能直接塞入长 JSON、账号 ID 或会话 token。浏览器绑定 secret 与扫码 token 分开，数据库保存摘要。
 
@@ -490,6 +490,10 @@ Gate-A 的本地技术验证已覆盖无邮箱微信、Cookie / 签名 Bearer、
 - 需要证明对方账号时，必须取得对方新验证结果，不能用当前账号证明覆盖双方。
 - 验证失败限流；错误不回显密码、code 或原始证明。
 
+阶段 6 采用 JOSE HS256、专用 typ / issuer / audience，与登录会话签名密钥分离；只签发明确的目的字段，不把密码或 code 复制进 payload。生产必填独立且替换过示例值的 ACTION_PROOF_SECRET，开发 / 测试未配置时仅作派生默认。全部业务有效期与 jwtVerify.currentDate 使用同一个注入 Clock。错误密码、微信身份不符、proof 过期 / 错上下文为 403 REAUTH_REQUIRED；旧预览授权 epoch 变更为 409 PREVIEW_STALE，当前会话本身失效才 401。
+
+电脑网页使用 `purpose=reauth` 的专用二维码：action 固定待授权目的 / 操作 / 目标，扫码必须是当前账号已绑定微信的新 code；resolve 不建号，confirm 不登录，consume 还要核对原会话、epoch、浏览器 secret、扫码身份及两分钟期限，只返回五分钟 action proof。普通登录码不能用来签发此证明。小程序每次显式调用平台 fresh code，再走 /auth/reauth。
+
 ### 6.6 `/me` 与资料
 
 `GET /api/v1/me` 返回：`id`、`displayName`、`profileVersion`、真实邮箱或 null、邮箱是否验证、`passwordEnabled`、微信是否已绑定、账号状态、注销到期时间、固定时区。微信显示仅提供必要的绑定状态，不返回 OpenID / UnionID。
@@ -518,6 +522,12 @@ Gate-A 的本地技术验证已覆盖无邮箱微信、Cookie / 签名 Bearer、
 - 验证后到完成前发生注册 / 绑定竞争：再次检查唯一性，重新进入冲突处理，不能依靠旧查询结果提交。
 
 密码设置和凭据修改委托 `AuthAdapter`，使用库支持的密码设置 / 验证机制。默认不额外提供任意邮箱解绑、微信解绑或更换唯一登录方式的通用接口，避免失去全部登录入口。
+
+阶段 6 增加 `GET /me/email-binding-requests` 返回本账号的最小申请状态，供跨设备点击邮件后回原设备继续；不返回另一账号是否存在。占用邮箱完成时须本次已验证邮件、当前 A proof 和该邮箱账号 fresh 密码，服务端建立五分钟 merge_context。原账号尚未验证邮箱时，匿名 verify 及 preview 均不修改该用户；最终合并事务只在精确邮箱的本次验证证据仍有效时，由 AuthAdapter 设置迁移后的 emailVerified=true。发信按账号 / 邮箱至少 60 秒，失败返回 MAIL_UNAVAILABLE；取消同时使相关未完成合并授权失效。
+
+已验证邮件申请支持同 UID / epoch、原操作 / 精确邮箱的新 SID 恢复：新会话先取得自己的 fresh proof，再在用户和申请锁内重新绑定 request.sessionId；旧 SID proof 明确 403，epoch 已撤销需重新申请。此规则只用于邮箱申请恢复，QR 仍严格绑定发起浏览器及原 SID，已有合并预览也不能靠登录切换沿用原会话授权。
+
+小程序的 `POST /me/wechat-binding` 接收 `{operationId,proof,code}`，在用户明确确认后获取新 code，直接绑定未占用微信或生成双方受证上下文，不依赖手机扫描自己的屏幕。它不创建未知微信账号。浏览器使用以下专用 QR 流程。
 
 ## 7. 扫码登录与微信绑定
 
@@ -555,7 +565,7 @@ pending -> scanned -> confirmed -> consumed
 
 绑定时增加目的为 `bind_wechat` 的重新验证证明。浏览器绑定随机 secret 放在专用 HttpOnly Cookie 或同等安全机制中；二维码只带扫码 token，两者不可互换。阶段 1 固定 scene 为 24 字节随机数的 32 位 base64url，浏览器 secret 和扫码者 proof 各为 32 字节随机数的 43 位 base64url，数据库仅保存其 SHA-256 哈希；浏览器 secret 存于每请求独立路径的 HttpOnly / SameSite=Lax Cookie，生产启用 Secure。resolve 接收 `{scene, code}`，confirm 接收 `{scannerProof}`，扫码者取消使用 `X-Dayline-Scanner-Proof` 请求头。多标签页请求各有独立 ID，刷新二维码不应让旧请求自动确认新请求。
 
-阶段 1 仅开放 `purpose=login`；`bind_wechat` 明确返回 `409 QR_PURPOSE_UNAVAILABLE`，未知值返回 400，拒绝发生在调用微信适配器和建号之前。创建重复 ID 返回 `409 QR_REQUEST_EXISTS`。resolve 返回 `QrResolvedDto`（有限状态及仅本请求有效的 scannerProof），创建返回 `QrCreatedDto`（有限状态及 miniappCode 图片 data URL），确认 / 状态 / 取消返回 `QrStatusDto`，领取返回公开 `UserDto` 与 expiresAt；签名凭据放响应头 / Cookie，不放状态 JSON。具体 schema 以 contracts 与生成 OpenAPI 为准。
+阶段 6 开放 `purpose=login|bind_wechat|reauth`。后两者创建需要当前真实会话，附 action `{purpose,operationId,target,proof?}`；bind_wechat 的 proof 必须精确为 bind_wechat / wechat。未知值返回 400，拒绝发生在调用微信适配器和建号之前。创建重复 ID 返回 `409 QR_REQUEST_EXISTS`。resolve 返回 `QrResolvedDto`（有限状态及仅本请求有效的 scannerProof），创建返回 `QrCreatedDto`（有限状态及 miniappCode 图片 data URL），确认 / 状态 / 取消返回 `QrStatusDto`，领取返回公开 `UserDto` 与 expiresAt；签名凭据放响应头 / Cookie，不放状态 JSON。具体 schema 以 contracts 与生成 OpenAPI 为准。
 
 ### 7.3 登录流程
 
@@ -605,13 +615,17 @@ resolve 使用微信 code 时，已验证身份和本次确认凭据只保留在
 | POST | `/api/v1/account-merges/{id}/review` | 根据预览选择分类映射 / 区分名称，返回新的计划修订与摘要；不写业务数据 |
 | POST | `/api/v1/account-merges/{id}/commit` | 重新验证双方、计划版本和选择，在线事务执行 |
 | DELETE | `/api/v1/account-merges/{id}` | 取消未完成预览，双方数据不变 |
-| GET | `/api/v1/account-merges/{id}/mappings` | 统一账号重新登录后获取自己的来源记录映射，供旧草稿手动核对 |
+| POST | `/api/v1/account-merges/{id}/mappings` | 统一账号重新登录后获取自己的来源记录映射，供旧草稿手动核对 |
 
 工程默认预览有效 15 分钟；操作证明过期可重新取得并绑定同一预览，不能仅凭未过期预览跳过重新验证。
 
 review 和 commit 均提交 `expectedPlanRevision`，commit 另带 `planDigest`；前一个页面的旧选择不能覆盖新预览。双方数据版本变化时重新生成预览，而不是在后台替用户确认新差异。
 
 预览读取也校验双方账号仍有效且 epoch 未发生撤销性变化。账号关闭、证明关联失效或权限变化后，不继续向仅知道预览 ID 的请求返回另一账号的内容。
+
+阶段 6 的 merge_context 只能由本次绑定流程创建，固定发起 A、对方 B、A 的真实 session、双方 epoch、原 operation 及最多五分钟期限。B 的新鲜证据来自 fresh code + 明确扫码确认，或精确绑定邮件 + fresh 当前密码；客户端传 source / target / userId 无授权作用。重新取得同一双方 / 原 session / 操作 / epoch 的 context 时，preview 在数据未变且十五分钟内更新原任务 contextId，保留 planRevision、digest 与已保存分类核对。账号或数据变化要求新预览，不套用旧选择。
+
+`GET /account-merges` 返回本目标账号的最小句柄、创建 / 完成时间与状态；任务 ID 仅内部使用。mappings 采用 POST，将 recover_drafts 专用 proof 和 operationId 放请求体，避免进入 URL；须已完成来源壳实际指向当前目标，验证后才返回 old/new entry/category ID。没有新验证时不开放草稿映射。
 
 ### 8.3 数据计划
 
@@ -641,6 +655,8 @@ review 和 commit 均提交 `expectedPlanRevision`，commit 另带 `planDigest`�
 其他网页保留来源账号草稿，重新认证统一账号后使用映射寻找目标记录，重新读取最新版本并由用户手动保存。不能把普通登录 B 解释成用户已经授权将 A 的草稿提交给 B。
 
 已完成请求以原操作 ID 返回原合并结果，不再次移动数据。合并来源壳不得拥有仍可使用的登录入口；后续认证通过已迁移身份进入目标。目标删除时，关联的来源壳与映射也清理，不留下可跨账号恢复数据的通道。
+
+阶段 6 保留原 import_jobs 归属和 `(user_id,client_operation_id)`；合并不搬运或覆盖任务。目标在准备 / 提交导入时，仅按服务端已完成关系读取来源壳的最小 committed receipt 全历史（sourceKey + digest），不开放来源任务私密 plan。完成合并的最小结果和 merge_record_mappings 长期保留；七天恢复快照和任务 plan 中的私人双方条目需由阶段 7 到期清理，不能只清 recovery_snapshot 却留下 plan 的完整副本。所有身份编排事务显式 maxWait 10 秒 / timeout 60 秒，正确性仍靠固定用户锁序、版本及状态，不靠超时作为授权。
 
 ## 9. 事项、分类、重点与回收站 API
 

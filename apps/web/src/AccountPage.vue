@@ -139,7 +139,10 @@ onMounted(load);
     <section class="record-panel">
       <h2>数据与账号管理</h2>
       <RouterLink to="/data">CSV / JSON 导入与导出</RouterLink>
-      <p>绑定与合并在阶段 6 开放；自助注销在阶段 7 开放。</p>
+      <RouterLink v-if="current" to="/identity"
+        >添加邮箱 / 绑定微信 / 合并账号</RouterLink
+      >
+      <p>自助注销在阶段 7 开放。</p>
       <p>游客数据仅保存在此设备，清除浏览器存储后无法找回。</p>
     </section>
   </section>

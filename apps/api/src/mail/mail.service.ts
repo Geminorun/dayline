@@ -18,6 +18,16 @@ export class MailService {
     );
   }
 
+  async sendEmailBinding(to: string, url: string): Promise<void> {
+    await this.sendLink(
+      to,
+      url,
+      '确认添加日序邮箱',
+      '验证待绑定邮箱',
+      '此链接仅验证邮箱，不会登录或移动任何账号。请在原设备继续，30 分钟内有效。',
+    );
+  }
+
   async sendPasswordReset(to: string, url: string): Promise<void> {
     await this.sendLink(
       to,

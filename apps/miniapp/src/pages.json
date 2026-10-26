@@ -53,6 +53,12 @@
       "style": {
         "navigationBarTitleText": "确认登录网页"
       }
+    },
+    {
+      "path": "pages/account/identity",
+      "style": {
+        "navigationBarTitleText": "登录方式与合并"
+      }
     }
   ],
   "globalStyle": {
