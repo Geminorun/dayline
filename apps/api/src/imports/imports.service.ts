@@ -5,7 +5,18 @@ import {
   importJobSchema,
   importResultSchema,
   normalizedImportSourceSchema,
+  importReceiptIndex,
+  importSourceReceipt,
 } from '@dayline/contracts';
+import {
+  initializeFilePlan,
+  reassessFilePlan,
+  reconcileFileCategories,
+  reviewFileCategory,
+  fileMappingsValid,
+  updateFileCounts,
+  applyFilePlan,
+} from '@dayline/contracts/files';
 import type {
   GuestAdmissionInput,
   NormalizedImportSource,
@@ -13,6 +24,7 @@ import type {
   ImportReviewInput,
   ImportCommitInput,
   ImportResult,
+  CategoryDto,
 } from '@dayline/contracts';
 import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
@@ -80,7 +92,7 @@ export class ImportsService {
     });
     if (!row) throw new AppError(404, 'RESOURCE_NOT_FOUND', '接入任务不存在。');
     if (row.status !== 'committed' && row.authEpoch !== actor.authEpoch)
-      throw new AppError(401, 'SESSION_REVOKED', '请重新准备接入。');
+      throw conflict();
     const plan = importJobSchema.parse(row.plan);
     if (row.status === 'preview' && row.expiresAt <= this.clock.now()) {
       plan.status = 'expired';
@@ -92,16 +104,22 @@ export class ImportsService {
     }
     return { row, plan };
   }
-  private ready(plan: ImportJobDto, categoryCount: number) {
+  private ready(plan: ImportJobDto, categories: CategoryDto[]) {
     const names = plan.categoryMappings
-      .filter((c) => !c.targetId)
+      .filter((c) => !c.targetId && c.action !== 'skip')
       .map((c) => c.name);
     plan.canCommit =
       plan.status === 'preview' &&
-      !plan.categoryMappings.some((c) => c.needsReview) &&
-      !plan.rows.some((r) => r.action === 'needs_review') &&
-      categoryCount + names.length <= 20 &&
+      !plan.categoryMappings.some(
+        (c) => c.action !== 'skip' && c.needsReview,
+      ) &&
+      !plan.rows.some(
+        (r) => r.action === 'needs_review' || r.file?.errors.length,
+      ) &&
+      categories.length + names.length <= 20 &&
+      (plan.kind === 'guest' || fileMappingsValid(plan, categories)) &&
       new Set(names).size === names.length;
+    if (plan.kind !== 'guest') updateFileCounts(plan);
     plan.planDigest = this.digest(plan);
   }
   async prepare(actor: Actor, input: GuestAdmissionInput) {
@@ -154,7 +172,7 @@ export class ImportsService {
         'IMPORT_INVALID',
         '本机时间或回收站期限不可信，请校准时间后核对原包。',
       );
-    const inputDigest = hash({ kind, source });
+    const inputDigest = source.file?.digest ?? hash({ kind, source });
     const focusByEntry = new Map<string, typeof source.focusDays>();
     for (const focus of source.focusDays) {
       const days = focusByEntry.get(focus.entryId) ?? [];
@@ -194,13 +212,12 @@ export class ImportsService {
           orderBy: { completedAt: 'asc' },
           select: { receipt: true },
         });
-        const processed = new Map<string, ImportResult['mappings'][number]>();
-        for (const job of previous) {
-          const receipt = importResultSchema.safeParse(job.receipt);
-          if (receipt.success)
-            for (const m of receipt.data.mappings)
-              processed.set(m.sourceKey, m);
-        }
+        const processed = importReceiptIndex(
+          previous.flatMap((job) => {
+            const receipt = importResultSchema.safeParse(job.receipt);
+            return receipt.success ? [receipt.data] : [];
+          }),
+        );
         const mappings = source.categories.map((c) => {
           const same = cloud.categories.find(
             (t) =>
@@ -244,7 +261,11 @@ export class ImportsService {
           categoryMappings: mappings,
           rows: preparedRows.map(
             ({ entry, focus, sourceKey, sourceDigest }) => {
-              const prior = processed.get(sourceKey);
+              const prior = importSourceReceipt(
+                processed,
+                sourceKey,
+                sourceDigest,
+              );
               const expired =
                 entry.purgeAfter !== null &&
                 Date.parse(entry.purgeAfter) <= now.getTime();
@@ -261,6 +282,7 @@ export class ImportsService {
                       ? 'needs_review'
                       : 'create_copy',
                 previousTargetId: prior?.targetId ?? null,
+                processed: prior?.sourceDigest === sourceDigest,
                 reason: expired
                   ? '回收站已到期，保留原包并跳过'
                   : prior
@@ -273,7 +295,9 @@ export class ImportsService {
           ),
           result: null,
         };
-        this.ready(plan, cloud.categories.length);
+        if (source.file)
+          initializeFilePlan(plan, source, cloud, processed, now.toISOString());
+        this.ready(plan, cloud.categories);
         await tx.importJob.create({
           data: {
             id: plan.id,
@@ -349,6 +373,16 @@ export class ImportsService {
           (c) => c.sourceId === choice.sourceId,
         );
         if (!mapping) throw conflict();
+        if (plan.kind !== 'guest') {
+          try {
+            reviewFileCategory(mapping, choice, cloud, plan.categoryMappings);
+          } catch (error) {
+            if (error instanceof Error && 'code' in error)
+              throw new AppError(409, String(error.code), error.message);
+            throw error;
+          }
+          continue;
+        }
         const target = choice.targetId
           ? cloud.categories.find((c) => c.id === choice.targetId)
           : null;
@@ -371,21 +405,67 @@ export class ImportsService {
           needsReview: false,
         });
       }
+      if (plan.kind !== 'guest')
+        reassessFilePlan(plan, cloud, this.clock.now().toISOString());
+      const rowsByKey = new Map(plan.rows.map((r) => [r.sourceKey, r])),
+        currentById = new Map(cloud.entries.map((e) => [e.id, e])),
+        focusByEntry = new Map<string, typeof cloud.focusDays>();
+      for (const f of cloud.focusDays) {
+        const days = focusByEntry.get(f.entryId) ?? [];
+        days.push(f);
+        focusByEntry.set(f.entryId, days);
+      }
       for (const choice of input.rows) {
-        const row = plan.rows.find((r) => r.sourceKey === choice.sourceKey);
+        const row = rowsByKey.get(choice.sourceKey);
         if (!row) throw conflict();
+        if (row.processed && choice.action !== 'skip')
+          throw conflict('IMPORT_REVIEW_REQUIRED');
         if (
           row.source.purgeAfter &&
           Date.parse(row.source.purgeAfter) <= this.clock.now().getTime() &&
           choice.action !== 'skip'
         )
           throw new AppError(410, 'TRASH_EXPIRED', '不能延长已到期回收站。');
-        row.action = choice.action;
+        if (row.file?.errors.length)
+          throw new AppError(422, 'IMPORT_INVALID', '请修正错误行后重新上传。');
+        if (choice.action === 'apply_update' || choice.action === 'restore') {
+          if (!row.file || plan.kind === 'guest') throw conflict();
+          const current = currentById.get(row.file.requestedId ?? '');
+          if (
+            !current ||
+            choice.expectedEntryVersion !== current.version ||
+            choice.expectedFocusVersion !== current.focusVersion
+          )
+            throw conflict();
+          if (
+            choice.action === 'apply_update' &&
+            (current.deletedAt || row.source.deletedAt)
+          )
+            throw conflict();
+          if (
+            choice.action === 'restore' &&
+            (!current.deletedAt || row.source.deletedAt)
+          )
+            throw conflict();
+          row.file.current = current;
+          row.file.currentFocusDays = focusByEntry.get(current.id) ?? [];
+          row.file.entryVersion = current.version;
+          row.file.focusVersion = current.focusVersion;
+          row.previousTargetId = current.id;
+        }
+        row.choice = choice.action;
+        row.action =
+          choice.action === 'apply_update' && !row.file?.differences.length
+            ? 'unchanged'
+            : choice.action;
       }
+      if (plan.kind !== 'guest') reconcileFileCategories(plan, cloud);
       // Re-reading cloud is an explicit review boundary. Candidates remain stable.
       for (const mapping of plan.categoryMappings)
         if (
           mapping.targetId &&
+          !mapping.restoreDefault &&
+          mapping.action !== 'skip' &&
           !cloud.categories.some(
             (c) =>
               c.id === mapping.targetId &&
@@ -401,7 +481,7 @@ export class ImportsService {
         categories: cloud.categories.length,
         focusDays: cloud.focusDays.length,
       };
-      this.ready(plan, cloud.categories.length);
+      this.ready(plan, cloud.categories);
       await tx.importJob.update({ where: { id }, data: { plan: json(plan) } });
       return plan;
     });
@@ -433,6 +513,33 @@ export class ImportsService {
     plan: ImportJobDto,
     version: bigint,
   ) {
+    const history = await tx.importJob.findMany({
+      where: { userId: actor.userId, kind: plan.kind, status: 'committed' },
+      select: { receipt: true },
+    });
+    const completed = importReceiptIndex(
+      history.flatMap((job) => {
+        const parsed = importResultSchema.safeParse(job.receipt);
+        return parsed.success ? [parsed.data] : [];
+      }),
+    );
+    if (
+      plan.rows.some(
+        (row) =>
+          row.action === 'create_copy' &&
+          completed.has(row.sourceKey + '@' + row.sourceDigest),
+      ) ||
+      plan.categoryMappings.some(
+        (c) =>
+          !c.targetId &&
+          c.action !== 'skip' &&
+          c.sourceKey &&
+          c.sourceDigest &&
+          completed.has(c.sourceKey + '@' + c.sourceDigest),
+      )
+    )
+      throw conflict();
+    if (plan.kind !== 'guest') return this.applyFile(tx, actor, plan, version);
     const now = this.clock.now(),
       categoryIds = new Map<string, string>();
     let changed = false;
@@ -521,6 +628,8 @@ export class ImportsService {
     const result: ImportResult = {
       dataVersion: dataVersion.toString(),
       created,
+      updated: 0,
+      unchanged: 0,
       skipped,
       mappings,
       committedAt: now.toISOString(),
@@ -535,6 +644,155 @@ export class ImportsService {
         status: 'committed',
         plan: json(plan),
         receipt: json(result),
+        completedAt: now,
+      },
+    });
+    return plan;
+  }
+  private async applyFile(
+    tx: Tx,
+    actor: Actor,
+    plan: ImportJobDto,
+    version: bigint,
+  ) {
+    const now = this.clock.now();
+    const cloud = await this.cloud(tx, actor.userId);
+    let applied: ReturnType<typeof applyFilePlan>;
+    try {
+      applied = applyFilePlan(cloud, plan, now.toISOString());
+    } catch (error) {
+      if (error instanceof Error && 'code' in error)
+        throw new AppError(409, String(error.code), error.message);
+      throw error;
+    }
+    const oldCategories = new Map(cloud.categories.map((c) => [c.id, c]));
+    const changedCategories = applied.cloud.categories.filter(
+      (c) =>
+        oldCategories.has(c.id) &&
+        JSON.stringify(oldCategories.get(c.id)) !== JSON.stringify(c),
+    );
+    const reservedNames = new Set(
+      [...cloud.categories, ...applied.cloud.categories].map((c) => c.name),
+    );
+    for (const c of changedCategories) {
+      let temporary: string;
+      do {
+        temporary = '~' + randomUUID().replaceAll('-', '').slice(0, 10);
+      } while (reservedNames.has(temporary));
+      reservedNames.add(temporary);
+      await tx.category.update({
+        where: { id: c.id },
+        data: { name: temporary },
+      });
+    }
+    for (const c of changedCategories)
+      await tx.category.update({
+        where: { id: c.id },
+        data: {
+          name: c.name,
+          color: c.color,
+          version: c.version,
+          updatedAt: new Date(c.updatedAt),
+        },
+      });
+    for (const c of applied.cloud.categories)
+      if (!oldCategories.has(c.id))
+        await tx.category.create({
+          data: {
+            id: c.id,
+            userId: actor.userId,
+            name: c.name,
+            color: c.color,
+            seedKey: c.seedKey,
+          },
+        });
+    const oldEntries = new Map(cloud.entries.map((e) => [e.id, e]));
+    const newEntries: Prisma.EntryCreateManyInput[] = [],
+      updates: typeof cloud.entries = [];
+    for (const e of applied.cloud.entries) {
+      const old = oldEntries.get(e.id);
+      const data = {
+        categoryId: e.categoryId,
+        title: e.title,
+        startDate: databaseDate(e.startDate),
+        endDate: e.endDate ? databaseDate(e.endDate) : null,
+        version: e.version,
+        focusVersion: e.focusVersion,
+        deletedAt: e.deletedAt ? new Date(e.deletedAt) : null,
+        purgeAfter: e.purgeAfter ? new Date(e.purgeAfter) : null,
+        updatedAt: new Date(e.updatedAt),
+      };
+      if (!old) newEntries.push({ id: e.id, userId: actor.userId, ...data });
+      else if (JSON.stringify(old) !== JSON.stringify(e)) updates.push(e);
+    }
+    for (let offset = 0; offset < newEntries.length; offset += 1000)
+      await tx.entry.createMany({
+        data: newEntries.slice(offset, offset + 1000),
+      });
+    for (let offset = 0; offset < updates.length; offset += 500) {
+      const values = updates
+        .slice(offset, offset + 500)
+        .map(
+          (e) =>
+            Prisma.sql`(${e.id}::uuid,${e.categoryId}::uuid,${e.title}::text,${databaseDate(e.startDate)}::date,${e.endDate ? databaseDate(e.endDate) : null}::date,${e.version}::int,${e.focusVersion}::int,${e.deletedAt ? new Date(e.deletedAt) : null}::timestamptz,${e.purgeAfter ? new Date(e.purgeAfter) : null}::timestamptz,${new Date(e.updatedAt)}::timestamptz)`,
+        );
+      await tx.$executeRaw(
+        Prisma.sql`UPDATE entries e SET category_id=v.category_id,title=v.title,start_date=v.start_date,end_date=v.end_date,version=v.version,focus_version=v.focus_version,deleted_at=v.deleted_at,purge_after=v.purge_after,updated_at=v.updated_at FROM (VALUES ${Prisma.join(values)}) AS v(id,category_id,title,start_date,end_date,version,focus_version,deleted_at,purge_after,updated_at) WHERE e.id=v.id AND e.user_id=${actor.userId}::uuid`,
+      );
+    }
+    const changedFocusIds = new Set(
+      updates
+        .filter((e) => oldEntries.get(e.id)?.focusVersion !== e.focusVersion)
+        .map((e) => e.id),
+    );
+    if (changedFocusIds.size)
+      await tx.entryFocusDay.deleteMany({
+        where: {
+          entryId: { in: [...changedFocusIds] },
+          entry: { userId: actor.userId },
+        },
+      });
+    const newFocus = applied.cloud.focusDays
+      .filter(
+        (f) => !oldEntries.has(f.entryId) || changedFocusIds.has(f.entryId),
+      )
+      .map((f) => ({ ...f, date: databaseDate(f.date), updatedAt: now }));
+    for (let offset = 0; offset < newFocus.length; offset += 1000)
+      await tx.entryFocusDay.createMany({
+        data: newFocus.slice(offset, offset + 1000),
+      });
+    const changed =
+      newEntries.length ||
+      applied.updated ||
+      changedCategories.length ||
+      oldCategories.size !== applied.cloud.categories.length;
+    const dataVersion = changed
+      ? (
+          await tx.user.update({
+            where: { id: actor.userId },
+            data: { dataVersion: { increment: 1 } },
+          })
+        ).dataVersion
+      : version;
+    plan.result = {
+      dataVersion: dataVersion.toString(),
+      created: applied.created,
+      updated: applied.updated,
+      unchanged: applied.unchanged,
+      skipped: applied.skipped,
+      mappings: applied.mappings,
+      categoryMappings: applied.categoryMappings,
+      committedAt: now.toISOString(),
+    };
+    plan.status = 'committed';
+    plan.disposition = 'committed';
+    plan.canCommit = false;
+    await tx.importJob.update({
+      where: { id: plan.id },
+      data: {
+        status: 'committed',
+        plan: json(plan),
+        receipt: json(plan.result),
         completedAt: now,
       },
     });

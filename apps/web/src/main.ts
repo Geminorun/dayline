@@ -1,5 +1,6 @@
 import { createApp } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
+import DataPage from './DataPage.vue';
 import DraftsPage from './DraftsPage.vue';
 import App from './App.vue';
 import AuthPage from './AuthPage.vue';
@@ -25,6 +26,7 @@ const router = createRouter({
     { path: '/account', redirect: '/settings' },
     { path: '/settings', component: AccountPage },
     { path: '/drafts', component: DraftsPage },
+    { path: '/data', component: DataPage },
     {
       path: '/auth/:mode(login|register|verify-email|forgot-password|reset-password)',
       component: AuthPage,

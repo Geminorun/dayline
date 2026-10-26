@@ -54,8 +54,15 @@ export async function createApp(
       'If-None-Match',
       'X-Dayline-Scanner-Proof',
       'X-Dayline-Method-Override',
+      'X-Dayline-File-Format',
+      'X-Dayline-Operation-ID',
     ],
-    exposedHeaders: ['set-auth-token', 'X-Request-ID', 'ETag'],
+    exposedHeaders: [
+      'set-auth-token',
+      'X-Request-ID',
+      'ETag',
+      'Content-Disposition',
+    ],
   });
   app.setGlobalPrefix('api/v1', {
     exclude: [

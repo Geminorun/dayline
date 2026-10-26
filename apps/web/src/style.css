@@ -587,3 +587,15 @@ button.secondary[aria-pressed='true'] {
   background: #7970cf;
   color: #ffffff;
 }
+
+.file-row {
+  border-top: 1px solid #ddd;
+  padding: 16px 0;
+  overflow-wrap: anywhere;
+}
+.file-category {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}

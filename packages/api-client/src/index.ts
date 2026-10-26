@@ -195,6 +195,18 @@ export class ApiClient {
         ENTRY_DELETED: '事项已在回收站。',
         TRASH_EXPIRED: '事项已超过恢复期限。',
         RATE_LIMITED: '操作过于频繁，请稍后重试。',
+        PREVIEW_STALE:
+          '记录或计划已有变化，请保留原文件，重新建立预览并核对当前内容。',
+        IMPORT_REVIEW_REQUIRED:
+          '请先处理所有逐项冲突与分类映射，再确认整体导入。',
+        IDEMPOTENCY_KEY_REUSED:
+          '原任务的文件不能更换，请查询原任务，或为另一份文件建立新预览。',
+        IMPORT_INVALID: '文件格式、行内容或引用无效，请修正原文件后重新预览。',
+        UPDATE_VERSION_REQUIRED:
+          '缺少更新基准，请使用带版本的导出，或明确核对当前内容。',
+        FORMAT_VERSION_UNSUPPORTED: '文件版本不兼容，请使用 Dayline v1 格式。',
+        FILE_TOO_LARGE:
+          '文件超过 10 MiB 或单次事项、重点数量限制，请拆分文件后重试。',
       };
       throw new ClientError(
         code,

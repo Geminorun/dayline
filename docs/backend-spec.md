@@ -8,7 +8,7 @@
 | 需求基线 | [requirements.md](requirements.md) v1.0 |
 | 客户端 | Vue 网页与 uni-app 微信小程序 |
 | 核心技术 | Node.js、NestJS、TypeScript、PostgreSQL、Prisma、Better Auth、Resend |
-| 当前交付 | 邮箱 / 微信统一认证、扫码登录、第 6.6 节资料版本修改，以及第 9 / 10 节记录核心与完整快照已实现；第 12 / 13 节游客接入与持久导入任务核心已实现，CSV / JSON 解析、绑定合并和注销维护待后续阶段，证据见 [阶段 4 交接](stage4-handoff.md) |
+| 当前交付 | 邮箱 / 微信统一认证、扫码登录、第 6.6 节资料版本修改，以及第 9 / 10 节记录核心与完整快照已实现；第 12 / 13 节游客接入与持久导入任务核心已实现，CSV / JSON 文件解析、版本化 review / commit、导出和 Web 游客本机往返已实现；绑定合并和注销维护待后续阶段，证据见 [阶段 5 交接](stage5-handoff.md) |
 
 阅读索引：
 
@@ -906,14 +906,18 @@ review 和 commit 均提交 `expectedPlanRevision`，commit 另带 `planDigest`�
 
 | 方法 | 路径 | 行为 |
 | --- | --- | --- |
-| POST | `/api/v1/imports/preview` | multipart 文件及格式、操作 UUID；解析验证并建立计划 |
+| POST | `/api/v1/imports/preview` | raw UTF-8 文件；格式与操作 UUID 在专用 header，解析验证并建立计划 |
 | GET | `/api/v1/imports/{id}` | 当前用户的预览、冲突或完成结果 |
 | GET | `/api/v1/imports/by-operation/{clientOperationId}` | 当前账号按原操作查找任务；准备响应丢失时恢复 |
 | POST | `/api/v1/imports/{id}/review` | 提交疑似重复、更新冲突及分类映射选择，得到新的计划修订 |
 | POST | `/api/v1/imports/{id}/commit` | 预览摘要、确认选项；事务执行全部有效计划 |
 | DELETE | `/api/v1/imports/{id}` | 取消未完成预览，不改变当前记录 |
 
-游客接入已实现 24 小时预览。精确 UUID `POST /imports/{id}/review` 使用独立 2 MiB JSON 解析，最多 10,000 项来源选择 / 20 分类映射，每个 sourceKey 最长 160 字符；普通及原生认证请求仍维持原限制。事务外解析 / 分组与源摘要，事务内锁用户再锁任务，批量写入分类、事项、重点与回执；阶段 5 文件解析调用 `ImportsService.prepareNormalized`，复用同一 review / commit。
+游客接入已实现 24 小时预览。精确 UUID `POST /imports/{id}/review` 使用独立 4 MiB JSON 解析，最多 10,000 项来源选择 / 20 分类映射，每个 sourceKey 最长 160 字符；普通及原生认证请求仍维持原限制。事务外解析 / 分组与源摘要，事务内锁用户再锁任务，批量写入分类、事项、重点与回执；阶段 5 文件解析调用 `ImportsService.prepareNormalized`，复用同一 review / commit。
+
+阶段 5 实际上传协议为精确 `POST /imports/preview` 的 raw 二进制体（不接受压缩包 / 远程 URL）：`Content-Type: application/octet-stream`、`X-Dayline-File-Format: csv|json`、`X-Dayline-Operation-ID: UUID`，现有会话、Cookie Origin 与 `X-Dayline-Expected-User` 保持。文件字节最高 10 MiB，fatal UTF-8 解码后解析；没有 JSON 包裹导致的转义扩张。普通 JSON 继续 64 KiB。CORS 显式允许两个文件 header，导出暴露 Content-Disposition；private 附件类型 / 文件名受控。精确 review 4 MiB 支持最坏 10,000 项、160 字符来源键及两类版本确认，未放宽其他入口。生产文件预览每账号每分钟最多 5 次，返回 Retry-After；限流不是幂等机制。
+
+JSON 分类来源回执与事项来源回执共同保留。真正空白且六默认结构未改的目标，预览可恢复既有 seed 分类的备份名称 / 颜色；锁定基准后在同一事务使用临时唯一占位名处理合法名称交换，最终仅实际变化的分类增加版本。已有私人内容 / 改过默认结构时不自动改现有分类，必须明确复用或选择作为自定义分类（保留名色，seed 不迁移）。CSV 不批量修改既有分类；只应用实际行操作需要的分类。重复已处理来源不会因目标后来改名 / 改色而重建旧分类，无事项 JSON 分类仍可独立导入。回执在同一导入事务提交，取消 / 回滚不留下来源成功标记。
 
 工程默认预览 24 小时内有效。`commit` 不重新接受一份任意文件，而是执行已经校验且与摘要匹配的输入；选项变化必须重新生成可展示的计划，不能偷偷加入未预览的数据。
 

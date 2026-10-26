@@ -230,3 +230,24 @@ it('requires business envelopes and explicit committed write versions before acc
     ).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
   }
 });
+
+it('keeps a fresh valid actor when an older-epoch import task is stale and gives an actionable recovery message', async () => {
+  const client = new ApiClient(async () => ({
+    status: 409,
+    headers: {},
+    body: {
+      error: { code: 'PREVIEW_STALE', message: 'untrusted provider body' },
+    },
+  }));
+  client.setAccount('current');
+  const generation = client.getGeneration();
+  await expect(
+    client.request('/api/v1/imports/old-task', { account: true }),
+  ).rejects.toMatchObject({
+    code: 'PREVIEW_STALE',
+    status: 409,
+    message: expect.stringContaining('重新建立预览'),
+  });
+  expect(client.getAccount()).toBe('current');
+  expect(client.getGeneration()).toBe(generation);
+});

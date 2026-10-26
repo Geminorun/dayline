@@ -317,6 +317,10 @@ describe('durable guest admissions and shared import transactions', () => {
     expect(third.job.rows.every((r) => r.action === 'skip')).toBe(true);
     await commit(user, third.job);
     expect((await snapshot(user)).data.entries).toHaveLength(3);
+    const original = await prepare(user, first.source);
+    expect(original.job.rows.every((row) => row.action === 'skip')).toBe(true);
+    await commit(user, original.job);
+    expect((await snapshot(user)).data.entries).toHaveLength(3);
   });
   it('requires explicit same-name/color mapping and enforces the 20-category boundary without dropping source categories', async () => {
     const user = await login();
@@ -509,7 +513,7 @@ describe('bounded admission capacity', () => {
         })
         .expect(422);
       await call(user, 'post', `/imports/${updated.job.id}/review`)
-        .send({ padding: 'x'.repeat(2 * 1024 * 1024) })
+        .send({ padding: 'x'.repeat(4 * 1024 * 1024) })
         .expect(413);
       await call(user, 'post', `/imports/${updated.job.id}/review`)
         .send({

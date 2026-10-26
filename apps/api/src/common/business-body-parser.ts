@@ -4,7 +4,7 @@ import {
   MAX_IMPORT_ENTRIES,
   MAX_IMPORT_FOCUS,
 } from '@dayline/contracts';
-import { json } from 'express';
+import { json, raw } from 'express';
 import type { RequestHandler } from 'express';
 import { AppError } from './app-error.js';
 
@@ -16,6 +16,17 @@ export const businessConfirmationBodyParser: RequestHandler = (
   response,
   next,
 ) => {
+  if (
+    request.method === 'POST' &&
+    /^\/api\/v1\/imports\/preview\/?$/.test(request.path)
+  ) {
+    raw({ type: () => true, limit: 10 * 1024 * 1024, inflate: false })(
+      request,
+      response,
+      next,
+    );
+    return;
+  }
   if (
     request.method === 'POST' &&
     /^\/api\/v1\/guest-admissions\/prepare\/?$/.test(request.path)
@@ -61,7 +72,7 @@ export const businessConfirmationBodyParser: RequestHandler = (
       request.path,
     )
   ) {
-    json({ limit: 2 * 1024 * 1024, strict: true })(
+    json({ limit: 4 * 1024 * 1024, strict: true })(
       request,
       response,
       (error?: unknown) => {

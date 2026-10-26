@@ -138,10 +138,8 @@ onMounted(load);
     </section>
     <section class="record-panel">
       <h2>数据与账号管理</h2>
-      <p>
-        CSV / JSON 文件功能在阶段 5 开放；绑定与合并在阶段 6
-        开放；自助注销在阶段 7 开放。
-      </p>
+      <RouterLink to="/data">CSV / JSON 导入与导出</RouterLink>
+      <p>绑定与合并在阶段 6 开放；自助注销在阶段 7 开放。</p>
       <p>游客数据仅保存在此设备，清除浏览器存储后无法找回。</p>
     </section>
   </section>

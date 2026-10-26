@@ -3,11 +3,13 @@ import {
   snapshotEnvelopeSchema,
   draftSchema,
   admissionOperationSchema,
+  fileOperationSchema,
 } from '@dayline/contracts';
 import type {
   SnapshotEnvelope,
   EntryDraft,
   AdmissionOperation,
+  FileOperation,
 } from '@dayline/contracts';
 export const localEnvironment = `${import.meta.env.MODE}:${window.location.origin}`;
 interface Stored {
@@ -95,6 +97,42 @@ export class WebLocalRepository {
       }
     });
   }
+  async fileOperation(userId: string) {
+    const raw = await this.values.get(`${userId}:file`);
+    if (!raw) return null;
+    const op = fileOperationSchema.parse(raw.value);
+    if (
+      op.scope !== 'account' ||
+      op.ownerId !== userId ||
+      op.environment !== this.environment ||
+      op.localPlan !== null
+    )
+      throw new Error('Local recovery required: file scope mismatch');
+    return op;
+  }
+  async putFileOperation(op: FileOperation) {
+    fileOperationSchema.parse(op);
+    if (
+      op.scope !== 'account' ||
+      op.environment !== this.environment ||
+      op.localPlan !== null
+    )
+      throw new Error('Local recovery required: file scope mismatch');
+    await this.database.transaction('rw', this.values, async () => {
+      const old = await this.fileOperation(op.ownerId);
+      if (
+        old &&
+        old.clientOperationId === op.clientOperationId &&
+        (old.text !== op.text || old.format !== op.format)
+      )
+        throw new Error('Immutable file input changed');
+      await this.values.put({
+        key: `${op.ownerId}:file`,
+        value: fileOperationSchema.parse(op),
+      });
+    });
+  }
+
   async operations(userId: string) {
     return (
       await this.values

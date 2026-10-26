@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./files": {
+      "types": "./dist/files.d.ts",
+      "import": "./dist/files.js"
     }
   },
   "scripts": {
@@ -15,7 +19,12 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "zod": "^4.0.0",
-    "@dayline/core": "workspace:*"
+    "@dayline/core": "workspace:*",
+    "@noble/hashes": "2.0.1",
+    "papaparse": "5.5.3",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/papaparse": "5.3.16"
   }
 }

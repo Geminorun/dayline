@@ -28,6 +28,12 @@ export const categoryMappingSchema = z.object({
   color: colorSchema,
   seedKey: z.string().nullable(),
   needsReview: z.boolean(),
+  sourceKey: z.string().optional(),
+  sourceDigest: z.string().optional(),
+  previousTargetId: z.uuid().nullable().optional(),
+  action: z.enum(['apply', 'skip']).optional(),
+  restoreDefault: categoryDtoSchema.optional(),
+  asCustom: z.boolean().optional(),
 });
 export const importRowSchema = z.object({
   sourceKey: z.string().min(1).max(160),
@@ -35,14 +41,45 @@ export const importRowSchema = z.object({
   candidateId: z.uuid(),
   source: entryDtoSchema,
   focusDays: z.array(focusDayDtoSchema),
-  action: z.enum(['create_copy', 'skip', 'needs_review']),
+  action: z.enum([
+    'create_copy',
+    'skip',
+    'needs_review',
+    'apply_update',
+    'restore',
+    'unchanged',
+  ]),
+  file: z
+    .object({
+      location: z.string(),
+      requestedId: z.string().nullable(),
+      categoryReference: z.string().nullable().optional(),
+      categoryName: z.string().nullable().optional(),
+      entryVersion: z.number().int().nullable(),
+      focusVersion: z.number().int().nullable(),
+      endPresent: z.boolean(),
+      categoryPresent: z.boolean(),
+      focusPresent: z.boolean(),
+      errors: z.array(z.string()),
+      current: entryDtoSchema.nullable(),
+      currentFocusDays: z.array(focusDayDtoSchema).optional(),
+      currentCategory: categoryDtoSchema.optional(),
+      differences: z.array(z.string()),
+      categoryAmbiguous: z.boolean(),
+    })
+    .optional(),
   previousTargetId: z.uuid().nullable(),
   reason: z.string().nullable(),
+  code: z.string().optional(),
+  processed: z.boolean().optional(),
+  choice: z.enum(['create_copy', 'skip', 'apply_update', 'restore']).optional(),
 });
 export const importResultSchema = z.object({
   dataVersion: dataVersionSchema,
   created: z.number().int().nonnegative(),
   skipped: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative().optional(),
+  unchanged: z.number().int().nonnegative().optional(),
   mappings: z.array(
     z.object({
       sourceKey: z.string().min(1).max(160),
@@ -50,6 +87,15 @@ export const importResultSchema = z.object({
       targetId: z.uuid(),
     }),
   ),
+  categoryMappings: z
+    .array(
+      z.object({
+        sourceKey: z.string(),
+        sourceDigest: z.string(),
+        targetId: z.uuid(),
+      }),
+    )
+    .optional(),
   committedAt: z.iso.datetime(),
 });
 export const importJobSchema = z.object({
@@ -77,6 +123,16 @@ export const importJobSchema = z.object({
   categoryMappings: z.array(categoryMappingSchema),
   rows: z.array(importRowSchema),
   result: importResultSchema.nullable(),
+  counts: z
+    .object({
+      create: z.number(),
+      update: z.number(),
+      unchanged: z.number(),
+      needsReview: z.number(),
+      errors: z.number(),
+      skip: z.number(),
+    })
+    .optional(),
 });
 export const importReviewSchema = z
   .object({
@@ -89,6 +145,7 @@ export const importReviewSchema = z
             targetId: z.uuid().nullable(),
             name: categoryNameSchema,
             color: colorSchema,
+            asCustom: z.boolean().optional(),
           })
           .strict(),
       )
@@ -98,7 +155,9 @@ export const importReviewSchema = z
         z
           .object({
             sourceKey: z.string().min(1).max(160),
-            action: z.enum(['create_copy', 'skip']),
+            action: z.enum(['create_copy', 'skip', 'apply_update', 'restore']),
+            expectedEntryVersion: z.number().int().positive().optional(),
+            expectedFocusVersion: z.number().int().positive().optional(),
           })
           .strict(),
       )
@@ -146,10 +205,19 @@ export const normalizedImportSourceSchema = z
     categories: z.array(categoryDtoSchema).min(1).max(20),
     entries: z.array(entryDtoSchema).max(MAX_IMPORT_ENTRIES),
     focusDays: z.array(focusDayDtoSchema).max(MAX_IMPORT_FOCUS),
+    file: z
+      .object({
+        digest: z.string(),
+        rows: z
+          .array(importRowSchema.shape.file.unwrap())
+          .max(MAX_IMPORT_ENTRIES),
+      })
+      .optional(),
   })
   .strict()
   .refine(
     (source) =>
+      source.file !== undefined ||
       snapshotDtoSchema.safeParse({
         schemaVersion: 1,
         userId: '00000000-0000-4000-8000-000000000001',
@@ -166,3 +234,50 @@ export const normalizedImportSourceSchema = z
 export type NormalizedImportSource = z.infer<
   typeof normalizedImportSourceSchema
 >;
+
+export const fileOperationSchema = z
+  .object({
+    environment: z.string(),
+    scope: z.enum(['guest', 'account']),
+    ownerId: z.uuid(),
+    clientOperationId: z.uuid(),
+    jobId: z.uuid().nullable(),
+    format: z.enum(['csv', 'json']),
+    text: z.string().max(10 * 1024 * 1024),
+    status: z.enum(['pending', 'committed', 'cancelled', 'expired']),
+    localPlan: importJobSchema.nullable(),
+  })
+  .strict();
+export type FileOperation = z.infer<typeof fileOperationSchema>;
+
+export const fileReceiptsSchema = z
+  .object({
+    environment: z.string(),
+    ownerId: z.uuid(),
+    receipts: z.array(importResultSchema),
+  })
+  .strict();
+
+/** Keep every completed content revision; completion timestamps are not a total order. */
+export function importReceiptIndex(receipts: ImportResult[]) {
+  const index = new Map<
+    string,
+    { sourceKey: string; sourceDigest: string; targetId: string }
+  >();
+  for (const receipt of receipts)
+    for (const mapping of [
+      ...receipt.mappings,
+      ...(receipt.categoryMappings ?? []),
+    ]) {
+      index.set(mapping.sourceKey, mapping);
+      index.set(mapping.sourceKey + '@' + mapping.sourceDigest, mapping);
+    }
+  return index;
+}
+export function importSourceReceipt(
+  index: ReadonlyMap<string, { sourceDigest: string; targetId: string }>,
+  key: string,
+  digest: string,
+) {
+  return index.get(key + '@' + digest) ?? index.get(key);
+}
