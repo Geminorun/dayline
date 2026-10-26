@@ -7,11 +7,16 @@ import { DatabaseModule } from './database/database.module.js';
 import { IdentityModule } from './auth/identity.module.js';
 import { SessionGuard } from './auth/session.guard.js';
 import { HealthController } from './health/health.controller.js';
+import type { WechatAdapter } from './wechat/wechat-adapter.js';
+import { WechatModule } from './wechat/wechat.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({})
 export class AppModule {
-  static register(config: AppConfig): DynamicModule {
+  static register(
+    config: AppConfig,
+    testWechatAdapter?: WechatAdapter,
+  ): DynamicModule {
     return {
       module: AppModule,
       imports: [
@@ -19,6 +24,7 @@ export class AppModule {
         DatabaseModule,
         IdentityModule,
         UsersModule,
+        WechatModule.register(testWechatAdapter),
       ],
       controllers: [HealthController],
       providers: [{ provide: APP_GUARD, useClass: SessionGuard }],

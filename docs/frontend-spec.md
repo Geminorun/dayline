@@ -98,6 +98,8 @@ packages/api-client/      # 传输注入后的端点调用与错误规范化
 
 ### 2.3 平台接口
 
+阶段 1 传输落地：共享 `ApiClient` 仅接收纯 Transport 与实际 decoder，不依赖平台 SDK。`request<T>` 必须同时传入对应 decoder，否则结果为 unknown；`/me`、微信登录、QR 和原生邮箱关键返回均运行 contracts schema 校验，校验失败不接收刷新凭据。匿名错误密码 401 不清除已有账号，私人会话 401 / 预期账号冲突才失效当前上下文，迟到响应不更新凭据。小程序原生 PATCH 使用后端明确支持的 POST + `X-Dayline-Method-Override: PATCH`。
+
 ```ts
 interface Transport {
   request<T>(input: RequestInput): Promise<ApiResult<T>>;
@@ -719,6 +721,8 @@ Better Auth 验证链接可能先到后端再回前端，前端只展示真实�
 
 虽然完整手机网页不属于首版，邮件验证、重置及绑定结果等必要认证页仍需在常见手机浏览器可读可操作；不要求同时完成全部手机业务布局。
 
+阶段 1 已提供这些邮箱界面。网页回调首次读取 token / error 后移除地址栏敏感 query，同时保留 Router 导航位置 / 滚动元数据，并清理 history state 的 current / back / forward URL 中的敏感 query。`/verified` 路径本身不能证明邮箱已验证，实际登录由服务端检查。
+
 ### 12.3 微信小程序登录
 
 游客不被强制登录。用户点击登录后调用平台登录取得新 code，提交 `/api/v1/auth/wechat/login`，成功后保存专用会话凭据并读取 `/me` 和完整快照。
@@ -750,7 +754,7 @@ creating -> waiting -> scanned -> confirmed -> consuming -> success
 
 解析 scene 后调用后端 resolve，按服务端返回的受验证意图显示“确认登录日序网页”或“确认绑定到账号”。用户明确点确认 / 取消，扫描本身不代表同意。
 
-未知微信从绑定场景进入时，先通过 fresh code 解析请求并等待确认，不先调用普通登录造空账号。确认凭据只留在本次流程内存，不放进可复制链接或本机业务包。
+未知微信从绑定场景进入时，先通过 fresh code 解析请求并等待确认，不先调用普通登录造空账号。确认凭据只留在本次流程内存，不放进可复制链接或本机业务包。确认后、网页消费前仍保留内存 proof 并提供取消入口；消费后取消显示请求已结束，卸载时清理 proof。
 
 请求已过期、目的不匹配或扫码身份冲突时显示明确结果并返回，不尝试本地更改 userId / purpose 绕过。取消不会退出已有独立账号，也不会删除本机数据。
 

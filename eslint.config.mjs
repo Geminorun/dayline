@@ -1,5 +1,6 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import vue from 'eslint-plugin-vue';
 import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
@@ -13,9 +14,17 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  ...vue.configs['flat/essential'],
   prettier,
   {
-    files: ['**/*.ts'],
+    files: ['**/*.vue'],
+    languageOptions: {
+      parserOptions: { parser: tseslint.parser, extraFileExtensions: ['.vue'] },
+    },
+    rules: { 'vue/multi-word-component-names': 'off', 'no-undef': 'off' },
+  },
+  {
+    files: ['**/*.ts', '**/*.vue'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',

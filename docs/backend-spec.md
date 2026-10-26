@@ -212,6 +212,8 @@ type Actor = {
 
 ### 3.5 API 兼容性
 
+微信原生 request 不支持 PATCH，平台适配器将它封装为 POST 并附 `X-Dayline-Method-Override: PATCH`。服务器仅对 pathname 位于 `/api/v1/` 的 POST 且 header 精确等于 `PATCH` 时，在路由 / Guard 前改写 method；原鉴权、Origin、预期账号和 DTO 校验继续执行。普通 POST / GET、其他 header 值及 `/api/auth` 均不改写。CORS 允许该 header。这是传输兼容机制，不增加匿名或绕过校验的业务接口。
+
 小程序可能较晚更新，`v1` 内保持字段与语义兼容。新增可选响应字段不要求同时发版；删除或改变必填字段需新版本。所有规范 DTO 写入 `packages/contracts`，再由接口实现生成或验证 OpenAPI；本文不是已经生成的 OpenAPI 文件。
 
 ## 4. 数据库模型
@@ -222,7 +224,7 @@ type Actor = {
 
 无邮箱微信用户的工程默认方案：自定义认证插件创建唯一的内部邮箱占位标识，例如 `wx-<random-uuid>@identity.dayline.invalid`，`emailVerified=false`，另有 `emailKind=internal`。它不是用户的真实邮箱，不发送邮件，不开放密码登录 / 找回密码，不通过 API 展示为已绑定邮箱。公开注册禁止使用内部保留后缀。
 
-这一方案借鉴成熟认证插件处理非邮箱身份的方式，但日序的微信插件尚未实现。Gate-A 必须证明它与所选版本的会话、邮箱绑定及密码设置相容。若不相容，则改为业务用户与认证用户受控映射，并在首个正式迁移前修订本节；不得伪造邮箱已验证，也不得把微信用户挡在邮箱注册之后。
+阶段 1 已通过服务端插件、签名会话和真实 PostgreSQL 集成测试验证无邮箱身份与后续邮箱 / 密码设置保持同一用户 ID；完整绑定产品流程尚未开放。Gate-A 的真实微信和邮件投递仍待凭据验证。若不相容，则改为业务用户与认证用户受控映射，并在首个正式迁移前修订本节；不得伪造邮箱已验证，也不得把微信用户挡在邮箱注册之后。
 
 Better Auth 的 `user / account / session / verification` 模型由锁定版本生成，再映射为本项目表名。禁止靠本文手写的简表猜测库必需字段，或同时运行两套互相竞争的迁移工具。
 
@@ -423,7 +425,7 @@ Better Auth 的 `user / account / session / verification` 模型由锁定版本�
 7. epoch 更新、退出、密码重置、合并和注销后，旧会话确实不能继续写入。
 8. 微信用户添加真实邮箱并设置密码后，使用邮箱登录得到原用户 ID。
 
-尚未完成 Gate-A，因此本文不会伪装成库已经提供了日序微信登录插件。集成中需要使用的库内部能力必须封装在 `AuthAdapter`；不允许多个业务服务各自直接调用不稳定内部 API。
+Gate-A 的本地技术验证已覆盖无邮箱微信、Cookie / 签名 Bearer、身份并发与邮箱密码迁移，真实微信 / Resend 与真机尚未执行，见 `stage1-handoff.md`。集成中需要使用的库内部能力必须封装在 `AuthAdapter`；不允许多个业务服务各自直接调用不稳定内部 API。
 
 ### 6.2 标准邮箱端点
 
@@ -551,7 +553,9 @@ pending -> scanned -> confirmed -> consumed
 }
 ```
 
-绑定时增加目的为 `bind_wechat` 的重新验证证明。浏览器绑定随机 secret 放在专用 HttpOnly Cookie 或同等安全机制中；二维码只带扫码 token，两者不可互换。多标签页请求各有独立 ID，刷新二维码不应让旧请求自动确认新请求。
+绑定时增加目的为 `bind_wechat` 的重新验证证明。浏览器绑定随机 secret 放在专用 HttpOnly Cookie 或同等安全机制中；二维码只带扫码 token，两者不可互换。阶段 1 固定 scene 为 24 字节随机数的 32 位 base64url，浏览器 secret 和扫码者 proof 各为 32 字节随机数的 43 位 base64url，数据库仅保存其 SHA-256 哈希；浏览器 secret 存于每请求独立路径的 HttpOnly / SameSite=Lax Cookie，生产启用 Secure。resolve 接收 `{scene, code}`，confirm 接收 `{scannerProof}`，扫码者取消使用 `X-Dayline-Scanner-Proof` 请求头。多标签页请求各有独立 ID，刷新二维码不应让旧请求自动确认新请求。
+
+阶段 1 仅开放 `purpose=login`；`bind_wechat` 明确返回 `409 QR_PURPOSE_UNAVAILABLE`，未知值返回 400，拒绝发生在调用微信适配器和建号之前。创建重复 ID 返回 `409 QR_REQUEST_EXISTS`。resolve 返回 `QrResolvedDto`（有限状态及仅本请求有效的 scannerProof），创建返回 `QrCreatedDto`（有限状态及 miniappCode 图片 data URL），确认 / 状态 / 取消返回 `QrStatusDto`，领取返回公开 `UserDto` 与 expiresAt；签名凭据放响应头 / Cookie，不放状态 JSON。具体 schema 以 contracts 与生成 OpenAPI 为准。
 
 ### 7.3 登录流程
 
@@ -1343,7 +1347,7 @@ API 不返回能把这些状态混成“已同步”的模糊成功。后端无�
 
 | 编号 | 结论 / 验证项 | 实施前状态 |
 | --- | --- | --- |
-| G-01 | 优先复用用户与数据库会话；微信内部占位标识与真实邮箱分开，绝不伪造验证 | Gate-A 尚未执行；若不相容，先修订为业务 / 认证映射 |
+| G-01 | 优先复用用户与数据库会话；微信内部占位标识与真实邮箱分开，绝不伪造验证 | 本地 Gate-A 技术验证通过；真实供应商 / 真机待验证，完整绑定待阶段 6 |
 | G-02 | NestJS Express 与社区认证适配，原生请求 / 业务解析共存 | 待锁定兼容版本并实际启动验证 |
 | G-03 | Bearer 凭据、签名、过期和 epoch 撤销行为 | 必须真正在 uni-app 请求适配上验证 |
 | G-04 | 7 天滑动会话、5 分钟证明、链接期限、15 分钟合并预览、24 小时导入预览 | 工程默认，可按所选版本和实测调整，不能延长用户的 7 天注销窗口 |

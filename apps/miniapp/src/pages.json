@@ -1,0 +1,17 @@
+{
+  "pages": [
+    {
+      "path": "pages/account/index",
+      "style": { "navigationBarTitleText": "日序 · 账号" }
+    },
+    {
+      "path": "pages/scan/confirm",
+      "style": { "navigationBarTitleText": "确认登录网页" }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarBackgroundColor": "#f6f4fa",
+    "backgroundColor": "#f6f4fa"
+  }
+}

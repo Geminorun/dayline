@@ -6,6 +6,7 @@ import { displayNameSchema } from '@dayline/contracts';
 import type { AppConfig } from '../config/environment.js';
 import type { PrismaService } from '../database/prisma.service.js';
 import type { MailService } from '../mail/mail.service.js';
+import { identityPlugin } from './adapter/identity-plugin.js';
 import { authModelOptions } from './auth-model-options.js';
 
 export const AUTH_INSTANCE = Symbol('AUTH_INSTANCE');
@@ -19,7 +20,7 @@ export function createAuth(
   return betterAuth({
     ...authModelOptions,
     appName: '日序 Dayline',
-    logger: { disabled: config.environment === 'test' },
+    logger: { disabled: true },
     secret: config.authSecret,
     baseURL: config.authBaseUrl,
     basePath: '/api/auth',
@@ -28,7 +29,7 @@ export function createAuth(
       provider: 'postgresql',
       transaction: true,
     }),
-    plugins: [bearer({ requireSignature: true })],
+    plugins: [bearer({ requireSignature: true }), identityPlugin()],
     emailAndPassword: {
       enabled: true,
       autoSignIn: false,

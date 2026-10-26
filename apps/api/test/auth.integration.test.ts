@@ -369,6 +369,42 @@ describe('authentication foundation with real PostgreSQL and HTTP', () => {
     }
   });
 
+  it('limits native PATCH tunnelling to exact POST /api/v1 requests without bypassing auth', async () => {
+    await post('/api/v1/auth/logout').send({}).expect(401);
+    await post('/api/v1/auth/logout')
+      .set('X-Dayline-Method-Override', 'GET')
+      .send({})
+      .expect(401);
+    await post('/api/v1/auth/logout')
+      .set('X-Dayline-Method-Override', 'PATCH')
+      .send({})
+      .expect(404);
+    const user = await register('method-override');
+    const session = await login(user.email);
+    await request(app.getHttpServer())
+      .get('/api/v1/me')
+      .set('Cookie', session.cookie)
+      .set('X-Dayline-Method-Override', 'PATCH')
+      .expect(200);
+    await post('/api/v1/auth/logout')
+      .set('Cookie', session.cookie)
+      .set('X-Dayline-Method-Override', 'PATCH')
+      .set('X-Dayline-Expected-User', user.id)
+      .send({})
+      .expect(404);
+    await post('/api/auth/sign-out')
+      .set('Cookie', session.cookie)
+      .set('X-Dayline-Method-Override', 'PATCH')
+      .send({})
+      .expect(400);
+    await post('/api/auth/sign-out')
+      .set('Cookie', session.cookie)
+      .set('X-Dayline-Method-Override', 'PATCH')
+      .set('X-Dayline-Expected-User', user.id)
+      .send({})
+      .expect(200);
+  });
+
   it('parses ordinary JSON safely and blocks unimplemented auth and business mutations', async () => {
     await post('/api/v1/auth/logout')
       .set('Content-Type', 'application/json')

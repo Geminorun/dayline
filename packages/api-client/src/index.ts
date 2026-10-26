@@ -1,0 +1,162 @@
+import { EXPECTED_USER_HEADER } from '@dayline/contracts';
+
+export interface TransportRequest {
+  path: string;
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+  headers: Record<string, string>;
+  body?: unknown;
+}
+export interface TransportResponse {
+  status: number;
+  headers: Record<string, string>;
+  body?: unknown;
+}
+export type Transport = (
+  request: TransportRequest,
+) => Promise<TransportResponse>;
+export interface RequestOptions {
+  method?: TransportRequest['method'];
+  body?: unknown;
+  headers?: Record<string, string>;
+  account?: boolean;
+  native?: boolean;
+}
+export class ClientError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly status = 0,
+  ) {
+    super(message);
+    this.name = 'ClientError';
+  }
+}
+function record(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+/** Pure account-generation barrier. Platforms own credentials, I/O and lifecycle. */
+export class ApiClient {
+  private accountId: string | null = null;
+  private generation = 0;
+  constructor(
+    private readonly transport: Transport,
+    private readonly acceptCredentials?: (
+      headers: Record<string, string>,
+    ) => void,
+  ) {}
+
+  setAccount(userId: string | null) {
+    this.accountId = userId;
+    this.generation++;
+  }
+  getAccount() {
+    return this.accountId;
+  }
+  invalidate() {
+    this.accountId = null;
+    this.generation++;
+  }
+
+  request(
+    path: string,
+    options?: RequestOptions,
+  ): Promise<{
+    data: unknown;
+    status: number;
+    headers: Record<string, string>;
+  }>;
+  request<T>(
+    path: string,
+    options: RequestOptions & { decode: (value: unknown) => T },
+  ): Promise<{
+    data: T | undefined;
+    status: number;
+    headers: Record<string, string>;
+  }>;
+  async request(
+    path: string,
+    options: RequestOptions & { decode?: (value: unknown) => unknown } = {},
+  ): Promise<{
+    data: unknown;
+    status: number;
+    headers: Record<string, string>;
+  }> {
+    const generation = this.generation;
+    const userId = this.accountId;
+    if (options.account && !userId)
+      throw new ClientError('ACTOR_CONTEXT_REQUIRED', '请先确认当前账号。');
+    const headers = {
+      ...options.headers,
+      ...(options.account && userId ? { [EXPECTED_USER_HEADER]: userId } : {}),
+    };
+    let response: TransportResponse;
+    try {
+      response = await this.transport({
+        path,
+        method: options.method ?? 'GET',
+        headers,
+        ...(options.body === undefined ? {} : { body: options.body }),
+      });
+    } catch (error) {
+      if (generation !== this.generation)
+        throw new ClientError('STALE_RESPONSE', '账号已变化，请重新读取。');
+      if (error instanceof ClientError) throw error;
+      throw new ClientError(
+        'NETWORK_ERROR',
+        '网络请求失败，请检查连接后重试。',
+      );
+    }
+    if (generation !== this.generation)
+      throw new ClientError('STALE_RESPONSE', '账号已变化，请重新读取。');
+    if (response.status === 304)
+      return { status: 304, data: undefined, headers: response.headers };
+    if (response.status < 200 || response.status >= 300) {
+      const body = record(response.body);
+      const error = record(body.error ?? body);
+      const code =
+        typeof error.code === 'string' ? error.code : 'REQUEST_FAILED';
+      if (
+        (response.status === 401 && options.account) ||
+        code === 'ACTOR_CONTEXT_MISMATCH'
+      )
+        this.invalidate();
+      // Never echo an upstream body, credential or internal SDK message into a UI.
+      const messages: Record<string, string> = {
+        ACTOR_CONTEXT_MISMATCH: '当前账号已变化，请重新登录。',
+        EMAIL_NOT_VERIFIED: '请先验证邮箱，可重新发送验证邮件。',
+        INVALID_EMAIL_OR_PASSWORD: '邮箱或密码不正确。',
+        QR_EXPIRED: '二维码已过期，请重新生成。',
+        QR_STATE_CONFLICT: '扫码请求已失效，请重新生成。',
+        QR_SCANNER_CONFLICT: '二维码已被其他微信扫描，请重新生成。',
+        WECHAT_NOT_CONFIGURED: '微信登录暂未配置，请使用邮箱登录。',
+        RATE_LIMITED: '操作过于频繁，请稍后重试。',
+      };
+      throw new ClientError(
+        code,
+        messages[code] ??
+          (response.status === 401
+            ? '登录状态失效，请重新登录。'
+            : '操作未完成，请核对输入后重试。'),
+        response.status,
+      );
+    }
+    const raw = options.native ? response.body : record(response.body).data;
+    let data: unknown = raw;
+    if (options.decode) {
+      try {
+        data = options.decode(raw);
+      } catch {
+        throw new ClientError(
+          'INVALID_RESPONSE',
+          '服务器响应不符合约定，请稍后重试。',
+          response.status,
+        );
+      }
+    }
+    this.acceptCredentials?.(response.headers);
+    return { status: response.status, headers: response.headers, data };
+  }
+}

@@ -25,6 +25,15 @@ const environmentSchema = z.object({
   MAIL_PREVIEW_DIR: z.string().default('.local/mail'),
   MAIL_FROM: z.string().min(1),
   RESEND_API_KEY: z.string().optional(),
+  WECHAT_APP_ID: z.string().optional(),
+  WECHAT_APP_SECRET: z.string().optional(),
+  WECHAT_MINIAPP_SCAN_PAGE: z
+    .string()
+    .regex(/^pages\/[a-zA-Z0-9/_-]+$/)
+    .default('pages/scan/confirm'),
+  WECHAT_MINIAPP_ENV: z
+    .enum(['develop', 'trial', 'release'])
+    .default('release'),
 });
 
 export type AppConfig = ReturnType<typeof parseEnvironment>;
@@ -89,5 +98,9 @@ export function parseEnvironment(input: Record<string, string | undefined>) {
     mailPreviewDirectory: resolve(WORKSPACE_ROOT, env.MAIL_PREVIEW_DIR),
     mailFrom: env.MAIL_FROM,
     resendApiKey: env.RESEND_API_KEY,
+    wechatAppId: env.WECHAT_APP_ID,
+    wechatAppSecret: env.WECHAT_APP_SECRET,
+    wechatScanPage: env.WECHAT_MINIAPP_SCAN_PAGE,
+    wechatEnvironment: env.WECHAT_MINIAPP_ENV,
   };
 }

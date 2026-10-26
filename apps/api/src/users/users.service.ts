@@ -16,6 +16,7 @@ const profileSelect = {
   profileVersion: true,
   status: true,
   deletionDueAt: true,
+  wechatIdentities: { select: { id: true }, take: 1 },
   accounts: {
     where: { providerId: 'credential', password: { not: null } },
     select: { id: true },
@@ -50,7 +51,7 @@ async function readProfile(
     email: user.emailKind === 'real' ? user.email : null,
     emailVerified: user.emailKind === 'real' && user.emailVerified,
     passwordEnabled: user.accounts.length > 0,
-    wechatBound: false,
+    wechatBound: user.wechatIdentities.length > 0,
     status: z.enum(USER_STATUSES).parse(user.status),
     deletionDueAt: user.deletionDueAt?.toISOString() ?? null,
     timeZone: BUSINESS_TIME_ZONE,

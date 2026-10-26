@@ -1,9 +1,11 @@
-name: Backend
+name: Dayline checks
 
 on:
   push:
     paths:
       - 'apps/api/**'
+      - 'apps/web/**'
+      - 'apps/miniapp/**'
       - 'packages/**'
       - 'infra/**'
       - '*.json'

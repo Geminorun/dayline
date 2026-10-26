@@ -3,14 +3,13 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { Request, Response } from 'express';
 import { AllowPendingDeletion } from './auth.decorators.js';
-import { AUTH_INSTANCE } from './create-auth.js';
-import type { DaylineAuth } from './create-auth.js';
+import { AuthAdapter } from './adapter/auth-adapter.js';
 import { AppError } from '../common/app-error.js';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(@Inject(AUTH_INSTANCE) private readonly auth: DaylineAuth) {}
+  constructor(@Inject(AuthAdapter) private readonly auth: AuthAdapter) {}
 
   @Post('logout')
   @HttpCode(200)
@@ -20,10 +19,7 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.auth.api.signOut({
-      headers: fromNodeHeaders(request.headers),
-      asResponse: true,
-    });
+    const result = await this.auth.signOut(fromNodeHeaders(request.headers));
     if (!result.ok)
       throw new AppError(503, 'AUTH_UNAVAILABLE', '退出暂未完成，请重试。');
     for (const cookie of result.headers.getSetCookie())

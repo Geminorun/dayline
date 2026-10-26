@@ -19,13 +19,17 @@
     "db:generate": "pnpm --filter @dayline/api db:generate",
     "db:migrate": "pnpm --filter @dayline/api db:migrate",
     "db:deploy": "pnpm --filter @dayline/api db:deploy",
-    "db:studio": "pnpm --filter @dayline/api db:studio"
+    "db:studio": "pnpm --filter @dayline/api db:studio",
+    "dev:web": "pnpm build:shared && pnpm --filter @dayline/web dev",
+    "dev:miniapp": "pnpm build:shared && pnpm --filter @dayline/miniapp dev"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.0.0",
+    "esbuild": "0.28.1",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.0.0",
+    "eslint-plugin-vue": "10.12.0",
     "prettier": "^3.0.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.0.0",

@@ -33,6 +33,12 @@ export function nativeAuthPolicy(access: AuthAccessService) {
     try {
       if (path === '/get-session') {
         const session = await access.resolve(fromNodeHeaders(request.headers));
+        if (session?.internalIdentity)
+          throw new AppError(
+            403,
+            'USE_PUBLIC_PROFILE',
+            '微信账号请使用公开账号接口。',
+          );
         if (session) forwardSessionHeaders(response, session.responseHeaders);
       } else if (sessionPaths.has(path)) {
         const session = await access.require(

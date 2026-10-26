@@ -1,0 +1,28 @@
+{
+  "name": "@dayline/miniapp",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "uni -p mp-weixin",
+    "build": "uni build -p mp-weixin",
+    "typecheck": "vue-tsc --noEmit && vue-tsc -p tsconfig.test.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@dayline/api-client": "workspace:*",
+    "@dayline/contracts": "workspace:*",
+    "@dcloudio/uni-app": "3.0.0-5030320261023001",
+    "@dcloudio/uni-components": "3.0.0-5030320261023001",
+    "@dcloudio/uni-mp-weixin": "3.0.0-5030320261023001",
+    "vue": "3.4.21"
+  },
+  "devDependencies": {
+    "@dcloudio/types": "3.4.31",
+    "@dcloudio/vite-plugin-uni": "3.0.0-5030320261023001",
+    "@vitejs/plugin-vue": "5.2.4",
+    "@vue/test-utils": "2.4.6",
+    "jsdom": "29.1.1",
+    "vite": "5.2.8",
+    "vue-tsc": "3.3.13"
+  }
+}

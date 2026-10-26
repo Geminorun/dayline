@@ -9,20 +9,21 @@ datasource db {
 }
 
 model User {
-  id             String    @id @default(dbgenerated("pg_catalog.gen_random_uuid()")) @db.Uuid
-  name           String
-  email          String
-  emailVerified  Boolean   @default(false) @map("email_verified")
-  image          String?
-  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
-  emailKind      String    @default("real") @map("email_kind")
-  status         String    @default("active")
-  authEpoch      Int       @default(1) @map("auth_epoch")
-  profileVersion Int       @default(1) @map("profile_version")
-  deletionDueAt  DateTime? @map("deletion_due_at") @db.Timestamptz(3)
-  sessions       Session[]
-  accounts       Account[]
+  id               String           @id @default(dbgenerated("pg_catalog.gen_random_uuid()")) @db.Uuid
+  name             String
+  email            String
+  emailVerified    Boolean          @default(false) @map("email_verified")
+  image            String?
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  emailKind        String           @default("real") @map("email_kind")
+  status           String           @default("active")
+  authEpoch        Int              @default(1) @map("auth_epoch")
+  profileVersion   Int              @default(1) @map("profile_version")
+  deletionDueAt    DateTime?        @map("deletion_due_at") @db.Timestamptz(3)
+  sessions         Session[]
+  accounts         Account[]
+  wechatIdentities WechatIdentity[]
 
   @@unique([email])
   @@index([status, deletionDueAt])
@@ -77,4 +78,38 @@ model Verification {
 
   @@index([identifier])
   @@map("auth_verifications")
+}
+
+model WechatIdentity {
+  id        String   @id @default(dbgenerated("pg_catalog.gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appId     String   @map("app_id")
+  openid    String
+  unionid   String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([appId, openid])
+  @@unique([userId, appId])
+  @@map("wechat_identities")
+}
+
+model QrRequest {
+  id                String   @id @db.Uuid
+  purpose           String
+  status            String   @default("pending")
+  browserSecretHash String   @map("browser_secret_hash")
+  sceneHash         String   @unique @map("scene_hash")
+  scannerSecretHash String?  @map("scanner_secret_hash")
+  scannerAppId      String?  @map("scanner_app_id")
+  scannerOpenid     String?  @map("scanner_openid")
+  scannerUnionid    String?  @map("scanner_unionid")
+  confirmedUserId   String?  @map("confirmed_user_id") @db.Uuid
+  expiresAt         DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([expiresAt])
+  @@map("qr_requests")
 }

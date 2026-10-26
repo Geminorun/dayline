@@ -7,6 +7,8 @@ allowBuilds:
   '@prisma/engines': true
   '@scarf/scarf': false
   esbuild: true
+  core-js: false
+  core-js-pure: false
   prisma: true
 
 overrides:
@@ -22,3 +24,4 @@ minimumReleaseAgeExclude:
   - '@better-auth/telemetry@1.7.13'
   - auth@1.7.13
   - better-auth@1.7.13
+  - eslint-plugin-vue@10.12.0

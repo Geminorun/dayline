@@ -3,19 +3,19 @@ import { EXPECTED_USER_HEADER } from '@dayline/contracts';
 import { AppError } from '../common/app-error.js';
 import type { Actor } from '../common/request-context.js';
 import { PrismaService } from '../database/prisma.service.js';
-import { AUTH_INSTANCE } from './create-auth.js';
-import type { DaylineAuth } from './create-auth.js';
+import { AuthAdapter } from './adapter/auth-adapter.js';
 
 interface AuthenticatedSession {
   actor: Actor;
   status: string;
+  internalIdentity: boolean;
   responseHeaders: Headers;
 }
 
 @Injectable()
 export class AuthAccessService {
   constructor(
-    @Inject(AUTH_INSTANCE) private readonly auth: DaylineAuth,
+    @Inject(AuthAdapter) private readonly auth: AuthAdapter,
     @Inject(PrismaService) private readonly database: PrismaService,
   ) {}
 
@@ -27,18 +27,15 @@ export class AuthAccessService {
       );
     const effectiveHeaders = new Headers(headers);
     if (hasBearer && hasSessionCookie) effectiveHeaders.delete('cookie');
-    const result = await this.auth.api.getSession({
-      headers: effectiveHeaders,
-      returnHeaders: true,
-    });
+    const result = await this.auth.readSession(effectiveHeaders);
     const session = result.response;
     if (hasBearer && hasSessionCookie) {
       const cookieHeaders = new Headers(headers);
       cookieHeaders.delete('authorization');
-      const cookieSession = await this.auth.api.getSession({
-        headers: cookieHeaders,
-        query: { disableRefresh: true },
-      });
+      const { response: cookieSession } = await this.auth.readSession(
+        cookieHeaders,
+        true,
+      );
       if (
         !cookieSession ||
         !session ||
@@ -80,6 +77,7 @@ export class AuthAccessService {
         transport: hasBearer ? 'bearer' : 'cookie',
       },
       status: user.status,
+      internalIdentity: user.emailKind === 'internal',
       responseHeaders: result.headers,
     };
   }

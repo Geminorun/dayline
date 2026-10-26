@@ -5,6 +5,7 @@ import { DatabaseModule } from '../database/database.module.js';
 import { PrismaService } from '../database/prisma.service.js';
 import { MailModule } from '../mail/mail.module.js';
 import { MailService } from '../mail/mail.service.js';
+import { AuthAdapter } from './adapter/auth-adapter.js';
 import { AuthAccessService } from './auth-access.service.js';
 import { AUTH_INSTANCE, createAuth } from './create-auth.js';
 
@@ -21,8 +22,9 @@ import { AUTH_INSTANCE, createAuth } from './create-auth.js';
         mail: MailService,
       ) => createAuth(config, database, mail),
     },
+    AuthAdapter,
     AuthAccessService,
   ],
-  exports: [AUTH_INSTANCE, AuthAccessService],
+  exports: [AUTH_INSTANCE, AuthAdapter, AuthAccessService],
 })
 export class AuthCoreModule {}
