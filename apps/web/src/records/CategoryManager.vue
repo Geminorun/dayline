@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import type { CategoryDto, EntryDto } from '@dayline/contracts';
+import type { CategoryDto, EntryDto, GuestMutation } from '@dayline/contracts';
 import { createCategorySchema } from '@dayline/contracts';
 import { records, errorMessage } from './record-service';
 const props = defineProps<{
   categories: CategoryDto[];
   entries: EntryDto[];
-  run: (action: () => Promise<unknown>) => Promise<void>;
+  run?: (action: () => Promise<unknown>) => Promise<void>;
+  mutate?: (
+    mutation: GuestMutation,
+    cloud: () => Promise<unknown>,
+  ) => Promise<void>;
   busy: boolean;
 }>();
 const name = ref('');
@@ -41,15 +45,30 @@ async function save() {
   error.value = '';
   try {
     const current = edit.value;
-    await props.run(() =>
+    const cloud = () =>
       current
         ? records.updateCategory(current.id, {
             expectedVersion: current.version,
             name: input.data.name,
             color: input.data.color,
           })
-        : records.createCategory(input.data),
-    );
+        : records.createCategory(input.data);
+    if (props.mutate)
+      await props.mutate(
+        current
+          ? {
+              kind: 'updateCategory',
+              id: current.id,
+              input: {
+                expectedVersion: current.version,
+                name: input.data.name,
+                color: input.data.color,
+              },
+            }
+          : { kind: 'createCategory', input: input.data },
+        cloud,
+      );
+    else await props.run?.(cloud);
     reset();
   } catch (cause) {
     error.value = errorMessage(cause);
@@ -61,13 +80,18 @@ async function remove() {
   if (!source || !target) return;
   error.value = '';
   try {
-    await props.run(() =>
-      records.deleteCategory(source.id, {
-        expectedVersion: source.version,
-        transferToCategoryId: target.id,
-        expectedTargetVersion: target.version,
-      }),
-    );
+    const input = {
+      expectedVersion: source.version,
+      transferToCategoryId: target.id,
+      expectedTargetVersion: target.version,
+    };
+    const cloud = () => records.deleteCategory(source.id, input);
+    if (props.mutate)
+      await props.mutate(
+        { kind: 'deleteCategory', id: source.id, input },
+        cloud,
+      );
+    else await props.run?.(cloud);
     deleting.value = null;
   } catch (cause) {
     error.value = errorMessage(cause);

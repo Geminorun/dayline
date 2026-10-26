@@ -1,96 +1,199 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { coversDate, durationDays } from '@dayline/core';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  toRefs,
+  watch,
+} from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import {
+  coversDate,
+  emptyFilter,
+  isCalendarDate,
+  selectEntries,
+  shiftDate,
+  shiftMonth,
+  spanLabel,
+  summarizeEntries,
+  timelineWindow,
+  weekDates,
+  dateOrdinal,
+} from '@dayline/core';
+
 import type {
   CreateEntryInput,
   EntryDto,
+  GuestMutation,
   PatchEntryInput,
-  SnapshotDto,
 } from '@dayline/contracts';
-import { useAccount } from '../account';
-import { api } from '../api';
+import { useWorkspace } from './workspace';
 import { records, errorMessage } from './record-service';
 import EntryEditor from './EntryEditor.vue';
 import EntryRow from './EntryRow.vue';
 import CategoryManager from './CategoryManager.vue';
-const newKey = () => crypto.randomUUID();
-const { current, refresh } = useAccount();
-const snapshot = ref<SnapshotDto | null>(null);
-const serverTime = ref('');
-const loading = ref(true),
-  busy = ref(false),
-  error = ref(''),
-  notice = ref(''),
-  selectedDate = ref('');
-const tab = ref<'review' | 'all' | 'trash' | 'categories'>('review');
-const editor = ref<{ entry: EntryDto | null; key: string } | null>(null);
-const confirm = ref<
-  | { kind: 'delete' | 'purge'; entry: EntryDto }
-  | { kind: 'clear'; dataVersion: string }
-  | null
->(null);
-const readonly = computed(() => current.value?.status !== 'active');
-const visible = computed(
-  () =>
-    snapshot.value?.entries.filter(
-      (entry) =>
-        tab.value === 'all' ||
-        coversDate(
-          entry,
-          selectedDate.value,
-          snapshot.value?.businessToday ?? selectedDate.value,
-        ),
-    ) ?? [],
+import TimelineView from './TimelineView.vue';
+import { recordView } from './view-state';
+const route = useRoute(),
+  router = useRouter();
+const {
+  mode,
+  snapshot,
+  loading,
+  busy,
+  error,
+  notice,
+  serverTime,
+  readonly,
+  ensure,
+  load,
+  mutate,
+} = useWorkspace();
+const { selectedDate, filter, scale, anchor, limit } = toRefs(recordView);
+const timeline = ref<InstanceType<typeof TimelineView> | null>(null);
+const editor = ref<{ entry: EntryDto | null; key: string } | null>(null),
+  confirm = ref<
+    | { kind: 'delete' | 'purge'; entry: EntryDto }
+    | { kind: 'clear'; dataVersion: string }
+    | null
+  >(null);
+const view = computed(() =>
+  route.path.startsWith('/timeline')
+    ? 'timeline'
+    : route.path === '/trash'
+      ? 'trash'
+      : route.path === '/categories'
+        ? 'categories'
+        : route.path === '/entries'
+          ? 'all'
+          : route.path.startsWith('/entries/')
+            ? 'editor'
+            : 'day',
+);
+const today = computed(() => snapshot.value?.businessToday ?? '');
+const filtered = computed(() =>
+  snapshot.value
+    ? selectEntries(snapshot.value.entries, today.value, filter.value)
+    : [],
+);
+const range = computed(() =>
+  timelineWindow(
+    filtered.value,
+    today.value,
+    scale.value,
+    anchor.value || today.value,
+  ),
+);
+const visible = computed(() => {
+  if (!snapshot.value) return [];
+  if (view.value === 'day')
+    return filtered.value.filter(
+      (e) =>
+        isCalendarDate(selectedDate.value) &&
+        coversDate(e, selectedDate.value, today.value),
+    );
+  if (view.value === 'timeline')
+    return selectEntries(
+      filtered.value,
+      today.value,
+      emptyFilter(),
+      range.value,
+    ).sort((a, b) =>
+      filter.value.sort === 'asc'
+        ? a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id)
+        : b.startDate.localeCompare(a.startDate) || a.id.localeCompare(b.id),
+    );
+  return filtered.value;
+});
+const summary = computed(() => summarizeEntries(visible.value, today.value));
+const dailyFocusCount = computed(() => {
+  const ids = new Set(visible.value.map((e) => e.id));
+  return (
+    snapshot.value?.focusDays.filter(
+      (f) => f.focused && f.date === selectedDate.value && ids.has(f.entryId),
+    ).length ?? 0
+  );
+});
+const week = computed(() =>
+  isCalendarDate(selectedDate.value) ? weekDates(selectedDate.value) : [],
 );
 const allEntries = computed(() => [
   ...(snapshot.value?.entries ?? []),
   ...(snapshot.value?.trashEntries ?? []),
 ]);
-async function reload() {
-  error.value = '';
-  const next = await records.snapshot();
-  snapshot.value = next.snapshot;
-  serverTime.value = next.serverTime ?? '';
-  if (!selectedDate.value) selectedDate.value = next.snapshot.businessToday;
+const hasFilter = computed(
+  () =>
+    !!filter.value.search.trim() ||
+    !!filter.value.categoryId ||
+    filter.value.status !== 'all',
+);
+const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+function open(entry: EntryDto | null) {
+  recordView.returnPath = route.fullPath;
+  recordView.scrollTop = window.scrollY;
+  void router.push(entry ? `/entries/${entry.id}` : '/entries/new');
 }
-async function load() {
-  loading.value = true;
-  error.value = '';
-  try {
-    await refresh();
-    snapshot.value = null;
-    await reload();
-  } catch (cause) {
-    error.value = errorMessage(cause);
-    if (!api.getAccount()) snapshot.value = null;
-  } finally {
-    loading.value = false;
+async function closeEditor() {
+  await router.push(
+    recordView.returnPath.startsWith('/entries/')
+      ? '/entries'
+      : recordView.returnPath,
+  );
+  await nextTick();
+  window.scrollTo(0, recordView.scrollTop);
+}
+function syncEditor() {
+  if (!snapshot.value || view.value !== 'editor') return;
+  const id = route.params.id;
+  if (route.path === '/entries/new')
+    editor.value = { entry: null, key: crypto.randomUUID() };
+  else {
+    const found = snapshot.value.entries.find((e) => e.id === id);
+    editor.value = found ? { entry: { ...found }, key: found.id } : null;
   }
 }
-async function run(action: () => Promise<unknown>) {
-  if (busy.value || loading.value)
-    throw new Error('Another operation is in progress');
-  busy.value = true;
-  error.value = '';
-  notice.value = '';
-  try {
-    await action();
-    notice.value = '服务器已确认保存。';
-    try {
-      await reload();
-    } catch (cause) {
-      error.value = `保存已完成，完整数据刷新失败：${errorMessage(cause)}`;
+watch(() => route.path, syncEditor);
+onBeforeUnmount(() => {
+  recordView.scrollTop = window.scrollY;
+});
+watch(
+  () => route.query.date,
+  (value) => {
+    if (typeof value === 'string' && isCalendarDate(value))
+      selectedDate.value = value;
+  },
+);
+watch(
+  () => snapshot.value?.categories,
+  () => {
+    if (
+      filter.value.categoryId &&
+      !snapshot.value?.categories.some((c) => c.id === filter.value.categoryId)
+    ) {
+      filter.value.categoryId = '';
+      notice.value = '分类已变化，已清除失效筛选。';
     }
-  } finally {
-    busy.value = false;
-  }
-}
-async function action(work: () => Promise<unknown>) {
+  },
+);
+watch(mode, () => {
+  filter.value = emptyFilter();
+  editor.value = null;
+  confirm.value = null;
+});
+watch(
+  filter,
+  () => {
+    limit.value = 40;
+  },
+  { deep: true },
+);
+async function action(mutation: GuestMutation, cloud: () => Promise<unknown>) {
   try {
-    await run(work);
+    await mutate(mutation, cloud);
   } catch (cause) {
     error.value = errorMessage(cause);
-    if (!api.getAccount()) snapshot.value = null;
   }
 }
 async function save(
@@ -98,188 +201,366 @@ async function save(
   input: CreateEntryInput | PatchEntryInput,
   creating: boolean,
 ) {
-  // The discriminated input is validated by each shared schema before transport.
-  if (creating && 'id' in input) await run(() => records.create(input));
+  if (creating && 'id' in input)
+    await mutate({ kind: 'create', input }, () => records.create(input));
   else if ('expectedVersion' in input)
-    await run(() => records.update(id, input));
+    await mutate({ kind: 'update', id, input }, () =>
+      records.update(id, input),
+    );
 }
 async function focus(entry: EntryDto) {
-  const date = selectedDate.value;
   const existing = snapshot.value?.focusDays.find(
-    (focus) => focus.entryId === entry.id && focus.date === date,
+    (f) => f.entryId === entry.id && f.date === selectedDate.value,
   );
-  await action(() =>
-    records.focus(entry.id, date, {
-      focused: !existing?.focused,
-      expectedEntryVersion: entry.version,
-      expectedFocusVersion: existing?.version ?? 0,
-    }),
+  const input = {
+    focused: !existing?.focused,
+    expectedEntryVersion: entry.version,
+    expectedFocusVersion: existing?.version ?? 0,
+  };
+  await action(
+    { kind: 'focus', id: entry.id, date: selectedDate.value, input },
+    () => records.focus(entry.id, selectedDate.value, input),
   );
 }
 async function finishEntry(entry: EntryDto) {
-  await action(() => records.finish(entry.id, entry.version));
+  await action(
+    { kind: 'finish', id: entry.id, expectedVersion: entry.version },
+    () => records.finish(entry.id, entry.version),
+  );
 }
 async function restoreEntry(entry: EntryDto) {
-  await action(() => records.restore(entry.id, entry.version));
+  await action(
+    { kind: 'restore', id: entry.id, expectedVersion: entry.version },
+    () => records.restore(entry.id, entry.version),
+  );
 }
 async function confirmed() {
-  const confirmation = confirm.value;
-  if (!confirmation) return;
+  const c = confirm.value;
+  if (!c) return;
   try {
-    await run(() =>
-      confirmation.kind === 'clear'
-        ? records.purge({ expectedDataVersion: confirmation.dataVersion })
-        : confirmation.kind === 'purge'
-          ? records.purge({
-              entries: [
-                {
-                  id: confirmation.entry.id,
-                  expectedVersion: confirmation.entry.version,
-                },
-              ],
-            })
-          : records.remove(confirmation.entry.id, confirmation.entry.version),
-    );
+    if (c.kind === 'clear') {
+      const input = { expectedDataVersion: c.dataVersion };
+      await mutate({ kind: 'purge', input }, () => records.purge(input));
+    } else if (c.kind === 'purge') {
+      const input = {
+        entries: [{ id: c.entry.id, expectedVersion: c.entry.version }],
+      };
+      await mutate({ kind: 'purge', input }, () => records.purge(input));
+    } else
+      await mutate(
+        { kind: 'remove', id: c.entry.id, expectedVersion: c.entry.version },
+        () => records.remove(c.entry.id, c.entry.version),
+      );
     confirm.value = null;
   } catch (cause) {
     error.value = errorMessage(cause);
-    confirm.value = null;
   }
 }
 function categoryName(id: string) {
   return (
-    snapshot.value?.categories.find((category) => category.id === id)?.name ??
-    '分类已变化，请刷新'
+    snapshot.value?.categories.find((c) => c.id === id)?.name ?? '分类已变化'
   );
 }
-onMounted(load);
+function changeDate(date: string) {
+  if (isCalendarDate(date)) {
+    selectedDate.value = date;
+    void router.replace({ query: { date } });
+  }
+}
+function move(amount: number) {
+  anchor.value = shiftMonth(
+    anchor.value,
+    (scale.value === 'year' ? 12 : scale.value === 'quarter' ? 3 : 1) * amount,
+  );
+}
+async function locate() {
+  anchor.value = today.value;
+  if (scale.value === 'all' && range.value.todayX === null)
+    scale.value = 'month';
+  await nextTick();
+  timeline.value?.locateToday();
+}
+onMounted(async () => {
+  await ensure();
+  if (snapshot.value) {
+    selectedDate.value =
+      typeof route.query.date === 'string' && isCalendarDate(route.query.date)
+        ? route.query.date
+        : selectedDate.value || today.value;
+    anchor.value = anchor.value || today.value;
+    syncEditor();
+  }
+});
 </script>
 <template>
   <section class="records-page">
-    <p class="eyebrow">DAYLINE · 记录与回看</p>
-    <h1>记录持续的经历</h1>
-    <p v-if="loading" role="status">正在确认账号并完整读取服务器记录…</p>
-    <p v-if="error" role="alert" class="error">{{ error }}</p>
-    <p v-if="notice" role="status" class="notice">{{ notice }}</p>
+    <p class="eyebrow">
+      DAYLINE · {{ mode === 'guest' ? '游客本机记录' : '云端记录' }}
+    </p>
+    <h1>
+      {{
+        view === 'day'
+          ? '每日回看'
+          : view === 'timeline'
+            ? '时间轴'
+            : view === 'trash'
+              ? '回收站'
+              : view === 'categories'
+                ? '分类管理'
+                : view === 'editor'
+                  ? '记录一段经历'
+                  : '全部记录'
+      }}
+    </h1>
+    <p v-if="loading" role="status">正在完整读取记录…</p>
+    <p v-if="error" class="error" role="alert">{{ error }}</p>
+    <p v-if="notice" class="notice" role="status">{{ notice }}</p>
     <button class="secondary" :disabled="loading || busy" @click="load">
       重新完整读取
     </button>
-    <RouterLink v-if="!current && !loading" to="/login">前往登录</RouterLink>
-    <template v-if="snapshot && current && snapshot.userId === current.id">
-      <p>
-        {{ current.displayName }} · 北京时间今天 {{ snapshot.businessToday }} ·
-        全部 {{ snapshot.entries.length }} 条活动事项
+    <template v-if="snapshot"
+      ><p class="muted">
+        {{
+          mode === 'guest'
+            ? '游客 · 仅保存在此设备，登录后可同步。'
+            : '在线保存 · 当前编辑只在内存中，请手动提交。'
+        }}
+        北京时间 {{ today }}
       </p>
-      <p v-if="readonly" class="notice">
-        账号正在注销中，此处仅可查看，业务保存已停用。
-      </p>
-      <nav aria-label="记录视图">
-        <button
-          v-for="item in [
-            ['review', '每日回看'],
-            ['all', '全部事项'],
-            ['trash', '回收站'],
-            ['categories', '分类'],
-          ] as const"
-          :key="item[0]"
-          class="secondary"
-          :aria-pressed="tab === item[0]"
-          :disabled="busy"
-          @click="tab = item[0]"
-        >
-          {{ item[1] }}
-        </button>
-      </nav>
+      <p v-if="readonly" class="notice">账号受限，当前仅可查看。</p>
       <button
-        v-if="!readonly"
-        :disabled="busy || !!editor"
-        @click="editor = { entry: null, key: newKey() }"
+        v-if="!readonly && view !== 'editor'"
+        :disabled="busy"
+        @click="open(null)"
       >
-        新建事项
+        ＋ 新建事项
       </button>
-      <EntryEditor
-        v-if="editor && !readonly"
-        :key="editor.key"
-        :entry="editor.entry"
-        :categories="snapshot.categories"
-        :today="snapshot.businessToday"
-        :save="save"
-        @close="editor = null"
-        @saved="editor = null"
-      />
-      <div v-if="confirm" class="record-panel">
-        <p v-if="confirm.kind === 'delete'">
-          将“{{ confirm.entry.title }}”及其重点移入回收站，保留 30 天。
-        </p>
-        <p v-else-if="confirm.kind === 'purge'">
-          永久删除“{{ confirm.entry.title }}”？此操作无法从回收站恢复。
-        </p>
-        <p v-else>
-          永久清空当前看到的
-          {{ snapshot.trashEntries.length }}
-          条回收站事项？此操作无法恢复。若数据有变化会要求重新确认。
-        </p>
-        <button :disabled="busy" @click="confirmed">
-          确认{{
-            confirm.kind === 'delete' ? '移入回收站' : '永久删除'
-          }}</button
-        ><button class="secondary" :disabled="busy" @click="confirm = null">
-          取消
-        </button>
-      </div>
-      <template v-if="tab === 'review' || tab === 'all'">
-        <label
-          >{{ tab === 'review' ? '回看日期' : '重点操作日期'
-          }}<input
-            v-model="selectedDate"
-            type="date"
-            min="0001-01-01"
-            max="9999-12-31"
-            required /></label
-        ><button
-          class="secondary"
-          @click="selectedDate = snapshot.businessToday"
-        >
-          回到今天
-        </button>
-        <p v-if="selectedDate > snapshot.businessToday">
-          未来日期不能标记重点；未结束事项只回顾到今天。
-        </p>
+      <template v-if="view === 'day' || view === 'all' || view === 'timeline'">
+        <div v-if="view !== 'timeline'" class="record-panel">
+          <div class="toolbar">
+            <button
+              class="secondary"
+              :disabled="
+                !isCalendarDate(selectedDate) || selectedDate === '0001-01-01'
+              "
+              @click="changeDate(shiftDate(selectedDate, -1))"
+            >
+              前一天</button
+            ><label
+              >{{ view === 'day' ? '回看日期' : '重点操作日期'
+              }}<input
+                :value="selectedDate"
+                type="date"
+                min="0001-01-01"
+                max="9999-12-31"
+                @change="
+                  changeDate(($event.target as HTMLInputElement).value)
+                " /></label
+            ><button
+              class="secondary"
+              :disabled="
+                !isCalendarDate(selectedDate) || selectedDate === '9999-12-31'
+              "
+              @click="changeDate(shiftDate(selectedDate, 1))"
+            >
+              后一天</button
+            ><button class="secondary" @click="changeDate(today)">今天</button>
+          </div>
+          <div v-if="view === 'day'" class="week-strip">
+            <button
+              v-for="date in week"
+              :key="date"
+              class="secondary"
+              :aria-pressed="date === selectedDate"
+              @click="changeDate(date)"
+            >
+              {{ weekdays[(dateOrdinal(date) - 1) % 7] }}<br />{{
+                date.slice(5)
+              }}
+            </button>
+          </div>
+          <p v-if="selectedDate > today">
+            未来日期可回看已知计划范围，重点只可标记今天及过去。
+          </p>
+        </div>
+        <div class="filters">
+          <label
+            >搜索标题<input
+              v-model="filter.search"
+              type="search"
+              placeholder="搜索当前完整数据" /></label
+          ><label
+            >分类<select v-model="filter.categoryId">
+              <option value="">全部分类</option>
+              <option
+                v-for="c in snapshot.categories"
+                :key="c.id"
+                :value="c.id"
+              >
+                {{ c.name }}
+              </option>
+            </select></label
+          ><label
+            >当前状态<select v-model="filter.status">
+              <option value="all">全部状态</option>
+              <option value="not_started">未开始</option>
+              <option value="ongoing">进行中</option>
+              <option value="ended">已结束</option>
+            </select></label
+          ><label
+            >开始日期排序<select v-model="filter.sort">
+              <option value="desc">从新到旧</option>
+              <option value="asc">从旧到新</option>
+            </select></label
+          ><button class="secondary" @click="filter = emptyFilter()">
+            清除筛选
+          </button>
+        </div>
+        <div v-if="view === 'timeline'" class="toolbar">
+          <label
+            >时间尺度<select v-model="scale">
+              <option value="month">月</option>
+              <option value="quarter">季度</option>
+              <option value="year">年</option>
+              <option value="all">全部时间</option>
+            </select></label
+          ><button
+            class="secondary"
+            :disabled="scale === 'all' || anchor === '0001-01-01'"
+            @click="move(-1)"
+          >
+            上一段</button
+          ><label
+            >浏览锚点<input
+              v-model="anchor"
+              type="date"
+              min="0001-01-01"
+              max="9999-12-31" /></label
+          ><button
+            class="secondary"
+            :disabled="scale === 'all' || anchor.slice(0, 4) === '9999'"
+            @click="move(1)"
+          >
+            下一段</button
+          ><button class="secondary" @click="locate">定位今天</button>
+        </div>
+        <section class="stats" aria-label="当前范围统计">
+          <span
+            >{{
+              view === 'day'
+                ? '选定日事项'
+                : view === 'timeline'
+                  ? '所选整段范围事项'
+                  : '筛选后全部事项'
+            }}
+            <strong>{{ summary.count }}</strong></span
+          ><span
+            >今天仍在进行 <strong>{{ summary.ongoing }}</strong></span
+          ><span
+            >涉及分类 <strong>{{ summary.categoryCount }}</strong></span
+          >
+          <span v-if="view === 'day'"
+            >选定日重点 <strong>{{ dailyFocusCount }}</strong></span
+          >
+          <p>
+            分类分布 · 按事项数量：<span
+              v-for="(count, id) in summary.categories"
+              :key="id"
+              >{{ categoryName(String(id)) }} {{ count }}（{{
+                Math.round((count / summary.count) * 100)
+              }}%） </span
+            ><span v-if="!summary.count">暂无分布</span>
+          </p>
+        </section>
         <p v-if="!visible.length" class="empty-state">
           {{
-            tab === 'review'
-              ? '这一天没有事项。可以切换日期，或新建一段经历。'
-              : '尚无事项，点击新建开始记录。'
+            hasFilter
+              ? '筛选后无结果，请调整或清除筛选。'
+              : !snapshot.entries.length
+                ? '当前空间还没有事项，开始记录自己的经历。'
+                : view === 'day'
+                  ? '这一天没有覆盖的事项，可切换日期或新建。'
+                  : '当前时间范围没有事项。'
           }}
         </p>
-        <ul class="entry-list">
-          <EntryRow
-            v-for="entry in visible"
-            :key="entry.id"
-            :entry="entry"
-            :category="categoryName(entry.categoryId)"
-            :today="snapshot.businessToday"
-            :date="selectedDate"
-            :focused="
-              snapshot.focusDays.some(
-                (focus) =>
-                  focus.entryId === entry.id &&
-                  focus.date === selectedDate &&
-                  focus.focused,
-              )
-            "
-            :busy="busy"
-            :readonly="readonly"
-            @edit="editor = { entry: { ...entry }, key: newKey() }"
-            @finish="finishEntry(entry)"
-            @remove="confirm = { kind: 'delete', entry: { ...entry } }"
-            @focus="focus(entry)"
-          />
-        </ul>
+        <TimelineView
+          v-if="view === 'timeline' && isCalendarDate(anchor)"
+          ref="timeline"
+          :entries="visible"
+          :focus-days="snapshot.focusDays"
+          :categories="snapshot.categories"
+          :today="today"
+          :scale="scale"
+          :anchor="anchor"
+          @edit="open"
+          @day="(date) => router.push({ path: '/day', query: { date } })"
+        />
+        <template v-else
+          ><ul class="entry-list">
+            <EntryRow
+              v-for="entry in visible.slice(0, limit)"
+              :key="entry.id"
+              :entry="entry"
+              :category="categoryName(entry.categoryId)"
+              :color="
+                snapshot.categories.find((c) => c.id === entry.categoryId)
+                  ?.color ?? '#A0A4B3'
+              "
+              :today="today"
+              :date="selectedDate"
+              :focused="
+                snapshot.focusDays.some(
+                  (f) =>
+                    f.entryId === entry.id &&
+                    f.date === selectedDate &&
+                    f.focused,
+                )
+              "
+              :busy="busy"
+              :readonly="readonly"
+              @edit="open(entry)"
+              @finish="finishEntry(entry)"
+              @remove="confirm = { kind: 'delete', entry: { ...entry } }"
+              @focus="focus(entry)"
+            />
+          </ul>
+          <button
+            v-if="visible.length > limit"
+            class="secondary"
+            @click="limit += 40"
+          >
+            显示更多（已显示 {{ Math.min(limit, visible.length) }} /
+            {{ visible.length }}）
+          </button></template
+        >
       </template>
-      <template v-else-if="tab === 'trash'"
-        ><h2>回收站 · {{ snapshot.trashEntries.length }} 条</h2>
-        <button
+      <template v-if="view === 'editor'"
+        ><EntryEditor
+          v-if="editor && !readonly"
+          :key="editor.key"
+          :entry="editor.entry"
+          :categories="snapshot.categories"
+          :today="today"
+          :local="mode === 'guest'"
+          :save="save"
+          @saved="closeEditor"
+          @close="closeEditor"
+        />
+        <p v-else>事项不存在或当前不可编辑。</p>
+        <section v-if="editor?.entry" class="record-panel">
+          <h2>累计重点日期</h2>
+          <p class="date-list">
+            {{
+              snapshot.focusDays
+                .filter((f) => f.entryId === editor?.entry?.id && f.focused)
+                .map((f) => f.date)
+                .join('、') || '尚无重点日'
+            }}
+          </p>
+        </section></template
+      >
+      <template v-if="view === 'trash'"
+        ><button
           v-if="snapshot.trashEntries.length && !readonly"
           :disabled="busy"
           @click="
@@ -297,52 +578,73 @@ onMounted(load);
             :key="entry.id"
             class="entry-row"
           >
-            <h3>{{ entry.title }}</h3>
+            <h2>{{ entry.title }}</h2>
             <p>
               {{ categoryName(entry.categoryId) }} · {{ entry.startDate }} →
-              {{ entry.endDate ?? '至今' }} ·
-              {{ durationDays(entry, snapshot.businessToday) }} 天
+              {{
+                entry.endDate ?? (entry.startDate > today ? '结束未定' : '至今')
+              }}
+              · {{ spanLabel(entry, today) }}
             </p>
-            <p>删除于 {{ entry.deletedAt }} · 到期 {{ entry.purgeAfter }}</p>
+            <p>删除：{{ entry.deletedAt }}<br />到期：{{ entry.purgeAfter }}</p>
             <p>
-              重点日期：{{
+              重点：{{
                 snapshot.focusDays
-                  .filter(
-                    (focus) => focus.entryId === entry.id && focus.focused,
-                  )
-                  .map((focus) => focus.date)
+                  .filter((f) => f.entryId === entry.id && f.focused)
+                  .map((f) => f.date)
                   .join('、') || '无'
               }}
             </p>
-            <template v-if="!readonly"
-              ><button
-                :disabled="
-                  busy ||
-                  (!!entry.purgeAfter &&
-                    !!serverTime &&
-                    entry.purgeAfter <= serverTime)
-                "
-                @click="restoreEntry(entry)"
-              >
-                恢复事项</button
-              ><button
-                class="secondary"
-                :disabled="busy"
-                @click="confirm = { kind: 'purge', entry: { ...entry } }"
-              >
-                永久删除此项
-              </button></template
+            <button
+              v-if="!readonly"
+              :disabled="
+                busy || (!!entry.purgeAfter && entry.purgeAfter <= serverTime)
+              "
+              @click="restoreEntry(entry)"
             >
+              恢复事项</button
+            ><button
+              v-if="!readonly"
+              class="secondary"
+              :disabled="busy"
+              @click="confirm = { kind: 'purge', entry: { ...entry } }"
+            >
+              永久删除此项
+            </button>
           </li>
         </ul></template
       >
       <CategoryManager
-        v-else-if="tab === 'categories' && !readonly"
+        v-if="view === 'categories' && !readonly"
         :categories="snapshot.categories"
         :entries="allEntries"
-        :run="run"
         :busy="busy"
+        :mutate="mutate"
       />
+      <section
+        v-if="confirm"
+        class="confirmation"
+        role="region"
+        aria-label="危险操作确认"
+        @keydown.esc="confirm = null"
+      >
+        <p>
+          {{
+            confirm.kind === 'delete'
+              ? `将“${confirm.entry.title}”及重点移入回收站，保留 30 天。`
+              : confirm.kind === 'purge'
+                ? `永久删除“${confirm.entry.title}”？无法恢复。`
+                : `永久清空当前 ${snapshot.trashEntries.length} 条回收站事项？无法恢复；期间有修改会重新确认。`
+          }}
+        </p>
+        <button :disabled="busy" @click="confirmed">
+          确认{{
+            confirm.kind === 'delete' ? '移入回收站' : '永久删除'
+          }}</button
+        ><button class="secondary" :disabled="busy" @click="confirm = null">
+          取消
+        </button>
+      </section>
     </template>
   </section>
 </template>

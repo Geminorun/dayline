@@ -239,3 +239,5 @@ export class ApiClient {
     };
   }
 }
+
+export { createRecordsClient } from './records.js';

@@ -1,67 +1,170 @@
 <script setup lang="ts">
-import { onLaunch } from '@dcloudio/uni-app';
+import { useWorkspace } from './workspace';
+import { onShow, onLaunch } from '@dcloudio/uni-app';
+onShow(() => {
+  const workspace = useWorkspace();
+  if (
+    workspace.mode.value === 'guest' &&
+    workspace.snapshot.value &&
+    !workspace.busy.value
+  )
+    void workspace.load();
+});
 onLaunch(() => {
   /* Visiting the app never creates a cloud account. */
 });
 </script>
+
 <style>
 page {
-  background: #f6f4fa;
-  color: #333443;
-  font-family: system-ui, sans-serif;
+  background: #f7f8fc;
+  color: #303340;
+  font-family:
+    system-ui,
+    -apple-system,
+    'PingFang SC',
+    sans-serif;
 }
 .page {
-  padding: 40rpx;
+  padding: 32rpx 28rpx calc(40rpx + env(safe-area-inset-bottom));
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .card {
-  background: #fff;
-  border: 1rpx solid #e8e3ee;
-  border-radius: 28rpx;
-  padding: 36rpx;
+  padding: 28rpx;
+  margin: 24rpx 0;
+  background: white;
+  border: 1px solid #eef0f5;
+  border-radius: 24rpx;
+  box-sizing: border-box;
 }
 .title {
-  font-size: 44rpx;
-  font-weight: 600;
   display: block;
-  margin: 8rpx 0 28rpx;
+  font-size: 48rpx;
+  font-weight: 700;
+  margin: 18rpx 0 32rpx;
 }
 .subtitle {
-  font-size: 24rpx;
-  color: #8b80a8;
-  letter-spacing: 3rpx;
+  display: block;
+  font-size: 22rpx;
+  letter-spacing: 2rpx;
+  color: #7970cf;
+}
+.heading {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 600;
+  line-height: 1.6;
 }
 .text {
   display: block;
-  font-size: 28rpx;
   line-height: 1.8;
-  margin: 20rpx 0;
-  word-break: break-all;
+  margin: 16rpx 0;
+  word-break: break-word;
+  font-size: 28rpx;
 }
 .muted {
-  color: #76717e;
+  color: #727789;
+}
+.error,
+.notice {
+  display: block;
+  padding: 24rpx;
+  border-radius: 16rpx;
+  line-height: 1.8;
 }
 .error {
-  color: #9c3b37;
   background: #fff0ef;
-  border-radius: 12rpx;
-  padding: 22rpx;
+  color: #9c3b37;
 }
 .notice {
-  color: #3f7050;
-  background: #edf5ef;
-  border-radius: 12rpx;
-  padding: 22rpx;
+  background: #f0eefb;
+  color: #5d54a0;
 }
 button {
-  margin-top: 26rpx;
-  background: #8b80b8;
+  background: #7970cf;
   color: white;
-  font-size: 30rpx;
   border-radius: 16rpx;
-  min-height: 88rpx;
+  font-size: 28rpx;
+  min-height: 44px;
+  line-height: 44px;
+  margin: 16rpx 0;
 }
 button.secondary {
-  background: #efecf5;
-  color: #51466e;
+  background: #f0eefb;
+  color: #5d54a0;
+}
+button::after {
+  border: 0;
+}
+input {
+  height: 48px;
+  padding: 0 20rpx;
+  border: 1px solid #dce0eb;
+  border-radius: 14rpx;
+  font-size: 28rpx;
+  background: white;
+  box-sizing: border-box;
+  margin: 12rpx 0;
+}
+.picker {
+  padding: 24rpx 20rpx;
+  border: 1px solid #dce0eb;
+  border-radius: 14rpx;
+  font-size: 28rpx;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  align-items: center;
+}
+.actions button {
+  flex: 1;
+  min-width: 140rpx;
+  padding: 0 16rpx;
+}
+.actions picker {
+  flex: 1;
+  min-width: 180rpx;
+}
+.week-strip {
+  display: flex;
+  gap: 4rpx;
+  justify-content: space-between;
+}
+.week-day {
+  display: flex;
+  flex: 1;
+  min-height: 44px;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  font-size: 22rpx;
+  border-radius: 12rpx;
+  color: #727789;
+  padding: 8rpx 2rpx;
+}
+.week-day.selected {
+  background: #7970cf;
+  color: white;
+}
+.empty {
+  text-align: center;
+  padding: 40rpx 10rpx;
+  color: #727789;
+}
+.dates-scroll {
+  max-height: 280px;
+  height: 200px;
+}
+.confirmation {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
+  border: 2px solid #dba96c;
+  background: #fff6ed;
 }
 </style>

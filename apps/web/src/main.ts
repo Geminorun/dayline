@@ -8,13 +8,25 @@ import './style.css';
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/review' },
-    { path: '/review', component: RecordsPage },
+    { path: '/', redirect: '/day' },
+    { path: '/review', redirect: '/day' },
+    { path: '/day', component: RecordsPage },
+    { path: '/entries', component: RecordsPage },
+    { path: '/entries/new', component: RecordsPage },
+    { path: '/entries/:id', component: RecordsPage },
+    { path: '/timeline', component: RecordsPage },
+    { path: '/categories', component: RecordsPage },
+    { path: '/trash', component: RecordsPage },
     {
       path: '/:mode(login|register|verify|verified|forgot-password|reset-password|change-password)',
       component: AuthPage,
     },
-    { path: '/account', component: AccountPage },
+    { path: '/account', redirect: '/settings' },
+    { path: '/settings', component: AccountPage },
+    {
+      path: '/auth/:mode(login|register|verify-email|forgot-password|reset-password)',
+      component: AuthPage,
+    },
   ],
 });
 createApp(App).use(router).mount('#app');

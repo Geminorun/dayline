@@ -2,7 +2,10 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "lib": ["ES2022", "DOM"],
-    "types": ["@dcloudio/types", "node", "vite/client"]
+    "types": ["@dcloudio/types", "node", "vite/client"],
+    "paths": {
+      "vue": ["./node_modules/vue"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.vue", "test/**/*.ts", "vitest.config.ts"]
 }

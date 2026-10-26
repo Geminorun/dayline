@@ -13,11 +13,14 @@ import { displayNameSchema } from '@dayline/contracts';
 import type { QrCreatedDto } from '@dayline/contracts';
 import { api } from './api';
 import { useAccount } from './account';
+import { useWorkspace } from './records/workspace';
 import { takeAuthCallback } from './callback';
 const route = useRoute();
 const router = useRouter();
 const account = useAccount();
-const mode = computed(() => String(route.params.mode));
+const mode = computed(() =>
+  route.params.mode === 'verify-email' ? 'verify' : String(route.params.mode),
+);
 const titles: Record<string, string> = {
   login: '欢迎回来',
   register: '创建日序账号',
@@ -91,7 +94,8 @@ async function submit() {
         body: { email: email.value, password: password.value },
       });
       await account.refresh();
-      await router.push('/account');
+      await useWorkspace().switchMode('account');
+      await router.push('/day');
     } else if (mode.value === 'register') {
       await api.request('/api/auth/sign-up/email', {
         decode: nativeUserSchema.parse,
@@ -248,7 +252,8 @@ async function consume() {
       method: 'POST',
     });
     await account.refresh();
-    await router.push('/account');
+    await useWorkspace().switchMode('account');
+    await router.push('/day');
   } catch (cause) {
     error.value =
       feedback(cause) + ' 请先到当前账号页检查登录结果；未登录时重新扫码。';

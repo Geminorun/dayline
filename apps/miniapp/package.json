@@ -11,6 +11,7 @@
   "dependencies": {
     "@dayline/api-client": "workspace:*",
     "@dayline/contracts": "workspace:*",
+    "@dayline/core": "workspace:*",
     "@dcloudio/uni-app": "3.0.0-5030320261023001",
     "@dcloudio/uni-components": "3.0.0-5030320261023001",
     "@dcloudio/uni-mp-weixin": "3.0.0-5030320261023001",

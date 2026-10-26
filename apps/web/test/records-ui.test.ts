@@ -11,6 +11,7 @@ import EntryEditor from '../src/records/EntryEditor.vue';
 import RecordsPage from '../src/records/RecordsPage.vue';
 import { records } from '../src/records/record-service';
 import { useAccount } from '../src/account';
+import { useWorkspace } from '../src/records/workspace';
 const userId = '63a561bd-2302-485d-8d89-cea248ffbdf1';
 const categoryId = '76c7987d-aadb-4001-922f-26ea52d9f0e8';
 const entryId = '8215ed08-99a1-460d-a4da-3e4fa674245f';
@@ -99,7 +100,7 @@ describe('minimal record interface', () => {
     expect(wrapper.emitted('saved')).toBeUndefined();
     await wrapper.get('form').trigger('submit');
     await flushPromises();
-    expect(wrapper.text()).toContain('正在请求服务器');
+    expect(wrapper.text()).toContain('正在保存');
     expect(wrapper.emitted('saved')).toBeUndefined();
     expect(save.mock.calls[0]?.[0]).toBe(save.mock.calls[1]?.[0]);
     resolve?.();
@@ -233,28 +234,33 @@ describe('minimal record interface', () => {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [
-        { path: '/', component: RecordsPage },
+        { path: '/', redirect: '/day' },
+        { path: '/day', component: RecordsPage },
+        { path: '/trash', component: RecordsPage },
         { path: '/login', component: { template: '<div>登录</div>' } },
       ],
     });
     await router.push('/');
     await router.isReady();
+    await useWorkspace().switchMode('account');
     const wrapper = mount(RecordsPage, { global: { plugins: [router] } });
     wrappers.push(wrapper);
     await flushPromises();
     expect(wrapper.text()).toContain('阅读三体');
-    expect(wrapper.text()).not.toContain('服务器已确认保存');
+    expect(wrapper.text()).not.toContain('已保存到云端');
     await button(wrapper, '移入回收站').trigger('click');
     expect(requests.filter((path) => path.endsWith(entryId))).toHaveLength(0);
     await button(wrapper, '确认移入回收站').trigger('click');
     await flushPromises();
-    expect(wrapper.text()).toContain('服务器已确认保存');
-    await button(wrapper, '回收站').trigger('click');
+    expect(wrapper.text()).toContain('已保存到云端');
+    await router.push('/trash');
+    await flushPromises();
     expect(wrapper.text()).toContain('阅读三体');
     await button(wrapper, '恢复事项').trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('回收站为空');
-    await button(wrapper, '每日回看').trigger('click');
+    await router.push('/day');
+    await flushPromises();
     expect(wrapper.text()).toContain('阅读三体');
   });
 });

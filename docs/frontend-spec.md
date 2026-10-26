@@ -9,7 +9,7 @@
 | 接口基线 | [backend-spec.md](backend-spec.md) v0.1 |
 | 网页 | Vue 3、TypeScript、Vite，面向电脑浏览器 |
 | 小程序 | uni-app、Vue 3、TypeScript，首版发布微信小程序 |
-| 当前交付 | 独立双端账号界面已实现；网页 /review 已接通最小录入 / 每日回看、分类和回收站闭环并完成本地 Chromium 流程。完整双端体验、游客、缓存草稿及真机验证待后续阶段，见 [阶段 2 交接](stage2-handoff.md) |
+| 当前交付 | 双端完整业务、游客本机事务、搜索统计与四尺度时间轴已实现并有本机自动化及 Chromium 证据；账号缓存、持久草稿、生命周期全量刷新及游客接入由阶段 4 承接，真机仍待验证，见 [阶段 3 交接](stage3-handoff.md) |
 
 阅读索引：
 

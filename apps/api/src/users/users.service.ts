@@ -2,9 +2,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { BUSINESS_TIME_ZONE } from '@dayline/core';
 import { USER_STATUSES } from '@dayline/contracts';
-import type { UserDto } from '@dayline/contracts';
+import type { UserDto, PatchProfileInput } from '@dayline/contracts';
 import { AppError } from '../common/app-error.js';
 import { PrismaService } from '../database/prisma.service.js';
+import type { Actor } from '../common/request-context.js';
 import type { Prisma } from '../generated/prisma/client.js';
 
 const profileSelect = {
@@ -29,6 +30,37 @@ export class UsersService {
   constructor(
     @Inject(PrismaService) private readonly database: PrismaService,
   ) {}
+
+  async update(actor: Actor, input: PatchProfileInput): Promise<UserDto> {
+    return this.database.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${actor.userId}::uuid FOR UPDATE`;
+      const user = await tx.user.findUnique({ where: { id: actor.userId } });
+      if (
+        !user ||
+        user.status === 'merged' ||
+        user.authEpoch !== actor.authEpoch
+      )
+        throw new AppError(401, 'SESSION_REVOKED', '登录状态已失效。');
+      if (user.status !== 'active')
+        throw new AppError(403, 'ACCOUNT_PENDING_DELETION', '账号正在注销中。');
+      if (user.profileVersion !== input.expectedProfileVersion)
+        throw new AppError(
+          409,
+          'VERSION_CONFLICT',
+          '显示名已有更新，请重新读取后核对。',
+          {
+            expectedVersion: input.expectedProfileVersion,
+            currentVersion: user.profileVersion,
+          },
+        );
+      if (user.name !== input.displayName)
+        await tx.user.update({
+          where: { id: actor.userId },
+          data: { name: input.displayName, profileVersion: { increment: 1 } },
+        });
+      return readProfile(tx, actor.userId);
+    });
+  }
 
   async read(userId: string): Promise<UserDto> {
     return readProfile(this.database, userId);

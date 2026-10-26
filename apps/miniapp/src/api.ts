@@ -1,7 +1,7 @@
 import { ApiClient, ClientError } from '@dayline/api-client';
 import type { Transport } from '@dayline/api-client';
-const tokenKey = 'dayline.auth.signed-token.v1';
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
+const tokenKey = `dayline:${import.meta.env.MODE}:${encodeURIComponent(baseUrl)}:auth:signed-token:v1`;
 let token: string | null = null;
 let tokenLoaded = false;
 function loadToken() {

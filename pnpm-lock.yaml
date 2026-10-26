@@ -135,6 +135,9 @@ importers:
       '@dayline/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@dayline/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@dcloudio/uni-app':
         specifier: 3.0.0-5030320261023001
         version: 3.0.0-5030320261023001(@dcloudio/types@3.4.31)(postcss@8.5.31)(rollup@4.65.0)(supports-color@8.1.1)(vite@5.2.8(@types/node@24.19.2)(lightningcss@1.33.0)(terser@5.51.2))(vue@3.4.21(typescript@5.9.3))
@@ -181,6 +184,9 @@ importers:
       '@dayline/core':
         specifier: workspace:*
         version: link:../../packages/core
+      dexie:
+        specifier: 4.2.1
+        version: 4.2.1
       vue:
         specifier: 3.5.44
         version: 3.5.44(typescript@5.9.3)
@@ -194,6 +200,9 @@ importers:
       '@vue/test-utils':
         specifier: 2.4.6
         version: 2.4.6
+      fake-indexeddb:
+        specifier: 6.2.5
+        version: 6.2.5
       jsdom:
         specifier: 29.1.1
         version: 29.1.1(@noble/hashes@2.4.0)
@@ -3484,6 +3493,9 @@ packages:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
 
+  dexie@4.2.1:
+    resolution: {integrity: sha512-Ckej0NS6jxQ4Po3OrSQBFddayRhTCic2DoCAG5zacOfOVB9P2Q5Xc5uL/nVa7ZVs+HdMnvUPzLFCB/JwpB6Csg==}
+
   dezalgo@1.0.4:
     resolution: {integrity: sha512-rXSP0bf+5n0Qonsb+SVVfNfIsimO4HEtmnIpPHY8Q1UCzKlQrDMfdobr8nJOOsRgWCyMRqeSBQzmWUMq7zvVig==}
 
@@ -3712,6 +3724,10 @@ packages:
 
   exsolve@1.1.3:
     resolution: {integrity: sha512-kuzL9zherLQoqDeQaS55AiiIg1kb4KYXaSusTtgZTPlvKP2gGCI82LNmBNh5RjDVUXIcmgx+/Mx7vPwRzBbhJA==}
+
+  fake-indexeddb@6.2.5:
+    resolution: {integrity: sha512-CGnyrvbhPlWYMngksqrSSUT1BAVP49dZocrHuK0SvtR0D5TMs5wP0o3j7jexDJW01KSadjBp1M/71o/KR3nD1w==}
+    engines: {node: '>=18'}
 
   fast-check@3.23.2:
     resolution: {integrity: sha512-h5+1OzzfCC3Ef7VbtKdcv7zsstUQwUDlYpUTvjeUsJAssPgLn7QzbboPtL5ro04Mq0rPOsMzl7q5hIbRs2wD1A==}
@@ -9698,6 +9714,8 @@ snapshots:
 
   detect-libc@2.1.2: {}
 
+  dexie@4.2.1: {}
+
   dezalgo@1.0.4:
     dependencies:
       asap: 2.0.6
@@ -10046,6 +10064,8 @@ snapshots:
       - supports-color
 
   exsolve@1.1.3: {}
+
+  fake-indexeddb@6.2.5: {}
 
   fast-check@3.23.2:
     dependencies:

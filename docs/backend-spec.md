@@ -8,7 +8,7 @@
 | 需求基线 | [requirements.md](requirements.md) v1.0 |
 | 客户端 | Vue 网页与 uni-app 微信小程序 |
 | 核心技术 | Node.js、NestJS、TypeScript、PostgreSQL、Prisma、Better Auth、Resend |
-| 当前交付 | 邮箱 / 微信统一认证、扫码登录，以及第 9 / 10 节记录核心与完整快照已实现；文件、绑定合并和注销维护待后续阶段，证据见 [阶段 2 交接](stage2-handoff.md) |
+| 当前交付 | 邮箱 / 微信统一认证、扫码登录、第 6.6 节资料版本修改，以及第 9 / 10 节记录核心与完整快照已实现；文件、绑定合并和注销维护待后续阶段，证据见 [阶段 2 交接](stage2-handoff.md) |
 
 阅读索引：
 
@@ -494,7 +494,7 @@ Gate-A 的本地技术验证已覆盖无邮箱微信、Cookie / 签名 Bearer、
 
 `GET /api/v1/me` 返回：`id`、`displayName`、`profileVersion`、真实邮箱或 null、邮箱是否验证、`passwordEnabled`、微信是否已绑定、账号状态、注销到期时间、固定时区。微信显示仅提供必要的绑定状态，不返回 OpenID / UnionID。
 
-`PATCH /api/v1/me` 只允许显示名与 `expectedProfileVersion`。不允许在这里更改邮箱、微信、状态或时区。
+`PATCH /api/v1/me` 只接受 `{displayName, expectedProfileVersion}`，共享严格 schema 校验 1–40 个 Unicode 码点。锁定用户后再次检查 epoch / active 状态与资料版本，版本不符返回 409 VERSION_CONFLICT；同名无变化不递增版本，成功返回公开 UserDto。资料修改不改变业务 dataVersion。Cookie Origin、预期账号与小程序 method override 均沿用同一保护路由。不允许在这里更改邮箱、微信、状态或时区。
 
 `POST /api/v1/auth/logout` 提供跨端一致的业务退出入口，内部调用认证适配器撤销当前会话，并清理网页 Cookie 或通知小程序清除凭据。
 

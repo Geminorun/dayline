@@ -153,3 +153,13 @@ export const apiMetaSchema = z
       ? {}
       : { dataVersion: meta.dataVersion }),
   }));
+export * from './guest.js';
+export const patchProfileSchema = z
+  .object({
+    displayName: displayNameSchema,
+    expectedProfileVersion: z.number().int().min(1).max(2147483647),
+  })
+  .strict();
+export type PatchProfileInput = z.infer<typeof patchProfileSchema>;
+
+export * from './guest-manifest.js';

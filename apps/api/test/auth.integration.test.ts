@@ -441,7 +441,7 @@ describe('authentication foundation with real PostgreSQL and HTTP', () => {
       .expect(200);
   });
 
-  it('parses ordinary JSON safely and blocks unimplemented auth and business mutations', async () => {
+  it('parses ordinary JSON safely, blocks native bypasses and requires the business profile version', async () => {
     await post('/api/v1/auth/logout')
       .set('Content-Type', 'application/json')
       .send('{"broken"')
@@ -476,7 +476,7 @@ describe('authentication foundation with real PostgreSQL and HTTP', () => {
       .set('Origin', origin)
       .set('Cookie', session.cookie)
       .set('X-Dayline-Expected-User', user.id)
-      .send({ displayName: '尚未开放' })
-      .expect(404);
+      .send({ displayName: '缺少资料版本' })
+      .expect(422);
   });
 });

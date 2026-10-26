@@ -946,3 +946,88 @@ describe('record core: real PostgreSQL and protected HTTP', () => {
     vi.mocked(clock.now).mockReturnValue(new Date('2026-10-26T04:00:00.000Z'));
   });
 });
+
+describe('profile versioned writes through the same protected route', () => {
+  it('compares profile versions atomically, validates Unicode, and leaves business dataVersion alone', async () => {
+    const user = await login();
+    const before = (await snapshot(user)).data.dataVersion;
+    const responses = await Promise.all([
+      call(user, 'patch', '/me').send({
+        displayName: '😀'.repeat(40),
+        expectedProfileVersion: 1,
+      }),
+      call(user, 'patch', '/me').send({
+        displayName: '另一个名称',
+        expectedProfileVersion: 1,
+      }),
+    ]);
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 409]);
+    const profile = await call(user, 'get', '/me').expect(200);
+    expect(profile.body.data.profileVersion).toBe(2);
+    expect(profile.body.data.displayName).toBe(
+      responses.find((r) => r.status === 200)?.body.data.displayName,
+    );
+    await call(user, 'patch', '/me')
+      .send({ displayName: '😀'.repeat(41), expectedProfileVersion: 2 })
+      .expect(422);
+    await call(user, 'patch', '/me')
+      .send({
+        displayName: '非法字段',
+        expectedProfileVersion: 2,
+        status: 'active',
+      })
+      .expect(422);
+    expect((await snapshot(user)).data.dataVersion).toBe(before);
+  });
+  it('enforces expected actor, Origin, epoch and pending status on direct and miniapp-override PATCH', async () => {
+    const user = await login(),
+      other = await login(),
+      input = { displayName: '受保护显示名', expectedProfileVersion: 1 };
+    await request(app.getHttpServer())
+      .post('/api/v1/me')
+      .set('X-Dayline-Method-Override', 'PATCH')
+      .set('Authorization', `Bearer ${user.token}`)
+      .send(input)
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/v1/me')
+      .set('X-Dayline-Method-Override', 'PATCH')
+      .set('Authorization', `Bearer ${user.token}`)
+      .set('X-Dayline-Expected-User', other.id)
+      .send(input)
+      .expect(409);
+    await request(app.getHttpServer())
+      .post('/api/v1/me')
+      .set('X-Dayline-Method-Override', 'PATCH')
+      .set('Cookie', user.cookie)
+      .set('X-Dayline-Expected-User', user.id)
+      .send(input)
+      .expect(403);
+    await request(app.getHttpServer())
+      .post('/api/v1/me')
+      .set('X-Dayline-Method-Override', 'PATCH')
+      .set('Cookie', user.cookie)
+      .set('Origin', origin)
+      .set('X-Dayline-Expected-User', user.id)
+      .send(input)
+      .expect(200);
+    await database.user.update({
+      where: { id: user.id },
+      data: { status: 'pending_deletion' },
+    });
+    await call(user, 'patch', '/me')
+      .send({ ...input, expectedProfileVersion: 2 })
+      .expect(403);
+    await database.user.update({
+      where: { id: user.id },
+      data: { status: 'active', authEpoch: { increment: 1 } },
+    });
+    await call(user, 'patch', '/me')
+      .send({ ...input, expectedProfileVersion: 2 })
+      .expect(401);
+    expect(
+      (await database.user.findUniqueOrThrow({ where: { id: other.id } }))
+        .profileVersion,
+    ).toBe(1);
+  });
+});

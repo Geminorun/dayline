@@ -100,3 +100,4 @@ export function summarizeEntries<T extends DateRange & { categoryId: string }>(
     categories,
   };
 }
+export * from './views.js';

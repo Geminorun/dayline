@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { durationDays, entryStatus } from '@dayline/core';
+import { spanLabel, entryStatus } from '@dayline/core';
 import type { EntryDto } from '@dayline/contracts';
 defineProps<{
   entry: EntryDto;
   category: string;
+  color?: string;
   today: string;
   date: string;
   focused: boolean;
@@ -18,9 +19,13 @@ const statuses = { not_started: '未开始', ongoing: '进行中', ended: '已�
     <div>
       <h3>{{ entry.title }}</h3>
       <p>
-        {{ category }} · {{ entry.startDate }} → {{ entry.endDate ?? '至今' }} ·
-        {{ statuses[entryStatus(entry, today)] }} ·
-        {{ durationDays(entry, today) }} 天
+        <span aria-hidden="true" :style="{ color: color ?? '#A0A4B3' }">●</span>
+        {{ category }} · {{ entry.startDate }} →
+        {{ entry.endDate ?? (entry.startDate > today ? '结束未定' : '至今') }} ·
+        <template v-if="entryStatus(entry, today) !== 'not_started'"
+          >{{ statuses[entryStatus(entry, today)] }} ·</template
+        >
+        {{ spanLabel(entry, today) }}
       </p>
     </div>
     <div v-if="!readonly" class="row-actions">
