@@ -218,6 +218,9 @@ importers:
       '@dayline/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@dayline/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/contracts:
     dependencies:

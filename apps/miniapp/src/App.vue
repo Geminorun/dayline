@@ -1,17 +1,13 @@
 <script setup lang="ts">
 import { useWorkspace } from './workspace';
-import { onShow, onLaunch } from '@dcloudio/uni-app';
-onShow(() => {
-  const workspace = useWorkspace();
-  if (
-    workspace.mode.value === 'guest' &&
-    workspace.snapshot.value &&
-    !workspace.busy.value
-  )
-    void workspace.load();
-});
+import { onShow, onHide, onLaunch } from '@dcloudio/uni-app';
+onShow(() => useWorkspace().lifecycle(true));
+onHide(() => useWorkspace().lifecycle(false));
 onLaunch(() => {
-  /* Visiting the app never creates a cloud account. */
+  void useWorkspace().ensure();
+  uni.onNetworkStatusChange((status) => {
+    if (status.isConnected) useWorkspace().networkRestored();
+  });
 });
 </script>
 

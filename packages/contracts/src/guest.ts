@@ -472,3 +472,19 @@ export async function commitGuestMutation(
   if (next !== current) await repository.commit(next, current.packageRevision);
   return next;
 }
+
+export function isDefaultGuestEmpty(data: GuestPackage): boolean {
+  return (
+    !data.entries.length &&
+    !data.focusDays.length &&
+    data.categories.length === DEFAULT_CATEGORIES.length &&
+    DEFAULT_CATEGORIES.every((seed) =>
+      data.categories.some(
+        (c) =>
+          c.seedKey === seed.seedKey &&
+          c.name === seed.name &&
+          c.color === seed.color,
+      ),
+    )
+  );
+}

@@ -116,18 +116,63 @@ export const focusDayDtoSchema = z.object({
   focused: z.boolean(),
   version: z.number().int().nonnegative(),
 });
-export const snapshotDtoSchema = z.object({
-  schemaVersion: z.literal(1),
-  userId: z.uuid(),
-  dataVersion: dataVersionSchema,
-  timeZone: z.literal('Asia/Shanghai'),
-  businessToday: dateSchema,
-  complete: z.literal(true),
-  categories: z.array(categoryDtoSchema),
-  entries: z.array(entryDtoSchema),
-  trashEntries: z.array(entryDtoSchema),
-  focusDays: z.array(focusDayDtoSchema),
-});
+export const snapshotDtoSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    userId: z.uuid(),
+    dataVersion: dataVersionSchema,
+    timeZone: z.literal('Asia/Shanghai'),
+    businessToday: dateSchema,
+    complete: z.literal(true),
+    categories: z.array(categoryDtoSchema),
+    entries: z.array(entryDtoSchema),
+    trashEntries: z.array(entryDtoSchema),
+    focusDays: z.array(focusDayDtoSchema),
+  })
+  .superRefine((data, ctx) => {
+    const categoryIds = new Set(data.categories.map((c) => c.id));
+    const entries = [...data.entries, ...data.trashEntries];
+    const entryById = new Map(entries.map((e) => [e.id, e]));
+    const focusKeys = new Set<string>();
+    if (
+      !data.categories.length ||
+      categoryIds.size !== data.categories.length ||
+      new Set(data.categories.map((c) => c.name)).size !==
+        data.categories.length ||
+      entryById.size !== entries.length
+    )
+      ctx.addIssue({ code: 'custom', message: '重复标识或分类缺失' });
+    for (const [trash, collection] of [
+      [false, data.entries],
+      [true, data.trashEntries],
+    ] as const)
+      for (const entry of collection)
+        if (
+          !categoryIds.has(entry.categoryId) ||
+          (entry.endDate !== null && entry.endDate < entry.startDate) ||
+          (entry.deletedAt !== null) !== trash ||
+          (entry.purgeAfter !== null) !== trash ||
+          (entry.deletedAt &&
+            entry.purgeAfter &&
+            Date.parse(entry.purgeAfter) <= Date.parse(entry.deletedAt))
+        )
+          ctx.addIssue({ code: 'custom', message: '事项分区或引用损坏' });
+    for (const day of data.focusDays) {
+      const key = day.entryId + ':' + day.date,
+        entry = entryById.get(day.entryId);
+      if (
+        focusKeys.has(key) ||
+        !entry ||
+        day.version < 1 ||
+        (day.focused &&
+          (day.date > data.businessToday ||
+            day.date < entry.startDate ||
+            (entry.endDate !== null && day.date > entry.endDate)))
+      )
+        ctx.addIssue({ code: 'custom', message: '重点引用或日期损坏' });
+      focusKeys.add(key);
+    }
+  });
 export const entryResultSchema = z.object({
   entry: entryDtoSchema,
   focusDays: z.array(focusDayDtoSchema),

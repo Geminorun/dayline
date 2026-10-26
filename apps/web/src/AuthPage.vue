@@ -93,7 +93,8 @@ async function submit() {
         native: true,
         body: { email: email.value, password: password.value },
       });
-      await account.refresh();
+      await account.refresh(true);
+      account.announce();
       await useWorkspace().switchMode('account');
       await router.push('/day');
     } else if (mode.value === 'register') {
@@ -251,7 +252,8 @@ async function consume() {
       decode: wechatLoginDtoSchema.parse,
       method: 'POST',
     });
-    await account.refresh();
+    await account.refresh(true);
+    account.announce();
     await useWorkspace().switchMode('account');
     await router.push('/day');
   } catch (cause) {

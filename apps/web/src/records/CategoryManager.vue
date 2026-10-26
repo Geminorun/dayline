@@ -6,11 +6,11 @@ import { records, errorMessage } from './record-service';
 const props = defineProps<{
   categories: CategoryDto[];
   entries: EntryDto[];
-  run?: (action: () => Promise<unknown>) => Promise<void>;
+  run?: (action: () => Promise<unknown>) => Promise<unknown>;
   mutate?: (
     mutation: GuestMutation,
     cloud: () => Promise<unknown>,
-  ) => Promise<void>;
+  ) => Promise<unknown>;
   busy: boolean;
 }>();
 const name = ref('');

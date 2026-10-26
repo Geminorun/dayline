@@ -57,9 +57,39 @@ export class ApiClient {
     ) => void,
   ) {}
 
+  private readonly identityListeners = new Set<() => void>();
+  private readonly writeListeners = new Set<
+    (data: unknown, version: string, serverTime: string | undefined) => void
+  >();
+  onIdentityChange(listener: () => void) {
+    this.identityListeners.add(listener);
+    return () => this.identityListeners.delete(listener);
+  }
+  onWrite(
+    listener: (
+      data: unknown,
+      version: string,
+      serverTime: string | undefined,
+    ) => void,
+  ) {
+    this.writeListeners.add(listener);
+    return () => this.writeListeners.delete(listener);
+  }
+  acknowledgeWrite(data: unknown, version: string, serverTime?: string) {
+    dataVersionSchema.parse(version);
+    for (const listener of this.writeListeners)
+      listener(data, version, serverTime);
+  }
+  getGeneration() {
+    return this.generation;
+  }
+  confirmAccount(userId: string) {
+    if (this.accountId !== userId) this.setAccount(userId);
+  }
   setAccount(userId: string | null) {
     this.accountId = userId;
     this.generation++;
+    for (const listener of this.identityListeners) listener();
   }
   getAccount() {
     return this.accountId;
@@ -67,6 +97,7 @@ export class ApiClient {
   invalidate() {
     this.accountId = null;
     this.generation++;
+    for (const listener of this.identityListeners) listener();
   }
 
   request(
@@ -229,6 +260,9 @@ export class ApiClient {
     this.acceptCredentials?.(response.headers);
     const dataVersion = meta?.dataVersion;
     const serverTime = meta?.serverTime;
+    if (options.requireDataVersion && dataVersion)
+      for (const listener of this.writeListeners)
+        listener(data, dataVersion, serverTime);
     return {
       status: response.status,
       headers: response.headers,
@@ -241,3 +275,8 @@ export class ApiClient {
 }
 
 export { createRecordsClient } from './records.js';
+
+export { SnapshotCoordinator } from './snapshot-coordinator.js';
+export { createImportsClient } from './imports.js';
+export { AdmissionCoordinator } from './admission-coordinator.js';
+export type { AdmissionState } from './admission-coordinator.js';

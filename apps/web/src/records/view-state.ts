@@ -12,3 +12,16 @@ export const recordView = reactive({
   timelineTop: 0,
   timelineLeft: 0,
 });
+export function resetRecordView() {
+  Object.assign(recordView, {
+    selectedDate: '',
+    filter: emptyFilter(),
+    scale: 'month',
+    anchor: '',
+    limit: 40,
+    returnPath: '/entries',
+    scrollTop: 0,
+    timelineTop: 0,
+    timelineLeft: 0,
+  });
+}

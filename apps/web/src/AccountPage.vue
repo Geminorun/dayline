@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useAdmission } from './admission';
 import { ClientError } from '@dayline/api-client';
 import { onMounted, ref } from 'vue';
 import {
@@ -19,7 +20,9 @@ const name = ref(''),
   notice = ref('');
 async function load() {
   try {
+    const generation = api.getGeneration();
     await refresh();
+    if (generation !== api.getGeneration() && !current.value) return;
     name.value = current.value?.displayName ?? '';
     base.value = current.value?.profileVersion ?? 0;
   } catch (cause) {
@@ -41,12 +44,14 @@ async function save() {
   busy.value = true;
   error.value = '';
   try {
+    const generation = api.getGeneration();
     await api.request('/api/v1/me', {
       method: 'PATCH',
       account: true,
       body: input.data,
       decode: userDtoSchema.parse,
     });
+    if (generation !== api.getGeneration()) return;
     await load();
     notice.value = '显示名已保存。';
   } catch (cause) {
@@ -93,9 +98,16 @@ onMounted(load);
         进入已验证账号记录</button
       ><RouterLink v-else to="/auth/login">登录云端账号</RouterLink>
       <p class="muted">
-        游客与账号记录独立保留。游客登录接入将在下一阶段开放，当前不会自动导入或清空本机记录。
+        游客与账号记录独立保留。接入仅确认被冻结修订；原本机数据持续保留。
       </p>
     </section>
+    <button
+      v-if="current && mode === 'account'"
+      class="secondary"
+      @click="useAdmission().begin(true)"
+    >
+      准备或查询游客记录接入
+    </button>
     <section v-if="current" class="record-panel">
       <h2>账号资料</h2>
       <p>

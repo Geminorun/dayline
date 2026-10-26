@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import AdmissionReview from '../../components/AdmissionReview.vue';
+import { useAdmission } from '../../admission';
 import { ref, watch } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { patchProfileSchema, userDtoSchema } from '@dayline/contracts';
@@ -6,6 +8,8 @@ import { useWorkspace, message } from '../../workspace';
 import { api } from '../../api';
 const {
   mode,
+  credentialWarning,
+  identityState,
   current,
   snapshot,
   busy,
@@ -44,13 +48,14 @@ async function save() {
   busy.value = true;
   error.value = '';
   try {
+    const generation = api.getGeneration();
     const response = await api.request('/api/v1/me', {
       method: 'PATCH',
       account: true,
       body: input.data,
       decode: userDtoSchema.parse,
     });
-    if (response.data) {
+    if (response.data && generation === api.getGeneration()) {
       current.value = response.data;
       base.value = response.data.profileVersion;
       notice.value = '显示名已保存。';
@@ -70,7 +75,20 @@ function navigate(url: string) {
     ><text class="subtitle">DAYLINE</text><text class="title">我的日序</text
     ><text v-if="loading" class="text">正在读取…</text
     ><text v-if="error" class="text error">{{ error }}</text
+    ><text v-if="credentialWarning" class="text error">{{
+      credentialWarning
+    }}</text
     ><text v-if="notice" class="text notice">{{ notice }}</text
+    ><view
+      v-if="identityState === 'unknown' || identityState === 'expired'"
+      class="card"
+      ><text class="text"
+        >身份未确认，私人缓存已隐藏；请重试已有会话或明确继续游客。</text
+      ><button class="secondary" @click="restoreSession">
+        重新验证已有会话</button
+      ><button class="secondary" @click="switchMode('guest')">
+        明确继续游客
+      </button></view
     ><view class="card"
       ><text class="heading">{{
         mode === 'guest' ? '游客 · 仅本机保存' : '已验证账号 · 云端记录'
@@ -93,8 +111,14 @@ function navigate(url: string) {
           读取已有会话并进入账号
         </button></template
       ><text class="text muted"
-        >游客与账号记录分别保留。游客登录接入将在下一阶段开放；当前不会自动导入或删除。</text
+        >游客与账号记录分别保留；接入只确认被冻结修订，原游客包保留。</text
       ></view
+    ><AdmissionReview v-if="mode === 'account'" /><button
+      v-if="mode === 'account'"
+      class="secondary"
+      @click="useAdmission().begin(true)"
+    >
+      准备或查询游客接入</button
     ><view v-if="current" class="card"
       ><text class="heading">账号资料</text
       ><text class="text">{{ current.displayName }}</text

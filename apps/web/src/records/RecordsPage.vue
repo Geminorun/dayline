@@ -28,6 +28,7 @@ import type {
   EntryDto,
   GuestMutation,
   PatchEntryInput,
+  EntryDraft,
 } from '@dayline/contracts';
 import { useWorkspace } from './workspace';
 import { records, errorMessage } from './record-service';
@@ -35,6 +36,11 @@ import EntryEditor from './EntryEditor.vue';
 import EntryRow from './EntryRow.vue';
 import CategoryManager from './CategoryManager.vue';
 import TimelineView from './TimelineView.vue';
+import {
+  localEnvironment,
+  localRepository,
+} from '../adapters/local-repository';
+import { useAccount } from '../account';
 import { recordView } from './view-state';
 const route = useRoute(),
   router = useRouter();
@@ -53,7 +59,11 @@ const {
 } = useWorkspace();
 const { selectedDate, filter, scale, anchor, limit } = toRefs(recordView);
 const timeline = ref<InstanceType<typeof TimelineView> | null>(null);
-const editor = ref<{ entry: EntryDto | null; key: string } | null>(null),
+const editor = ref<{
+    entry: EntryDto | null;
+    key: string;
+    draft?: EntryDraft;
+  } | null>(null),
   confirm = ref<
     | { kind: 'delete' | 'purge'; entry: EntryDto }
     | { kind: 'clear'; dataVersion: string }
@@ -144,9 +154,46 @@ async function closeEditor() {
   await nextTick();
   window.scrollTo(0, recordView.scrollTop);
 }
-function syncEditor() {
+async function syncEditor() {
   if (!snapshot.value || view.value !== 'editor') return;
   const id = route.params.id;
+  let draftId = route.query.draftId;
+  const user = useAccount().current.value?.id;
+  if (typeof draftId === 'string' && user && mode.value === 'account') {
+    try {
+      draftId =
+        sessionStorage.getItem(
+          `dayline:${localEnvironment}:${user}:resume:${draftId}`,
+        ) ?? draftId;
+    } catch {
+      /* original durable draft remains accessible */
+    }
+  }
+
+  if (!draftId && user && mode.value === 'account') {
+    try {
+      draftId =
+        sessionStorage.getItem(
+          `dayline:${localEnvironment}:${user}:editor:${typeof id === 'string' ? id : 'new'}`,
+        ) ?? undefined;
+    } catch {
+      /* draft list remains available */
+    }
+  }
+  if (typeof draftId === 'string' && user && mode.value === 'account') {
+    const generation = useWorkspace().generation();
+    try {
+      const draft = await localRepository.draft(user, draftId);
+      if (generation !== useWorkspace().generation()) return;
+      if (draft) {
+        editor.value = { entry: draft.baseEntry, key: draft.draftId, draft };
+        return;
+      }
+    } catch {
+      error.value = '无法读取原草稿，已保留原始内容。';
+      return;
+    }
+  }
   if (route.path === '/entries/new')
     editor.value = { entry: null, key: crypto.randomUUID() };
   else {
@@ -154,7 +201,10 @@ function syncEditor() {
     editor.value = found ? { entry: { ...found }, key: found.id } : null;
   }
 }
-watch(() => route.path, syncEditor);
+watch(
+  () => route.path,
+  () => void syncEditor(),
+);
 onBeforeUnmount(() => {
   recordView.scrollTop = window.scrollY;
 });
@@ -202,9 +252,9 @@ async function save(
   creating: boolean,
 ) {
   if (creating && 'id' in input)
-    await mutate({ kind: 'create', input }, () => records.create(input));
+    return await mutate({ kind: 'create', input }, () => records.create(input));
   else if ('expectedVersion' in input)
-    await mutate({ kind: 'update', id, input }, () =>
+    return await mutate({ kind: 'update', id, input }, () =>
       records.update(id, input),
     );
 }
@@ -323,7 +373,7 @@ onMounted(async () => {
         {{
           mode === 'guest'
             ? '游客 · 仅保存在此设备，登录后可同步。'
-            : '在线保存 · 当前编辑只在内存中，请手动提交。'
+            : '输入自动尝试暂存本机草稿；点击保存才提交云端。'
         }}
         北京时间 {{ today }}
       </p>
@@ -539,6 +589,7 @@ onMounted(async () => {
           v-if="editor && !readonly"
           :key="editor.key"
           :entry="editor.entry"
+          :draft="editor.draft"
           :categories="snapshot.categories"
           :today="today"
           :local="mode === 'guest'"

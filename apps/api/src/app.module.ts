@@ -10,6 +10,7 @@ import { HealthController } from './health/health.controller.js';
 import type { WechatAdapter } from './wechat/wechat-adapter.js';
 import { WechatModule } from './wechat/wechat.module.js';
 import { RecordsModule } from './records/records.module.js';
+import { ImportsModule } from './imports/imports.module.js';
 import { UsersModule } from './users/users.module.js';
 
 @Module({})
@@ -26,6 +27,7 @@ export class AppModule {
         IdentityModule,
         UsersModule,
         RecordsModule,
+        ImportsModule,
         WechatModule.register(testWechatAdapter),
       ],
       controllers: [HealthController],

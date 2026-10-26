@@ -1,6 +1,8 @@
 import {
   MAX_FOCUS_REMOVAL_ACKNOWLEDGEMENTS,
   MAX_TRASH_PURGE_ENTRIES,
+  MAX_IMPORT_ENTRIES,
+  MAX_IMPORT_FOCUS,
 } from '@dayline/contracts';
 import { json } from 'express';
 import type { RequestHandler } from 'express';
@@ -14,6 +16,76 @@ export const businessConfirmationBodyParser: RequestHandler = (
   response,
   next,
 ) => {
+  if (
+    request.method === 'POST' &&
+    /^\/api\/v1\/guest-admissions\/prepare\/?$/.test(request.path)
+  ) {
+    json({ limit: 10 * 1024 * 1024, strict: true })(
+      request,
+      response,
+      (error?: unknown) => {
+        if (error) {
+          next(error);
+          return;
+        }
+        const body: unknown = request.body;
+        const source: unknown =
+          typeof body === 'object' && body !== null
+            ? Reflect.get(body, 'package')
+            : undefined;
+        if (typeof source === 'object' && source !== null) {
+          const entries: unknown = Reflect.get(source, 'entries'),
+            focus: unknown = Reflect.get(source, 'focusDays');
+          if (
+            (Array.isArray(entries) && entries.length > MAX_IMPORT_ENTRIES) ||
+            (Array.isArray(focus) && focus.length > MAX_IMPORT_FOCUS)
+          ) {
+            next(
+              new AppError(
+                422,
+                'IMPORT_INVALID',
+                '接入包超过事项或重点数量限制。',
+              ),
+            );
+            return;
+          }
+        }
+        next();
+      },
+    );
+    return;
+  }
+  if (
+    request.method === 'POST' &&
+    /^\/api\/v1\/imports\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/review\/?$/i.test(
+      request.path,
+    )
+  ) {
+    json({ limit: 2 * 1024 * 1024, strict: true })(
+      request,
+      response,
+      (error?: unknown) => {
+        if (error) {
+          next(error);
+          return;
+        }
+        const body: unknown = request.body;
+        if (typeof body === 'object' && body !== null) {
+          const rows: unknown = Reflect.get(body, 'rows'),
+            categories: unknown = Reflect.get(body, 'categories');
+          if (
+            (Array.isArray(rows) && rows.length > MAX_IMPORT_ENTRIES) ||
+            (Array.isArray(categories) && categories.length > 20)
+          ) {
+            next(new AppError(422, 'IMPORT_INVALID', '预览选择超过条数限制。'));
+            return;
+          }
+        }
+        next();
+      },
+    );
+    return;
+  }
   const focusRoute =
     request.method === 'PATCH' &&
     /^\/api\/v1\/entries\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/i.test(

@@ -23,6 +23,7 @@ model User {
   deletionDueAt    DateTime?        @map("deletion_due_at") @db.Timestamptz(3)
   dataVersion      BigInt           @default(1) @map("data_version")
   initializedAt    DateTime?        @map("initialized_at") @db.Timestamptz(3)
+  importJobs       ImportJob[]
   categories       Category[]
   entries          Entry[]
   sessions         Session[]
@@ -169,4 +170,26 @@ model EntryFocusDay {
 
   @@id([entryId, date])
   @@map("entry_focus_days")
+}
+
+model ImportJob {
+  id                String    @id @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind              String
+  clientOperationId String    @map("client_operation_id") @db.Uuid
+  inputDigest       String    @map("input_digest")
+  authEpoch         Int       @map("auth_epoch")
+  status            String    @default("preview")
+  input             Json?
+  plan              Json
+  receipt           Json?
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt       DateTime? @map("completed_at") @db.Timestamptz(3)
+
+  @@unique([userId, clientOperationId])
+  @@index([userId, inputDigest])
+  @@index([status, expiresAt])
+  @@map("import_jobs")
 }

@@ -1,5 +1,7 @@
+import { ref } from 'vue';
 import { ApiClient, ClientError } from '@dayline/api-client';
 import type { Transport } from '@dayline/api-client';
+export const credentialWarning = ref('');
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
 const tokenKey = `dayline:${import.meta.env.MODE}:${encodeURIComponent(baseUrl)}:auth:signed-token:v1`;
 let token: string | null = null;
@@ -19,10 +21,20 @@ function loadToken() {
   }
   return token;
 }
+export function hasCredential() {
+  return loadToken() !== null;
+}
 export function clearCredential() {
-  uni.removeStorageSync(tokenKey);
   token = null;
   tokenLoaded = true;
+  try {
+    uni.removeStorageSync(tokenKey);
+  } catch {
+    throw new ClientError(
+      'STORAGE_ERROR',
+      '登录凭据清理失败，请检查本机存储。',
+    );
+  }
 }
 export const bearerTransport: Transport = (request) =>
   new Promise((resolve, reject) => {
@@ -75,15 +87,23 @@ export const bearerTransport: Transport = (request) =>
 export const api = new ApiClient(bearerTransport, (headers) => {
   const signed = headers['set-auth-token'];
   if (!signed) return;
+  token = signed;
+  tokenLoaded = true;
   try {
     uni.setStorageSync(tokenKey, signed);
-    token = signed;
-    tokenLoaded = true;
+    credentialWarning.value = '';
   } catch {
-    throw new ClientError(
-      'STORAGE_ERROR',
-      '登录凭据保存失败，请释放存储空间后重新登录。',
-    );
+    credentialWarning.value =
+      '云端请求已确认，但登录凭据未能持久保存；当前会话仅在内存，请检查空间后重新登录。';
+  }
+});
+api.onIdentityChange(() => {
+  if (!api.getAccount()) {
+    try {
+      clearCredential();
+    } catch {
+      /* in-memory credential is cleared first */
+    }
   }
 });
 export function wechatCode(): Promise<string> {

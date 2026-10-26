@@ -3,36 +3,83 @@ import { readonly, ref } from 'vue';
 import type { UserDto } from '@dayline/contracts';
 import { ClientError } from '@dayline/api-client';
 import { api } from './api';
-const current = ref<UserDto | null>(null);
-const loading = ref(false);
+const current = ref<UserDto | null>(null),
+  loading = ref(false),
+  serverTime = ref('');
+let probe: Promise<void> | null = null;
+let probeSequence = 0;
+api.onIdentityChange(() => {
+  probe = null;
+  probeSequence++;
+  loading.value = false;
+  if (current.value?.id !== api.getAccount()) {
+    current.value = null;
+    serverTime.value = '';
+  }
+});
+let channel: BroadcastChannel | undefined;
+if (typeof BroadcastChannel !== 'undefined') {
+  channel = new BroadcastChannel('dayline:identity');
+  channel.onmessage = () => {
+    api.invalidate();
+    void useAccount()
+      .refresh()
+      .catch(() => {});
+  };
+}
 export function useAccount() {
-  async function refresh() {
+  async function refresh(relogin = false) {
+    if (probe && !relogin) return probe;
+    if (relogin) api.setAccount(api.getAccount());
+    const generation = api.getGeneration(),
+      sequence = ++probeSequence;
     loading.value = true;
-    try {
-      const { data } = await api.request('/api/v1/me', {
-        decode: userDtoSchema.parse,
-      });
-      if (!data) throw new ClientError('EMPTY_RESPONSE', '无法读取账号。');
-      current.value = data;
-      api.setAccount(data.id);
-    } catch (error) {
-      if (error instanceof ClientError && error.status === 401) {
-        current.value = null;
-        api.invalidate();
+    const work = (async () => {
+      try {
+        const response = await api.request('/api/v1/me', {
+          decode: userDtoSchema.parse,
+        });
+        const data = response.data;
+        if (generation !== api.getGeneration()) return;
+        if (!data) throw new ClientError('EMPTY_RESPONSE', '无法读取账号。');
+        current.value = data;
+        serverTime.value = response.serverTime ?? '';
+        api.confirmAccount(data.id);
+      } catch (error) {
+        if (
+          generation === api.getGeneration() &&
+          error instanceof ClientError &&
+          error.status === 401
+        ) {
+          current.value = null;
+          api.invalidate();
+        }
+        throw error;
+      } finally {
+        if (sequence === probeSequence) loading.value = false;
       }
-      throw error;
+    })();
+    probe = work;
+    try {
+      await work;
     } finally {
-      loading.value = false;
+      if (probe === work) probe = null;
     }
   }
   function clear() {
     current.value = null;
     api.invalidate();
+    channel?.postMessage({ type: 'identity-may-have-changed' });
+  }
+  function announce() {
+    channel?.postMessage({ type: 'identity-may-have-changed' });
   }
   return {
+    serverTime: readonly(serverTime),
     current: readonly(current),
     loading: readonly(loading),
     refresh,
     clear,
+    announce,
   };
 }

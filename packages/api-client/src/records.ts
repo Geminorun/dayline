@@ -31,6 +31,19 @@ export function createRecordsClient(api: ApiClient) {
         );
       return { snapshot: response.data, serverTime: response.serverTime };
     },
+    conditionalSnapshot(etag?: string) {
+      return api.request('/api/v1/snapshot', {
+        account: true,
+        decode: snapshotDtoSchema.parse,
+        ...(etag ? { headers: { 'If-None-Match': etag } } : {}),
+      });
+    },
+    detail(id: string) {
+      return api.request(`/api/v1/entries/${id}`, {
+        account: true,
+        decode: entryResultSchema.parse,
+      });
+    },
     create(input: CreateEntryInput) {
       return api.request('/api/v1/entries', {
         requireDataVersion: true,

@@ -5,14 +5,17 @@ import {
   createEntrySchema,
   focusRemovalDetailsSchema,
   GuestError,
+  entryResultSchema,
 } from '@dayline/contracts';
 import type { EntryDto } from '@dayline/contracts';
 import { ClientError } from '@dayline/api-client';
 import { spanLabel } from '@dayline/core';
 import { useWorkspace, records, message } from '../../workspace';
+import { api } from '../../api';
 import { newId } from '../../adapters/uuid';
 const {
   mode,
+  spaceRevision,
   snapshot,
   busy,
   error: workspaceError,
@@ -20,6 +23,8 @@ const {
   ensure,
   mutate,
 } = useWorkspace();
+let editorSpace = -1,
+  editorActor = -1;
 const id = ref(''),
   entry = ref<EntryDto | null>(null),
   title = ref(''),
@@ -66,13 +71,40 @@ onLoad(async (query) => {
     categoryId.value =
       found?.categoryId ?? snapshot.value.categories[0]?.id ?? '';
     focusDate.value = today.value;
+    editorSpace = spaceRevision.value;
+    editorActor = api.getGeneration();
     ready.value = true;
   } catch (cause) {
     error.value = message(cause);
   }
 });
+watch(spaceRevision, () => {
+  if (editorSpace >= 0 && editorSpace !== spaceRevision.value) {
+    ready.value = false;
+    error.value = '数据空间已变化，请重新进入事项。原输入不会提交到其他账号。';
+  }
+});
+function matches(
+  value: EntryDto,
+  input: ReturnType<typeof createEntrySchema.parse>,
+) {
+  return (
+    !value.deletedAt &&
+    value.title === input.title &&
+    value.startDate === input.startDate &&
+    value.endDate === input.endDate &&
+    value.categoryId === input.categoryId
+  );
+}
 async function save(confirm = false) {
   if (saving.value || busy.value || readonly.value) return;
+  if (
+    editorSpace !== spaceRevision.value ||
+    editorActor !== api.getGeneration()
+  ) {
+    error.value = '数据空间已变化，请重新验证原账号。';
+    return;
+  }
   error.value = '';
   const parsed = createEntrySchema.safeParse({
     id: id.value,
@@ -89,26 +121,47 @@ async function save(confirm = false) {
     error.value = '结束日期不能早于开始日期。';
     return;
   }
+  const requestEntry = entry.value ? { ...entry.value } : null,
+    requestId = id.value,
+    requestAck =
+      confirm && ack.value ? ack.value.map((day) => ({ ...day })) : null;
   saving.value = true;
   try {
-    if (entry.value) {
+    let response: unknown;
+    if (requestEntry) {
       const input = {
-        expectedVersion: entry.value.version,
+        expectedVersion: requestEntry.version,
         title: parsed.data.title,
         startDate: parsed.data.startDate,
         endDate: parsed.data.endDate,
         categoryId: parsed.data.categoryId,
-        ...(confirm && ack.value
-          ? { focusRemovalAcknowledgement: ack.value }
-          : {}),
+        ...(requestAck ? { focusRemovalAcknowledgement: requestAck } : {}),
       };
-      await mutate({ kind: 'update', id: id.value, input }, () =>
-        records.update(id.value, input),
+      response = await mutate({ kind: 'update', id: requestId, input }, () =>
+        records.update(requestId, input),
       );
     } else
-      await mutate({ kind: 'create', input: parsed.data }, () =>
+      response = await mutate({ kind: 'create', input: parsed.data }, () =>
         records.create(parsed.data),
       );
+    if (
+      editorSpace !== spaceRevision.value ||
+      editorActor !== api.getGeneration()
+    )
+      return;
+    const result = entryResultSchema.safeParse(
+      typeof response === 'object' && response !== null && 'data' in response
+        ? response.data
+        : undefined,
+    );
+    if (
+      result.success &&
+      result.data.alreadyExists &&
+      !matches(result.data.entry, parsed.data)
+    ) {
+      error.value = '同一稳定标识已有不同云端内容，请核对后再保存。';
+      return;
+    }
     uni.navigateBack({
       fail: () => uni.switchTab({ url: '/pages/entries/index' }),
     });
@@ -120,7 +173,34 @@ async function save(confirm = false) {
       const details = focusRemovalDetailsSchema.safeParse(cause.details);
       ack.value = details.success ? details.data.affectedFocusDays : null;
     }
-    error.value = message(cause);
+    if (
+      cause instanceof ClientError &&
+      ['NETWORK_ERROR', 'INVALID_RESPONSE'].includes(cause.code) &&
+      mode.value === 'account'
+    ) {
+      error.value = '保存结果待确认，正在读取云端核对。';
+      try {
+        const latest = await records.detail(requestId);
+        if (
+          editorSpace !== spaceRevision.value ||
+          editorActor !== api.getGeneration()
+        )
+          return;
+        if (
+          latest.data &&
+          matches(latest.data.entry, parsed.data) &&
+          (!requestEntry || latest.data.entry.version > requestEntry.version)
+        ) {
+          error.value = '已核对云端保存成功。';
+          entry.value = latest.data.entry;
+          await useWorkspace().load();
+          return;
+        }
+        error.value = '已核对当前云端，输入仍保留，请手动核对后重试。';
+      } catch {
+        error.value = '保存结果仍待确认，当前输入保留；联网后请先重新读取。';
+      }
+    } else error.value = message(cause);
   } finally {
     saving.value = false;
   }
@@ -169,6 +249,7 @@ function back() {
         placeholder="一段值得记录的经历"
       /><text class="text">开始日期</text
       ><picker
+        :disabled="saving || readonly"
         mode="date"
         :value="start"
         start="0001-01-01"
@@ -177,10 +258,12 @@ function back() {
         ><view class="picker">{{ start }} ▾</view></picker
       ><input
         v-model="start"
+        :disabled="saving || readonly"
         aria-label="开始日期 YYYY-MM-DD"
         placeholder="YYYY-MM-DD"
       /><text class="text">结束日期（留空表示未结束）</text
       ><picker
+        :disabled="saving || readonly"
         mode="date"
         :value="end || today"
         start="0001-01-01"
@@ -189,12 +272,14 @@ function back() {
         ><view class="picker">{{ end || '未结束' }} ▾</view></picker
       ><input
         v-model="end"
+        :disabled="saving || readonly"
         aria-label="结束日期 YYYY-MM-DD"
         placeholder="留空表示未结束"
       /><button class="secondary" :disabled="saving" @click="end = ''">
         清空结束日期</button
       ><text class="text">分类</text
       ><picker
+        :disabled="saving || readonly"
         :value="categoryIndex"
         :range="snapshot.categories.map((c) => c.name)"
         @change="

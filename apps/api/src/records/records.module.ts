@@ -5,5 +5,6 @@ import { Clock } from './clock.js';
 @Module({
   controllers: [RecordsController],
   providers: [RecordsService, Clock],
+  exports: [Clock],
 })
 export class RecordsModule {}
