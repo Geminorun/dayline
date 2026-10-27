@@ -16,9 +16,10 @@ on:
       - '*.mjs'
       - '.prettierignore'
       - '.node-version'
-      - '.github/workflows/backend.yml'
+      - '.github/workflows/**'
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -26,9 +27,12 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        postgres: ['17', '18']
     services:
       postgres:
-        image: postgres:18-alpine
+        image: postgres:${{ matrix.postgres }}-alpine
         env:
           POSTGRES_USER: dayline
           POSTGRES_PASSWORD: dayline_ci_only
@@ -56,4 +60,5 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm test:deployment
       - run: pnpm test:integration

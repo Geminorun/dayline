@@ -26,5 +26,8 @@
   },
   "devDependencies": {
     "@types/papaparse": "5.3.16"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }

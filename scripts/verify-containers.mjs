@@ -1,231 +1,370 @@
 import assert from 'node:assert/strict';
 import process from 'node:process';
 import console from 'node:console';
-import { randomUUID, randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID, createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { mkdir, writeFile, chmod, open } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import {
+  mkdir,
+  writeFile,
+  readFile,
+  open,
+  cp,
+  readlink,
+  stat,
+  readdir,
+} from 'node:fs/promises';
+import { resolve, join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
-const suffix = randomUUID().slice(0, 8),
-  project = 'dayline-stage7-' + suffix,
-  directory = resolve('.local/stage7/containers-' + suffix),
-  password = randomBytes(24).toString('hex');
-await mkdir(directory, { recursive: true, mode: 0o700 });
-const environmentPath = directory + '/test.env',
-  overridePath = directory + '/override.yaml',
-  log = await open(directory + '/commands.log', 'w', 0o600);
-const environment = {
-  NODE_ENV: 'test',
-  HOST: '0.0.0.0',
-  PORT: '3000',
-  POSTGRES_USER: 'dayline',
-  POSTGRES_PASSWORD: password,
-  POSTGRES_DB: 'dayline_container_test',
-  POSTGRES_PORT: '15437',
-  DATABASE_URL: `postgresql://dayline:${password}@db:5432/dayline_container_test`,
-  API_DATABASE_URL: `postgresql://dayline:${password}@db:5432/dayline_container_test`,
-  AUTH_BASE_URL: 'http://localhost:18080',
-  WEB_BASE_URL: 'http://localhost:18080',
-  AUTH_TRUSTED_ORIGINS: 'http://localhost:18080',
-  BETTER_AUTH_SECRET: randomBytes(32).toString('hex'),
-  ACTION_PROOF_SECRET: randomBytes(32).toString('hex'),
-  MAIL_TRANSPORT: 'file',
-  MAIL_PREVIEW_DIR: '/tmp/dayline-mail',
-  MAIL_FROM: 'Dayline <noreply@example.com>',
-  MAINTENANCE_ENABLED: 'true',
-  RATE_LIMIT_ENABLED: 'true',
-  DAYLINE_HOST: 'http://localhost',
-  HTTP_PORT: '127.0.0.1:18080',
-  HTTPS_PORT: '127.0.0.1:18443',
-  DAYLINE_API_IMAGE: 'dayline-api:stage7-' + suffix,
-  DAYLINE_BUILD_CA_FILE:
-    process.env.CODEX_PROXY_CERT || '/etc/ssl/certs/ca-certificates.crt',
-};
-await writeFile(
-  environmentPath,
-  Object.entries(environment)
-    .map(([k, v]) => `${k}=${v}`)
-    .join('\n') + '\n',
-  { mode: 0o600 },
-);
-await writeFile(
-  overridePath,
-  `services:\n  api:\n    environment:\n      NODE_ENV: test\n    env_file: !override\n      - ${environmentPath}\n`,
-  { mode: 0o600 },
-);
-const dockerEnvironment = { ...process.env };
+import { createServer as createTlsServer } from 'node:https';
+import { request as httpRequest } from 'node:http';
+import { createServer as createTcpServer } from 'node:net';
+
+const suffix = randomUUID().slice(0, 8);
+const project = `dayline-deploy-${suffix}`;
+const container = `${project}-postgres`;
+const volume = `${project}-postgres-data`;
+const image = process.env.DAYLINE_TEST_IMAGE || `dayline:deploy-${suffix}`;
+const directory = resolve('.local/deployment', suffix);
+const bundle = join(directory, 'bundle');
+const serverDirectory = join(directory, 'server');
+await mkdir(bundle, { recursive: true, mode: 0o700 });
+const log = await open(join(directory, 'commands.log'), 'w', 0o600);
+const environment = { ...process.env };
 for (const key of [
-  'DOCKER_HOST',
   'DOCKER_CONTEXT',
   'DOCKER_TLS',
   'DOCKER_TLS_VERIFY',
   'DOCKER_CERT_PATH',
 ])
-  delete dockerEnvironment[key];
-function docker(args, capture = false) {
-  return new Promise((resolveResult, reject) => {
-    const child = spawn(
-      'docker',
-      ['--host=unix:///var/run/docker.sock', ...args],
-      {
-        env: dockerEnvironment,
-        stdio: ['ignore', capture ? 'pipe' : log.fd, log.fd],
-      },
-    );
+  delete environment[key];
+environment.DOCKER_HOST = 'unix:///var/run/docker.sock';
+function command(binary, args, options = {}) {
+  return new Promise((resolveCommand, reject) => {
+    const child = spawn(binary, args, {
+      env: { ...environment, ...options.env },
+      stdio: ['ignore', options.capture ? 'pipe' : log.fd, log.fd],
+    });
     let output = '';
-    if (capture)
+    if (options.capture)
       child.stdout.on('data', (chunk) => {
         output += chunk;
       });
     child.on('error', reject);
-    child.on('close', (code) =>
-      code === 0
-        ? resolveResult(output)
-        : reject(
-            new Error(
-              'Container verification command failed; inspect private commands.log',
-            ),
+    child.on('close', (code) => {
+      if (options.allowFailure) resolveCommand({ code, output });
+      else if (code === 0) resolveCommand(output.trim());
+      else
+        reject(
+          new Error(
+            `Deployment verification failed (${binary}); inspect private ${directory}/commands.log`,
           ),
-    );
+        );
+    });
   });
 }
-const compose = (args, capture = false) =>
+const docker = (args, options) =>
+  command('docker', ['--host=unix:///var/run/docker.sock', ...args], options);
+const sql = (text, database = 'postgres') =>
   docker(
     [
-      'compose',
-      '--env-file',
-      environmentPath,
-      '-p',
-      project,
-      '-f',
-      'compose.yaml',
-      '-f',
-      'compose.production.yaml',
-      '-f',
-      overridePath,
-      ...args,
+      'exec',
+      container,
+      'psql',
+      '-XAt',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-U',
+      'postgres',
+      '-d',
+      database,
+      '-c',
+      text,
     ],
-    capture,
+    { capture: true },
   );
-try {
-  await compose(['build', 'api']);
-  await compose(['up', '-d', '--wait', 'db']);
-  await compose(['run', '--rm', 'api', 'pnpm', 'db:deploy']);
-  await compose(['up', '-d', '--wait', 'api', 'web']);
-  const origin = 'http://localhost:18080';
-  const ready = await fetch(origin + '/health/ready');
-  assert.equal(ready.status, 200);
-  assert.match(ready.headers.get('cache-control') ?? '', /no-store/);
+async function availablePort() {
+  const server = createTcpServer();
+  await new Promise((resolveListen, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolveListen);
+  });
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  const port = address.port;
+  await new Promise((resolveClose) => server.close(resolveClose));
+  return port;
+}
+const appPort = await availablePort();
+let stripRevision = false;
+let tlsServer;
+const password = randomBytes(24).toString('hex') + '$#@:/ \'double"value';
+const database = `dayline_deploy_${suffix}_test`;
+const role = `dayline_${suffix}`;
+const fields = {
+  POSTGRES_CONTAINER: container,
+  POSTGRES_PASSWORD: password,
+  POSTGRES_DB: database,
+  POSTGRES_USER: role,
+  BETTER_AUTH_SECRET: randomBytes(32).toString('hex'),
+  ACTION_PROOF_SECRET: randomBytes(32).toString('hex'),
+  RESEND_API_KEY: 'deployment-verification-no-mail',
+  MAIL_FROM: 'Dayline <noreply@example.com>',
+  APP_PORT: String(appPort),
+  DEPLOY_PROJECT: project,
+};
+async function writeEnvironment(overrides = {}) {
+  await writeFile(
+    join(bundle, 'app.env'),
+    Object.entries({ ...fields, ...overrides })
+      .map(([key, value]) => `${key}=\`${value}\``)
+      .join('\n') + '\n',
+    { mode: 0o600 },
+  );
+}
+const revision = (label) =>
+  createHash('sha1').update(`${suffix}:${label}`).digest('hex');
+async function deploy(label, allowFailure = false) {
+  await writeFile(join(bundle, 'revision'), revision(label), { mode: 0o600 });
+  return command('bash', [join(bundle, 'scripts/deploy/apply.sh'), bundle], {
+    allowFailure,
+    env: {
+      DAYLINE_DEPLOY_ROOT: serverDirectory,
+      CURL_CA_BUNDLE: join(directory, 'tls.crt'),
+    },
+  });
+}
+async function publicCheck(expectedRevision) {
+  const origin = `http://127.0.0.1:${appPort}`;
   for (const path of [
     '/day',
+    '/entries/example',
     '/account-deletion',
-    '/entries/deep-link-fixture',
-    '/auth/email-binding?token=sensitive-query-probe',
+    '/auth/email-binding?token=private-query',
   ]) {
     const response = await fetch(origin + path);
     assert.equal(response.status, 200);
+    assert.equal(response.headers.get('x-dayline-revision'), expectedRevision);
     assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
+    assert.match(response.headers.get('cache-control') || '', /no-store/);
     assert.match(await response.text(), /id="app"/);
   }
-  const assetIndex = await (await fetch(origin + '/day')).text(),
-    asset = assetIndex.match(/src="([^"]+\.js)"/)?.[1];
+  const html = await (await fetch(origin + '/day')).text();
+  const asset = html.match(/src="([^"]+\.js)"/)?.[1];
   assert.ok(asset);
-  assert.equal((await fetch(origin + asset)).status, 200);
-  const marker = randomUUID();
-  await compose([
-    'exec',
-    '-T',
-    'db',
-    'psql',
-    '-U',
-    'dayline',
-    '-d',
-    'dayline_container_test',
-    '-v',
-    'ON_ERROR_STOP=1',
-    '-c',
-    `CREATE TABLE stage7_persistence_marker(id uuid PRIMARY KEY); INSERT INTO stage7_persistence_marker VALUES ('${marker}');`,
-  ]);
-  await compose(['up', '-d', '--force-recreate', '--no-deps', '--wait', 'db']);
-  assert.equal(
-    (
-      await compose(
-        [
-          'exec',
-          '-T',
-          'db',
-          'psql',
-          '-U',
-          'dayline',
-          '-d',
-          'dayline_container_test',
-          '-tA',
-          '-c',
-          `SELECT count(*) FROM stage7_persistence_marker WHERE id='${marker}'`,
-        ],
-        true,
-      )
-    ).trim(),
-    '1',
-  );
-  let recovered = false;
-  for (let i = 0; i < 40; i++) {
-    try {
-      if ((await fetch(origin + '/health/ready')).ok) {
-        recovered = true;
-        break;
-      }
-    } catch {
-      /* API reconnects while this fixture database restarts. */
-    }
-    await setTimeout(250);
+  const response = await fetch(origin + asset);
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('cache-control') || '', /immutable/);
+  assert.equal((await fetch(origin + '/api/v1/snapshot')).status, 401);
+  for (const path of [
+    '/assets/missing.js',
+    '/.env',
+    '/api/v1/missing',
+    '/health/missing',
+  ])
+    assert.equal((await fetch(origin + path)).status, 404);
+}
+let postgresStarted = false;
+try {
+  await docker(['info', '--format', '{{.ServerVersion}}']);
+  if (!process.env.DAYLINE_TEST_IMAGE) {
+    const args = ['build'];
+    if (process.env.CODEX_PROXY_CERT)
+      args.push('--secret', `id=proxy_ca,src=${process.env.CODEX_PROXY_CERT}`);
+    args.push('-t', image, '.');
+    await docker(args);
   }
-  assert.ok(recovered);
-  const logs = await compose(['logs', '--no-color', 'web'], true);
-  assert.ok(!logs.includes('sensitive-query-probe'));
-  const volumes = (
-    await docker(
-      [
-        'volume',
-        'ls',
-        '--filter',
-        `label=com.docker.compose.project=${project}`,
-        '--format',
-        '{{.Name}}',
-      ],
-      true,
-    )
-  )
-    .trim()
-    .split('\n');
-  const report = {
-    measuredAt: new Date().toISOString(),
-    project,
-    image: environment.DAYLINE_API_IMAGE,
-    origin,
-    retainedVolumes: volumes,
-    checks: {
-      imageFreshInstallAndBuild: true,
-      eightMigrations: true,
-      apiReadiness: true,
-      spaDeepLinks: true,
-      staticAsset: true,
-      apiProxy: true,
-      referrerPolicy: true,
-      queryAbsentFromAccessLogs: true,
-      recreatedPostgresContainerRetainedData: true,
+  await docker(['volume', 'create', volume]);
+  await docker([
+    'run',
+    '-d',
+    '--name',
+    container,
+    '--mount',
+    `type=volume,src=${volume},dst=/var/lib/postgresql/data`,
+    '-e',
+    `POSTGRES_PASSWORD=${randomBytes(24).toString('hex')}`,
+    'postgres:17-alpine',
+  ]);
+  postgresStarted = true;
+  let ready = false;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const result = await docker(
+      ['exec', container, 'pg_isready', '-U', 'postgres'],
+      { allowFailure: true },
+    );
+    if (result.code === 0) {
+      ready = true;
+      break;
+    }
+    await setTimeout(500);
+  }
+  assert.ok(ready);
+  await sql(
+    'CREATE TABLE public.unrelated_marker(value integer); INSERT INTO public.unrelated_marker VALUES (17)',
+  );
+  await cp('compose.production.yaml', join(bundle, 'compose.production.yaml'));
+  await cp('scripts/deploy', join(bundle, 'scripts/deploy'), {
+    recursive: true,
+  });
+  await writeFile(join(bundle, 'image.ref'), image, { mode: 0o600 });
+  await writeEnvironment();
+  await command('openssl', [
+    'req',
+    '-x509',
+    '-newkey',
+    'rsa:2048',
+    '-nodes',
+    '-days',
+    '1',
+    '-subj',
+    '/CN=localhost',
+    '-addext',
+    'subjectAltName=DNS:localhost',
+    '-keyout',
+    join(directory, 'tls.key'),
+    '-out',
+    join(directory, 'tls.crt'),
+  ]);
+  tlsServer = createTlsServer(
+    {
+      key: await readFile(join(directory, 'tls.key')),
+      cert: await readFile(join(directory, 'tls.crt')),
     },
-    runtime:
-      'local test configuration with file mail; no external delivery or deployment',
+    (request, response) => {
+      const upstream = httpRequest(
+        {
+          hostname: '127.0.0.1',
+          port: appPort,
+          path: request.url,
+          method: request.method,
+          headers: request.headers,
+        },
+        (result) => {
+          const headers = { ...result.headers };
+          if (stripRevision) delete headers['x-dayline-revision'];
+          response.writeHead(result.statusCode || 502, headers);
+          result.pipe(response);
+        },
+      );
+      upstream.on('error', () => {
+        response.writeHead(502);
+        response.end();
+      });
+      request.pipe(upstream);
+    },
+  );
+  await new Promise((resolveListen) =>
+    tlsServer.listen(0, '127.0.0.1', resolveListen),
+  );
+  const address = tlsServer.address();
+  assert.ok(address && typeof address === 'object');
+  await writeFile(
+    join(bundle, 'site.url'),
+    `https://localhost:${address.port}`,
+    { mode: 0o600 },
+  );
+  await deploy('first');
+  await publicCheck(revision('first'));
+  assert.equal(
+    await sql(
+      'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL',
+      database,
+    ),
+    '8',
+  );
+  assert.equal(
+    await sql(
+      `SELECT rolcanlogin AND NOT (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls) FROM pg_roles WHERE rolname='${role}'`,
+    ),
+    't',
+  );
+  await sql(
+    'CREATE TABLE public.deployment_marker(value integer); INSERT INTO public.deployment_marker VALUES (42)',
+    database,
+  );
+  await deploy('second');
+  await publicCheck(revision('second'));
+  assert.equal(
+    await sql('SELECT value FROM public.deployment_marker', database),
+    '42',
+  );
+  assert.equal(await sql('SELECT value FROM public.unrelated_marker'), '17');
+  await writeEnvironment({ POSTGRES_PASSWORD: 'incorrect-password' });
+  const wrongPassword = await deploy('wrong-password', true);
+  assert.notEqual(wrongPassword.code, 0);
+  await publicCheck(revision('second'));
+  assert.equal(
+    await readFile(join(serverDirectory, 'deployed-revision'), 'utf8'),
+    revision('second') + '\n',
+  );
+  await writeEnvironment();
+  stripRevision = true;
+  const wrongPublicEndpoint = await deploy('wrong-public-endpoint', true);
+  assert.notEqual(wrongPublicEndpoint.code, 0);
+  assert.equal(
+    await readFile(join(serverDirectory, 'deployed-revision'), 'utf8'),
+    revision('second') + '\n',
+  );
+  assert.equal(
+    await sql('SELECT value FROM public.deployment_marker', database),
+    '42',
+  );
+  stripRevision = false;
+  await deploy('recovered');
+  await publicCheck(revision('recovered'));
+  assert.equal(
+    await sql('SELECT value FROM public.deployment_marker', database),
+    '42',
+  );
+  const current = await readlink(join(serverDirectory, 'current'));
+  assert.equal((await stat(join(current, '.runtime.env'))).mode & 0o777, 0o600);
+  const backups = await readdir(join(serverDirectory, 'backups'));
+  assert.equal(backups.length, 4);
+  for (const backup of backups) {
+    const info = await stat(join(serverDirectory, 'backups', backup));
+    assert.equal(info.mode & 0o777, 0o600);
+    assert.ok(info.size > 0);
+  }
+  const report = {
+    passed: true,
+    postgres: 17,
+    migrations: 8,
+    singleContainerWebAndApi: true,
+    repeatedDeploymentPreservesData: true,
+    wrongPasswordPreservesRunningRelease: true,
+    stalePublicEndpointRejected: true,
+    explicitRecoveryPreservesData: true,
+    unrelatedDatabasePreserved: true,
+    backups: backups.length,
+    retainedVolume: volume,
   };
   await writeFile(
-    '.local/stage7/container-check.json',
+    join(directory, 'report.json'),
     JSON.stringify(report, null, 2),
     { mode: 0o600 },
   );
   console.log(JSON.stringify(report));
 } finally {
-  await compose(['down', '--remove-orphans']).catch(() => {});
+  if (tlsServer)
+    await new Promise((resolveClose) => tlsServer.close(resolveClose));
+  try {
+    const current = await readlink(join(serverDirectory, 'current'));
+    await docker([
+      'compose',
+      '--project-name',
+      project,
+      '--env-file',
+      join(current, '.deploy.env'),
+      '-f',
+      join(current, 'compose.production.yaml'),
+      'down',
+    ]);
+  } catch {
+    /* Keep private evidence when no deployment completed. */
+  }
+  if (postgresStarted) await docker(['rm', '-f', container]);
+  await docker(['network', 'rm', `${project}-database`], {
+    allowFailure: true,
+  });
   await log.close();
-  await chmod(directory, 0o700);
 }

@@ -1170,6 +1170,7 @@ active --申请并确认--> pending_deletion --未到期撤销--> active
 | 配置 | 用途 |
 | --- | --- |
 | `DATABASE_URL` | PostgreSQL 连接及运行连接池 |
+| `WEB_DIST_DIR / RELEASE_REVISION` | 单容器网页构建目录及公开发布 SHA；部署脚本自动设置 |
 | `BETTER_AUTH_SECRET` | 认证库所需密钥，不提交到仓库 |
 | `AUTH_BASE_URL / AUTH_TRUSTED_ORIGINS` | 公开认证地址和可信来源，不写死域名 |
 | `ACTION_PROOF_SECRET` | 短期操作证明独立密钥，与普通会话配置分开 |

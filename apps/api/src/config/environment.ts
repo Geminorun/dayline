@@ -37,6 +37,11 @@ const environmentSchema = z.object({
     .enum(['development', 'test', 'production'])
     .default('development'),
   HOST: z.string().default('127.0.0.1'),
+  WEB_DIST_DIR: z.string().min(1).optional(),
+  RELEASE_REVISION: z
+    .string()
+    .regex(/^[a-f0-9]{40}$/)
+    .optional(),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   DATABASE_URL: z.url({ protocol: /^postgres(?:ql)?$/ }),
   AUTH_BASE_URL: httpUrl,
@@ -140,6 +145,8 @@ export function parseEnvironment(input: Record<string, string | undefined>) {
     batchTimeoutMs: env.BATCH_TIMEOUT_MS,
     environment: env.NODE_ENV,
     host: env.HOST,
+    webDistDirectory: env.WEB_DIST_DIR,
+    releaseRevision: env.RELEASE_REVISION,
     port: env.PORT,
     databaseUrl: env.DATABASE_URL,
     authBaseUrl: env.AUTH_BASE_URL,

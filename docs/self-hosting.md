@@ -1,6 +1,6 @@
 # 自托管、备份与恢复
 
-本文件提供可复跑的本机 / 自有服务器操作，不代表已经发布。运行时是一套 Nest API、PostgreSQL 18 和 Caddy 静态网页；小程序独立构建上传，日常业务不依赖 ChatGPT。原始数据库与任何已有卷都不得用 reset、drop 或 `down -v` 处理。
+本文件提供可复跑的本机 / 自有服务器操作，不代表已经发布。当前生产为一个提供 Web + Nest API 的容器，连接已有 PostgreSQL 17 / 18 容器，HTTPS 由服务器入口反代；小程序独立构建上传，日常业务不依赖 ChatGPT。原始数据库与任何已有卷都不得用 reset、drop 或 `down -v` 处理。
 
 ## 固定安装与本机启动
 
@@ -18,29 +18,13 @@ pnpm dev
 
 另开终端 `pnpm dev:web`。API 3000，Web 5173；`/health/live` 检查进程，`/health/ready` 只有数据库和启动维护成功后才返回成功。六个默认分类由建号同事务触发器创建；没有公开 seed 密码或演示账号，不需另跑 seed。迁移从初始认证到第八条注销迁移按顺序 deploy；不使用 schema push 或 migrate reset。
 
-## 同源反向代理运行
+## 生产发布
 
-先在自己的 `.env` 中填写生产配置：`NODE_ENV=production`、独立随机 `BETTER_AUTH_SECRET` / `ACTION_PROOF_SECRET`、HTTPS `AUTH_BASE_URL` / `WEB_BASE_URL`、精确 `AUTH_TRUSTED_ORIGINS`、真实 Resend 已验证发件人和密钥。示例 origin 必须替换。`API_DATABASE_URL` 是容器内 `db:5432` 的数据库 URL，密码须 URL 编码；`DATABASE_URL` 用于你实际执行迁移的环境。不要把 `.env`、邮件、备份或代理凭据复制进镜像。
+生产流程、六项 GitHub Secrets、现有 PG 容器初始化及 HTTPS 入口要求以 [部署指南](deployment.md) 为准。`compose.production.yaml` 已改为独立生产文件，只包含一个 app 服务；不要再与开发 `compose.yaml` 叠加，也不要创建第二个生产数据库或将 localhost 当作容器内的数据库。
 
-```bash
-pnpm install --frozen-lockfile --prod=false
-pnpm db:generate
-pnpm build
-docker compose -f compose.yaml -f compose.production.yaml build api
-docker compose -f compose.yaml -f compose.production.yaml up -d --wait db
-docker compose -f compose.yaml -f compose.production.yaml run --rm api pnpm db:deploy
-docker compose -f compose.yaml -f compose.production.yaml up -d --wait api web
-```
+容器应用直接提供 Web / SPA 深链接，保留 API 的 no-store、安全响应头及不记录敏感 query 的日志。站点入口可以沿用已有 Nginx / Caddy，原样转发到宿主 `127.0.0.1:13000`。部署脚本只信任专用 Docker 网桥的宿主 gateway 为反代来源；入口需覆盖 X-Forwarded-For 等头。应用端口和数据库端口不暴露公网。
 
-`compose.production.yaml` 显式固定生产模式。Caddy 通过宿主 `apps/web/dist` 提供静态文件，因此上面的宿主 Web 构建是必要步骤；镜像中的 dist 不会自动穿过 bind mount。API 镜像保留固定依赖与迁移 CLI，便于一次性部署迁移；首次版本没有为了缩小镜像剔除编译工具。构建可放在独立 CI 机器，运行不要求安装编译工具。
-
-Caddy `/api/*` 和 `/health/*` 反代 API，其他路径回退 `index.html`，包括 `/entries/:id`、邮件回调和 `/account-deletion`。生产 Cookie 为 HttpOnly / SameSite=Lax / Secure，API 不发布公网端口，PostgreSQL 保持宿主回环地址。配置 `DAYLINE_HOST` 为自己的 HTTPS 站点；Caddy 的证书数据卷也应保留。仅本机演练使用 HTTP 及测试模式，不能把它等同于生产 TLS / Cookie 已验收。
-
-`TRUST_PROXY` 仅接受明确 IP 或 CIDR，默认空值忽略客户端转发 IP。反代运行时应填入受控 Caddy 的地址或仅受控代理所在专用网段，不能用 `true`、任意跳数或整个公网；代理后 IP 来源未经验证时宁可共享更严格限流。公网只允许经该反代访问 API，不能另开绕过代理的入口。
-
-代理访问日志不能记录完整 query 或 Referer：附带的 Caddy 配置将 URI 整体替换成 `/redacted`，删除请求与响应 headers，并为 Web 静态响应设置 `Referrer-Policy: no-referrer`。API 仅记录 requestId、方法、路由模板、状态、耗时，不输出请求 / 响应体、SQL、私人记录、邮箱链接、OpenID 或凭据。`LOG_LEVEL=error|warn|info` 同时控制 Nest 与 HTTP info；邮件投递失败有固定用途 / 错误码事件，找回密码仍保持通用响应。
-
-受管理云环境构建时，通过 BuildKit secret 提供该环境公开 CA：`DAYLINE_BUILD_CA_FILE` 指向受信 CA 文件；网络步骤挂载该 CA 并启用 TLS 校验。不要关闭证书校验。该文件不进入镜像层，运行 API 时也通过只读 secret 提供给 NODE_EXTRA_CA_CERTS；普通服务器可使用系统 CA 路径默认值。公共入口包装保留 HTTP(S)_PROXY、原 NO_PROXY / no_proxy 与 CA 配置，仅追加 api / db / loopback 到免代理列表，避免内部反代被外部代理拒绝；Node 24 按环境代理设置发起外部 HTTP。
+受管理云环境本机构建仍需使用 `--secret id=proxy_ca,src="$CODEX_PROXY_CERT"` 提供环境公开 CA。运行需要外部 HTTPS 的测试容器时同样挂载 CA 并设置 NODE_EXTRA_CA_CERTS；不要关闭 TLS 校验。GitHub 托管 runner 和普通服务器使用自己的正常系统信任，无需复制当前会话 CA 或代理凭据。
 
 ## 运行边界
 
@@ -58,7 +42,7 @@ Caddy `/api/*` 和 `/health/*` 反代 API，其他路径回退 `index.html`，�
 ```bash
 umask 077
 mkdir -p /private/dayline-backups
-docker compose exec -T db pg_dump -U dayline -d dayline -Fc > /private/dayline-backups/dayline.dump
+docker exec postgres17 pg_dump -U postgres -d dayline -Fc > /private/dayline-backups/dayline.dump
 ```
 
 实际用户 / 数据库名以自己的配置为准。异地复制及轮换应由自己服务器的调度配置管理；本仓库没有替你安装系统 cron 或对外上传备份。
@@ -75,8 +59,8 @@ pnpm verify:capacity
 pnpm verify:containers
 ```
 
-前两项必须有安全的 `TEST_DATABASE_URL` 且库名以 `_test` 结尾。恢复脚本只创建新的 `dayline_restore_*_test`，真实 pg_dump / pg_restore，重放迁移、撤旧会话、启动维护后验证类别 / 事项 / true-false 重点 / 回收站 / 身份 / 幂等 / 清理；原库与所有新旧库均保留。脚本仅清理自己的 fixture，不改 `.env`，结果与备份留在 `.local/stage7` 私目录。运行真实数据库脚本时串行，避免人为时钟测试与容量采样相互干扰。
+`verify:backup-restore` 与 `verify:capacity` 必须有安全的 `TEST_DATABASE_URL` 且库名以 `_test` 结尾。恢复脚本只创建新的 `dayline_restore_*_test`，真实 pg_dump / pg_restore，重放迁移、撤旧会话、启动维护后验证类别 / 事项 / true-false 重点 / 回收站 / 身份 / 幂等 / 清理；原库与所有新旧库均保留。脚本仅清理自己的 fixture，不改 `.env`，结果与备份留在 `.local/stage7` 私目录。运行真实数据库脚本时串行，避免人为时钟测试与容量采样相互干扰。
 
-容器演练在独立 Compose project、新命名卷和 127.0.0.1:18080 / 15437 上执行，不占 3000 / 5173，不碰已有 `dayline-db-1`。测试秘密随机生成并只写私目录；构建镜像、全迁移、健康、SPA 深链、静态资产、API 代理与日志 query 脱敏，再 force-recreate 该测试 PG 容器验证同卷样本仍在。结束仅 down 容器，不加 -v；新卷保留以便复核。本机演练不发布、不对外部署，也不调用真实微信 / Resend。
+容器演练创建独立 PG17 和一个 Web / API 容器，实际执行首次初始化、备份、迁移、重复部署及失败恢复。使用随机 project / 回环端口，不碰已有 PG 容器和卷；结束删除自己的测试容器与网络，保留新卷及 `.local/deployment` 私有报告。GitHub 镜像发布也执行这一演练。本机证据不等于生产发布。
 
 邮箱标准验证链接增加服务器保存的 token 摘要 → 原 UUID 绑定，最终 Better Auth 更新同时约束 UUID / active；升级前尚未完成、没有该绑定的旧验证链接应重新申请，不根据同邮箱新注册自动接受旧链接。密码和验证仍由 Better Auth 处理。

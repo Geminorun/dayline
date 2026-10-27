@@ -15,9 +15,18 @@ COPY --chown=node:node . .
 RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
     pnpm db:generate && pnpm build
-# Retain the pinned migration CLI for an explicit one-off migrate deploy.
-FROM build AS runtime
-ENV HOST=0.0.0.0 PORT=3000
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
+    CI=true pnpm --filter @dayline/api deploy --legacy --prod /runtime-api
+# The API's production dependencies include the pinned migration CLI.
+# Frontend compilers, tests, source and workspace development dependencies stay in build.
+FROM node:24.19.0-bookworm-slim AS runtime
+WORKDIR /app
+COPY --from=build --chown=node:node /runtime-api ./apps/api
+COPY --from=build --chown=node:node /app/apps/web/dist ./apps/web/dist
+COPY --from=build --chown=node:node /app/scripts/deploy ./scripts/deploy
+COPY --from=build --chown=node:node /app/infra/container-entrypoint.sh ./infra/container-entrypoint.sh
+ENV HOST=0.0.0.0 PORT=3000 WEB_DIST_DIR=/app/apps/web/dist NODE_USE_ENV_PROXY=1
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=6 CMD /bin/sh /app/infra/container-entrypoint.sh node -e "fetch('http://127.0.0.1:3000/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"

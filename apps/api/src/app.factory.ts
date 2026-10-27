@@ -14,6 +14,7 @@ import type { AppConfig } from './config/environment.js';
 import { ApiExceptionFilter } from './common/api-exception.filter.js';
 import { businessConfirmationBodyParser } from './common/business-body-parser.js';
 import { ApiResultInterceptor } from './common/api-result.interceptor.js';
+import { createStaticSite } from './web/static-site.js';
 
 export async function createApp(
   config: AppConfig,
@@ -55,6 +56,8 @@ export async function createApp(
     request.requestId = randomUUID();
     response.setHeader('X-Request-ID', request.requestId);
     response.setHeader('Cache-Control', 'no-store');
+    if (config.releaseRevision)
+      response.setHeader('X-Dayline-Revision', config.releaseRevision);
     next();
   });
   app.use((request: Request, response: Response, next: NextFunction) => {
@@ -109,6 +112,8 @@ export async function createApp(
       'Content-Disposition',
     ],
   });
+  if (config.webDistDirectory)
+    app.use(createStaticSite(config.webDistDirectory));
   app.setGlobalPrefix('api/v1', {
     exclude: [
       { path: 'health/live', method: RequestMethod.GET },

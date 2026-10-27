@@ -9,7 +9,7 @@
 ## 技术与目录
 
 - Node.js 24.19.0、pnpm 11.25.0、TypeScript 严格模式。
-- NestJS 11 + Express，PostgreSQL 18 + Prisma 7。
+- NestJS 11 + Express，PostgreSQL 17 / 18 + Prisma 7。
 - Better Auth 1.7.13，社区 Nest 适配器 2.8.0，Resend 6.34.1。
 - Web：Vue 3.5.44 + Vue Router 4.6.4 + Vite 8.3.5；小程序：DCloud 5.33 对应固定包 3.0.0-5030320261023001 + Vue 3.4.21 + Vite 5.2.8，遵循 DCloud 的兼容依赖。
 - 单个后端、独立前端工程；当前没有 Redis、消息队列或离线同步引擎。
@@ -42,7 +42,7 @@ pnpm dev
 
 已有 `.env` 时保留自己的配置。示例中的密码和认证 secret 仅供本机开发。PostgreSQL 只向本机开放端口；Compose 的命名卷保留数据，不需要删除卷来重启服务。
 
-另开终端运行 `pnpm dev:web`，网页为 `http://localhost:5173`，开发代理把 `/api` 转至本机 API。生产网页需配置同源反向代理和 SPA 路由回退，避免验证 / 重置回调路径返回 404。
+另开终端运行 `pnpm dev:web`，网页为 `http://localhost:5173`，开发代理把 `/api` 转至本机 API。生产使用同一个 Docker 镜像提供 Web 与 API，应用内处理 SPA 深链接，服务器 HTTPS 入口统一反代。
 
 小程序复制 `apps/miniapp/.env.example` 至同目录 `.env`，设置 `VITE_API_BASE_URL` 为自己的 HTTPS API origin；在 `src/manifest.json` 中填写自己的 `mp-weixin.appid`。运行 `pnpm dev:miniapp`，或 `pnpm --filter @dayline/miniapp build`；开发者工具导入 `apps/miniapp/dist/build/mp-weixin`。空 AppID 可编译，但不能代表真实登录或上传已验收。Web 和小程序分别构建，未共享平台 UI。
 
@@ -53,6 +53,10 @@ pnpm dev
 如果云环境写入的 SQL 文件权限为 0600，首次启动前执行 `chmod 644 infra/postgres/init-test-db.sql`，让容器内的 PostgreSQL 用户可以读取它。初始化 SQL 仅在空数据卷首次启动时执行；已有卷缺少测试库时，通过 PostgreSQL 管理工具创建专用的 `dayline_test` 数据库。
 
 新增模型后使用 `pnpm db:migrate --name <migration_name>`，审阅生成的 SQL 再保存迁移。`pnpm db:deploy` 只应用现有迁移，不负责生成新迁移。`prisma/auth.generated.prisma` 是认证库参考文件，实际迁移使用 `prisma/schema.prisma`。
+
+## 生产部署
+
+生产复用服务器已有 PostgreSQL 17 / 18 容器，缺少专用账号 / 数据库时自动创建；Web 与 API 共用一个镜像。GitHub Actions 手动触发，检查后构建、推送 GHCR、SSH 发布、备份与迁移、验证公共入口。配置集中为六项 GitHub Secrets，具体见 [部署指南](docs/deployment.md) 和 [APP_ENV 模板](infra/production.env.example)。`compose.production.yaml` 是独立文件，不再与开发用 `compose.yaml` 叠加。
 
 ## 邮件配置
 

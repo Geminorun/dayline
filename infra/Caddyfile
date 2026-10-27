@@ -1,4 +1,6 @@
-{$DAYLINE_HOST} {
+# Optional HOST Caddy configuration. This is not a service inside the app container.
+# Set SITE_URL in the host Caddy service environment, or replace the site address.
+{$SITE_URL} {
   encode zstd gzip
   header {
     -Server
@@ -17,16 +19,5 @@
       }
     }
   }
-  handle /api/* {
-    reverse_proxy api:3000
-  }
-  handle /health/* {
-    reverse_proxy api:3000
-  }
-  handle {
-    header Cache-Control no-cache
-    root * /srv/dayline
-    try_files {path} /index.html
-    file_server
-  }
+  reverse_proxy 127.0.0.1:13000
 }
