@@ -22,6 +22,7 @@ import {
 import { request as httpRequest } from 'node:http';
 import { createServer as createTcpServer } from 'node:net';
 import { startTestHostNginx } from './test-host-nginx.mjs';
+import { redactDiagnostics } from './deployment-diagnostics.mjs';
 
 const mode = process.env.DAYLINE_TEST_NGINX_MODE || 'host';
 assert.ok(['host', 'container'].includes(mode));
@@ -36,6 +37,7 @@ const serverDirectory = join(directory, 'server');
 await mkdir(bundle, { recursive: true, mode: 0o700 });
 const log = await open(join(directory, 'commands.log'), 'w', 0o600);
 const environment = { ...process.env };
+let checkpoint = 'prepare';
 for (const key of [
   'DOCKER_CONTEXT',
   'DOCKER_TLS',
@@ -62,7 +64,7 @@ function command(binary, args, options = {}) {
       else
         reject(
           new Error(
-            `Deployment verification failed (${binary}); inspect private ${directory}/commands.log`,
+            `Deployment verification failed (${binary}, exit ${code}, checkpoint ${checkpoint}); inspect private ${directory}/commands.log`,
           ),
         );
     });
@@ -141,6 +143,8 @@ async function writeEnvironment(overrides = {}) {
 const revision = (label) =>
   createHash('sha1').update(`${suffix}:${label}`).digest('hex');
 async function deploy(label, allowFailure = false) {
+  checkpoint = `deploy ${label}`;
+  console.log(`[${mode}] ${checkpoint}`);
   await writeFile(join(bundle, 'revision'), revision(label), { mode: 0o600 });
   return command('bash', [join(bundle, 'scripts/deploy/apply.sh'), bundle], {
     allowFailure,
@@ -181,6 +185,7 @@ async function tlsFetch(url, headers = {}, body, localAddress) {
   });
 }
 async function publicCheck(expectedRevision) {
+  checkpoint = 'verify public responses';
   if (hostNginx) await hostNginx.assertUnchanged();
   const origin = publicOrigin;
   const redirect = await fetch(
@@ -338,6 +343,7 @@ try {
   await writeFile(join(bundle, 'site.url'), publicOrigin, { mode: 0o600 });
   await deploy('first');
   await publicCheck(revision('first'));
+  checkpoint = 'verify client IP handling';
   if (mode === 'host') {
     assert.equal(
       await docker(
@@ -495,6 +501,69 @@ try {
     { mode: 0o600 },
   );
   console.log(JSON.stringify(report));
+} catch (error) {
+  // Only this isolated smoke test emits diagnostics. Production release logs,
+  // environment files, database dumps and TLS keys are never uploaded.
+  const privateValues = [
+    password,
+    fields.BETTER_AUTH_SECRET,
+    fields.ACTION_PROOF_SECRET,
+    fields.RESEND_API_KEY,
+  ];
+  const report = (label, text) =>
+    console.error(
+      `${label}\n${redactDiagnostics(text, privateValues).slice(-12000)}`,
+    );
+  console.error(`[${mode}] Failed during ${checkpoint}`);
+  report(
+    'Smoke-test command output:',
+    await readFile(join(directory, 'commands.log'), 'utf8'),
+  );
+  const releases = await readdir(join(serverDirectory, 'releases')).catch(
+    () => [],
+  );
+  for (const release of releases) {
+    for (const name of [
+      'nginx-validation.log',
+      'migration.log',
+      'database-init.log',
+    ]) {
+      const text = await readFile(
+        join(serverDirectory, 'releases', release, name),
+        'utf8',
+      ).catch(() => '');
+      if (text) report(`${release}/${name}:`, text);
+    }
+  }
+  const states = await docker(
+    [
+      'ps',
+      '-a',
+      '--filter',
+      `label=com.docker.compose.project=${project}`,
+      '--format',
+      '{{.Names}} {{.Status}}',
+    ],
+    { capture: true, allowFailure: true },
+  );
+  report('Smoke-test containers:', states.output);
+  const ids = await docker(
+    ['ps', '-aq', '--filter', `label=com.docker.compose.project=${project}`],
+    { capture: true, allowFailure: true },
+  );
+  if (ids.output.trim()) {
+    const health = await docker(
+      [
+        'inspect',
+        '--format',
+        '{{.Name}} {{json .State}}',
+        ...ids.output.trim().split(/\s+/),
+      ],
+      { capture: true, allowFailure: true },
+    );
+    report('Smoke-test health checks:', health.output);
+  }
+  throw error;
 } finally {
   if (tlsServer)
     await new Promise((resolveClose) => tlsServer.close(resolveClose));

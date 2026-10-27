@@ -80,6 +80,8 @@ Cloudflare SSL/TLS → Origin Server → Create Certificate，可生成包含本
 
 Workflow 合入默认分支后，Actions → Deploy Dayline → Run workflow，选择可信分支 / 标签。推送仅触发检查，不自动生产发布；PR 不读取生产 Secrets。
 
+只排查构建或演练问题时，勾选 `verify_only`：仍构建镜像并验证两种入口，但跳过服务器部署，不读取生产 Secrets。演练失败会在 Actions 输出检查阶段及脱敏测试日志；这些日志只来自临时测试数据库和生成的测试凭据，不上传生产配置或备份。
+
 1. PostgreSQL 17 / 18 分别执行格式、lint、类型、单元 / 配置和真实数据库接口测试。
 2. GitHub 构建 Web + API 镜像、推送 GHCR，以不可变 digest 部署；分别演练本机入口和可选容器入口。
 3. 严格 SSH 校验后传输私有临时包；GITHUB_TOKEN 只临时拉取镜像，随后清理 registry 登录和 token。

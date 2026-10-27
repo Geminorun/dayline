@@ -2,6 +2,11 @@ name: Deploy Dayline
 
 on:
   workflow_dispatch:
+    inputs:
+      verify_only:
+        description: Build and verify without deploying to the server
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -61,6 +66,7 @@ jobs:
           DAYLINE_TEST_NGINX_MODE: container
         run: node scripts/verify-containers.mjs
   deploy:
+    if: ${{ !inputs.verify_only }}
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 20
