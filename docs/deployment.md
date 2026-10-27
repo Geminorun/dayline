@@ -72,7 +72,7 @@ APP_ENV 必填字段：`POSTGRES_CONTAINER`、`POSTGRES_PASSWORD`、`BETTER_AUTH
 
 | Workflow | 触发方式 | 工作 |
 | --- | --- | --- |
-| Dayline checks（backend.yml） | 推送 main、PR、手动运行 | 检查代码及 PG17 / 18；main 检查通过后构建一个 Web + API 镜像，在原生 Nginx 进程后完成隔离演练，保存已验证的镜像 digest |
+| Dayline checks（backend.yml） | 推送 main、PR、手动运行 | main 并行执行代码 / PG17 / 18 检查与镜像构建 / 本机 Nginx 演练，保存镜像 digest；整次 CI 全部成功后才允许发布 |
 | Deploy Dayline（deploy.yml） | 手动运行，选择 main | 查找同一提交成功 CI 的发布清单，复用镜像；SSH 备份、迁移、启动应用和验证公共 HTTPS |
 
 PR 和其他分支的手动 CI 只运行检查，不推送镜像或产生可发布清单。main 的 CI、演练均不读取生产 Secrets，不访问生产服务器；原生 Nginx 仅安装在临时 CI runner 中。
@@ -95,7 +95,7 @@ PR 和其他分支的手动 CI 只运行检查，不推送镜像或产生可发�
 4. 仅停止上一版应用写入，备份目标库，再执行 Prisma migrate deploy。备份失败且迁移未开始时，尝试恢复上一版应用；不重启 Nginx。禁止 reset、drop 或 db push。
 5. 启动应用、检查 readiness，再从公共 HTTPS 验证 SHA 和网页；通过后更新 `current` 和 `deployed-revision`。
 
-总体验证和镜像准备仍需时间，但每个 main 提交只做一次；后续发布复用结果。Docker 构建只编译共享包、API 和 Web，小程序由 CI 独立验证；文档、workflow 与部署脚本修改不再使应用编译层失效。实际发布耗时仍取决于镜像下载、数据库备份和迁移，不承诺固定两分钟。
+检查与镜像准备并行，耗时不再简单累加；只有整次 CI 成功的清单才可复用，构建先结束不代表已获准发布。总体验证和镜像准备仍需时间，但每个 main 提交只做一次；后续发布复用结果。Docker 构建只编译共享包、API 和 Web，小程序由 CI 独立验证；文档、workflow 与部署脚本修改不再使应用编译层失效。实际发布耗时仍取决于镜像下载、数据库备份和迁移，不承诺固定两分钟。
 
 首次不必手动建库。更新只补未执行的迁移，密码轮换需先在数据库显式完成再同步 Secret。PG 被其原 Compose 重建后，需要重新补回专用网络连接；长期可在原 PG 配置声明同一外部网络，自动重启策略也由原服务管理。
 
