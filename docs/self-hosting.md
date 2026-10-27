@@ -1,6 +1,6 @@
 # 自托管、备份与恢复
 
-本文件提供可复跑的本机 / 自有服务器操作，不代表已经发布。当前生产为一个提供 Web + Nest API 的容器，连接已有 PostgreSQL 17 / 18 容器，HTTPS 由同一 Compose 管理的 Nginx 入口提供，使用 Cloudflare Origin 证书；小程序独立构建上传，日常业务不依赖 ChatGPT。原始数据库与任何已有卷都不得用 reset、drop 或 `down -v` 处理。
+本文件提供可复跑的本机 / 自有服务器操作，不代表已经发布。当前生产为一个提供 Web + Nest API 的容器，连接已有 PostgreSQL 17 / 18 容器，默认复用服务器本机 Nginx 与证书，入口容器仅为可选项；小程序独立构建上传，日常业务不依赖 ChatGPT。原始数据库与任何已有卷都不得用 reset、drop 或 `down -v` 处理。
 
 ## 固定安装与本机启动
 
@@ -20,9 +20,9 @@ pnpm dev
 
 ## 生产发布
 
-生产流程、八项 GitHub Secrets、现有 PG 容器初始化及 HTTPS 入口要求以 [部署指南](deployment.md) 为准。`compose.production.yaml` 已改为独立生产文件，包含 app 和 Nginx gateway 服务；不要再与开发 `compose.yaml` 叠加，也不要创建第二个生产数据库或将 localhost 当作容器内的数据库。
+生产流程、默认六项 GitHub Secrets、现有 PG 容器初始化及 HTTPS 入口要求以 [部署指南](deployment.md) 为准。`compose.production.yaml` 已改为独立生产文件，默认只包含 app；NGINX_MODE=container 才叠加独立入口文件；不要再与开发 `compose.yaml` 叠加，也不要创建第二个生产数据库或将 localhost 当作容器内的数据库。
 
-容器应用直接提供 Web / SPA 深链接，保留 API 的 no-store、安全响应头及不记录敏感 query 的日志。Nginx 入口通过专用 proxy 网络转发至应用，部署脚本只信任该网段的转发头；入口仅信任 Cloudflare 官方网段提供的访客 IP，并覆盖转发头。应用诊断端口仅绑定宿主 `127.0.0.1:13000`，既有 PG 的端口和防火墙由原配置管理。
+容器应用直接提供 Web / SPA 深链接，保留 API 的 no-store、安全响应头及不记录敏感 query 的日志。本机 Nginx 通过宿主回环端口转发至应用，API 仅信任宿主网关及回环地址。可选入口容器通过专用 proxy 网段连接，API 仅信任该网段。入口应仅信任 Cloudflare 官方网段提供的访客 IP，并覆盖转发头。应用诊断端口仅绑定宿主 `127.0.0.1:13000`，既有 PG 的端口和防火墙由原配置管理。
 
 受管理云环境本机构建仍需使用 `--secret id=proxy_ca,src="$CODEX_PROXY_CERT"` 提供环境公开 CA。运行需要外部 HTTPS 的测试容器时同样挂载 CA 并设置 NODE_EXTRA_CA_CERTS；不要关闭 TLS 校验。GitHub 托管 runner 和普通服务器使用自己的正常系统信任，无需复制当前会话 CA 或代理凭据。
 

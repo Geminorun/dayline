@@ -27,6 +27,7 @@ const allowed = new Set([
   'WECHAT_MINIAPP_ENV',
   'APP_PORT',
   'DEPLOY_PROJECT',
+  'NGINX_MODE',
   'NGINX_HTTP_PORT',
   'NGINX_HTTPS_PORT',
   'NGINX_BIND_ADDRESS',
@@ -79,6 +80,9 @@ export function deploymentConfig(text, siteUrl, image, revision, proxyIp = '') {
   const port = input.APP_PORT || '13000';
   if (!/^\d+$/.test(port) || Number(port) < 1024 || Number(port) > 65535)
     throw new Error('APP_PORT must be between 1024 and 65535.');
+  const nginxMode = input.NGINX_MODE || 'host';
+  if (!['host', 'container'].includes(nginxMode))
+    throw new Error('NGINX_MODE must be host or container.');
   const httpPort = input.NGINX_HTTP_PORT || '80';
   const httpsPort = input.NGINX_HTTPS_PORT || '443';
   for (const value of [httpPort, httpsPort]) {
@@ -152,6 +156,7 @@ export function deploymentConfig(text, siteUrl, image, revision, proxyIp = '') {
       DAYLINE_DATABASE_PASSWORD: password,
     },
     deployment: {
+      NGINX_MODE: nginxMode,
       DAYLINE_IMAGE: image,
       DAYLINE_APP_PORT: port,
       DAYLINE_DB_NETWORK: `${project}-database`,
@@ -197,42 +202,48 @@ export function validateOriginTls(certPem, keyPem, hostname, now = Date.now()) {
     );
 }
 
-async function render() {
-  const [, , inputFile, directory] = process.argv;
-  if (!inputFile || !directory)
-    throw new Error('Expected APP_ENV input and output directory.');
-  const config = deploymentConfig(
-    await readFile(inputFile, 'utf8'),
-    process.env.SITE_URL,
-    process.env.DAYLINE_IMAGE,
-    process.env.RELEASE_REVISION,
-    process.env.DAYLINE_PROXY_IP,
-  );
-  const { parseEnvironment } =
-    await import('../../apps/api/dist/config/environment.js');
-  parseEnvironment(config.runtime);
-  const inputDirectory = dirname(inputFile);
-  const cert = await readFile(join(inputDirectory, 'tls.crt'), 'utf8');
-  const key = await readFile(join(inputDirectory, 'tls.key'), 'utf8');
+export async function writeDeploymentFiles(config, inputDirectory, directory) {
   const hostname = new URL(config.runtime.WEB_BASE_URL).hostname;
-  validateOriginTls(cert, key, hostname);
-  const nginxTemplate = await readFile(
-    join(inputDirectory, 'infra/nginx/default.conf.template'),
-    'utf8',
-  );
   const realIpConfig = await readFile(
     join(inputDirectory, 'infra/nginx/cloudflare-real-ip.conf'),
     'utf8',
   );
-  await mkdir(join(directory, 'nginx'), { mode: 0o700 });
-  await mkdir(join(directory, 'tls'), { mode: 0o700 });
-  await writeFile(join(directory, 'tls/tls.crt'), cert, { mode: 0o600 });
-  await writeFile(join(directory, 'tls/tls.key'), key, { mode: 0o600 });
+  await mkdir(join(directory, 'nginx'), { mode: 0o700, recursive: true });
+  const containerMode = config.deployment.NGINX_MODE === 'container';
+  if (containerMode) {
+    let cert;
+    let key;
+    try {
+      cert = await readFile(join(inputDirectory, 'tls.crt'), 'utf8');
+      key = await readFile(join(inputDirectory, 'tls.key'), 'utf8');
+    } catch {
+      throw new Error(
+        'TLS_CERT and TLS_KEY are required for NGINX_MODE=container.',
+      );
+    }
+    validateOriginTls(cert, key, hostname);
+    await mkdir(join(directory, 'tls'), { mode: 0o700, recursive: true });
+    await writeFile(join(directory, 'tls/tls.crt'), cert, { mode: 0o600 });
+    await writeFile(join(directory, 'tls/tls.key'), key, { mode: 0o600 });
+  }
+  const nginxTemplate = await readFile(
+    join(
+      inputDirectory,
+      'infra/nginx',
+      containerMode ? 'default.conf.template' : 'host.conf.template',
+    ),
+    'utf8',
+  );
   await writeFile(
-    join(directory, 'nginx/default.conf'),
+    join(
+      directory,
+      'nginx',
+      containerMode ? 'default.conf' : 'host.conf.example',
+    ),
     nginxTemplate
       .replaceAll('@SITE_HOST@', hostname)
-      .replaceAll('@SITE_URL@', config.runtime.WEB_BASE_URL),
+      .replaceAll('@SITE_URL@', config.runtime.WEB_BASE_URL)
+      .replaceAll('@APP_PORT@', config.deployment.DAYLINE_APP_PORT),
     { mode: 0o600 },
   );
   await writeFile(
@@ -254,6 +265,23 @@ async function render() {
       { mode: 0o600 },
     );
   }
+}
+
+async function render() {
+  const [, , inputFile, directory] = process.argv;
+  if (!inputFile || !directory)
+    throw new Error('Expected APP_ENV input and output directory.');
+  const config = deploymentConfig(
+    await readFile(inputFile, 'utf8'),
+    process.env.SITE_URL,
+    process.env.DAYLINE_IMAGE,
+    process.env.RELEASE_REVISION,
+    process.env.DAYLINE_PROXY_IP,
+  );
+  const { parseEnvironment } =
+    await import('../../apps/api/dist/config/environment.js');
+  parseEnvironment(config.runtime);
+  await writeDeploymentFiles(config, dirname(inputFile), directory);
 }
 if (
   process.argv[1] &&

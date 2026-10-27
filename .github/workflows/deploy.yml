@@ -50,9 +50,15 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Verify the release against an isolated PostgreSQL 17
+      - name: Verify deployment through an existing host Nginx
         env:
           DAYLINE_TEST_IMAGE: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+          DAYLINE_TEST_NGINX_MODE: host
+        run: node scripts/verify-containers.mjs
+      - name: Verify the optional Nginx container
+        env:
+          DAYLINE_TEST_IMAGE: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+          DAYLINE_TEST_NGINX_MODE: container
         run: node scripts/verify-containers.mjs
   deploy:
     needs: build

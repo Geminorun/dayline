@@ -1,6 +1,6 @@
 # 阶段 7：注销、维护与最终运行交接
 
-> 本文保留阶段 7 当时的验证记录。当前生产部署已采用 Nginx + Cloudflare Origin 证书，最新步骤见 [部署指南](deployment.md)。
+> 本文保留阶段 7 当时的验证记录。当前生产部署默认复用本机 Nginx / 证书，并保留可选入口容器，最新步骤见 [部署指南](deployment.md)。
 
 日期：2026-10-26。只实现第七阶段，未 commit / push / 发布，未修改主 Agent 独占的 implementation-plan.md；该文件中的主 Agent 更新不属于本实现 Agent 的编辑。两个前端继续独立 Vue / Vite 版本，一个 Nest 单体、PostgreSQL；未引入 Redis、离线队列、自动补传或额外后台服务。
 

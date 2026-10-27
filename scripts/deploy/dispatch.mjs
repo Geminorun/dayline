@@ -15,8 +15,6 @@ export function validateDispatch(env) {
     'DEPLOY_SSH_KEY',
     'DEPLOY_KNOWN_HOSTS',
     'APP_ENV',
-    'TLS_CERT',
-    'TLS_KEY',
     'DAYLINE_IMAGE',
     'RELEASE_REVISION',
     'REGISTRY_USER',
@@ -128,9 +126,13 @@ async function dispatch() {
       'registry.user': 'REGISTRY_USER',
       'registry.token': 'REGISTRY_TOKEN',
     }))
-      await writeFile(join(payload, file), process.env[keyName] + '\n', {
-        mode: 0o600,
-      });
+      await writeFile(
+        join(payload, file),
+        (process.env[keyName] ?? '') + '\n',
+        {
+          mode: 0o600,
+        },
+      );
     const archive = join(directory, 'bundle.tgz');
     await command('tar', [
       '-czf',
@@ -138,6 +140,7 @@ async function dispatch() {
       '-C',
       resolve('.'),
       'compose.production.yaml',
+      'compose.nginx.yaml',
       'scripts/deploy',
       'infra/nginx',
       '-C',

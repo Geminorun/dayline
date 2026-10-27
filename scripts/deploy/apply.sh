@@ -20,25 +20,32 @@ RELEASE_REVISION="$(cat "$dayline_bundle/revision")"
 [[ "$RELEASE_REVISION" =~ ^[a-f0-9]{40}$ ]] || { echo 'Invalid revision.' >&2; exit 1; }
 dayline_release="$(mktemp -d "$dayline_root/releases/$RELEASE_REVISION.XXXXXXXX")"
 cp "$dayline_bundle/compose.production.yaml" "$dayline_release/compose.production.yaml"
+cp "$dayline_bundle/compose.nginx.yaml" "$dayline_release/compose.nginx.yaml"
 dayline_previous="$(readlink -f "$dayline_root/current" || true)"
 dayline_stopped=false
 dayline_migration_started=false
 dayline_started=false
-dayline_compose() {
-  env -u DAYLINE_IMAGE -u DAYLINE_APP_PORT -u DAYLINE_DB_NETWORK -u DAYLINE_PROXY_NETWORK -u DAYLINE_HTTP_PORT -u DAYLINE_HTTPS_PORT -u DAYLINE_NGINX_BIND docker compose --project-name "$DEPLOY_PROJECT" --env-file "$dayline_release/.deploy.env" \
-    -f "$dayline_release/compose.production.yaml" "$@"
+dayline_services=(app)
+dayline_compose_at() {
+  local dayline_directory="$1"
+  shift
+  local dayline_extra_files=()
+  if [[ -f "$dayline_directory/compose.nginx.yaml" ]] &&
+     [[ "$(sed -n 's/^NGINX_MODE=//p' "$dayline_directory/.deploy.env")" == container ]]; then
+    dayline_extra_files=(-f "$dayline_directory/compose.nginx.yaml")
+  fi
+  env -u DAYLINE_IMAGE -u DAYLINE_APP_PORT -u DAYLINE_DB_NETWORK -u DAYLINE_PROXY_NETWORK -u DAYLINE_HTTP_PORT -u DAYLINE_HTTPS_PORT -u DAYLINE_NGINX_BIND docker compose --project-name "$DEPLOY_PROJECT" --env-file "$dayline_directory/.deploy.env" \
+    -f "$dayline_directory/compose.production.yaml" "${dayline_extra_files[@]}" "$@"
 }
-dayline_old_compose() {
-  env -u DAYLINE_IMAGE -u DAYLINE_APP_PORT -u DAYLINE_DB_NETWORK -u DAYLINE_PROXY_NETWORK -u DAYLINE_HTTP_PORT -u DAYLINE_HTTPS_PORT -u DAYLINE_NGINX_BIND docker compose --project-name "$DEPLOY_PROJECT" --env-file "$dayline_previous/.deploy.env" \
-    -f "$dayline_previous/compose.production.yaml" "$@"
-}
+dayline_compose() { dayline_compose_at "$dayline_release" "$@"; }
+dayline_old_compose() { dayline_compose_at "$dayline_previous" "$@"; }
 dayline_failure() {
   local dayline_code=$?
   trap - EXIT
   if [[ "$dayline_code" != 0 ]]; then
-    if [[ "$dayline_started" == true ]]; then dayline_compose stop app gateway >/dev/null 2>&1 || true; fi
+    if [[ "$dayline_started" == true ]]; then dayline_compose stop "${dayline_services[@]}" >/dev/null 2>&1 || true; fi
     if [[ "$dayline_stopped" == true && "$dayline_migration_started" == false ]]; then
-      dayline_old_compose up -d --no-deps --wait >/dev/null 2>&1 || true
+      dayline_old_compose up -d --no-deps --wait app >/dev/null 2>&1 || true
     fi
     echo "Deployment failed. Private evidence: $dayline_release" >&2
     if [[ "$dayline_migration_started" == true ]]; then
@@ -66,7 +73,12 @@ if [[ -n "$dayline_previous" && -f "$dayline_previous/.deploy.env" ]]; then
     }
   done
 fi
-for dayline_network in "$DAYLINE_DB_NETWORK" "$DAYLINE_PROXY_NETWORK"; do
+dayline_networks=("$DAYLINE_DB_NETWORK")
+if [[ "$NGINX_MODE" == container ]]; then
+  dayline_services+=(gateway)
+  dayline_networks+=("$DAYLINE_PROXY_NETWORK")
+fi
+for dayline_network in "${dayline_networks[@]}"; do
   if ! docker network inspect "$dayline_network" >/dev/null 2>&1; then
     docker network create --label me.mindreview.dayline.project="$DEPLOY_PROJECT" "$dayline_network" >/dev/null
   fi
@@ -80,29 +92,44 @@ done
 if ! docker inspect --format "{{with index .NetworkSettings.Networks \"$DAYLINE_DB_NETWORK\"}}{{range .Aliases}}{{println .}}{{end}}{{end}}" "$POSTGRES_CONTAINER" | grep -qx dayline-postgres; then
   docker network connect --alias dayline-postgres "$DAYLINE_DB_NETWORK" "$POSTGRES_CONTAINER"
 fi
-dayline_proxy_subnet="$(docker network inspect --format '{{(index .IPAM.Config 0).Subnet}}' "$DAYLINE_PROXY_NETWORK")"
-[[ "$dayline_proxy_subnet" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]] || { echo 'Expected an IPv4 proxy subnet.' >&2; exit 1; }
-sed -i "s|^TRUST_PROXY=$|TRUST_PROXY=$dayline_proxy_subnet|" "$dayline_release/.runtime.env"
-# Validate syntax/key permissions before the previous application is stopped.
-dayline_compose run --rm --no-deps gateway nginx -t > "$dayline_release/nginx-validation.log" 2>&1 || {
-  echo 'Nginx configuration failed validation; inspect the private nginx-validation.log.' >&2; exit 1;
-}
 dayline_old_gateway=""
+dayline_old_app=""
 if [[ -f "$dayline_previous/.deploy.env" ]]; then
   dayline_old_gateway="$(dayline_old_compose ps -q gateway 2>/dev/null || true)"
+  dayline_old_app="$(dayline_old_compose ps -q app)"
 fi
-for dayline_port in "$DAYLINE_HTTP_PORT" "$DAYLINE_HTTPS_PORT"; do
-  dayline_port_owned=false
+if [[ "$NGINX_MODE" == host ]]; then
   if [[ -n "$dayline_old_gateway" ]]; then
-    if docker port "$dayline_old_gateway" | grep -Eq ":$dayline_port$"; then dayline_port_owned=true; fi
+    echo 'A managed Nginx gateway is still running. Migrate that entry explicitly before selecting host mode.' >&2; exit 1;
   fi
-  if [[ "$dayline_port_owned" == false ]] && {
+  dayline_host_gateway="$(docker network inspect --format '{{(index .IPAM.Config 0).Gateway}}' "$DAYLINE_DB_NETWORK")"
+  [[ "$dayline_host_gateway" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || { echo 'Expected an IPv4 Docker host gateway.' >&2; exit 1; }
+  dayline_trusted_proxy="$dayline_host_gateway,127.0.0.1,::1"
+else
+  dayline_trusted_proxy="$(docker network inspect --format '{{(index .IPAM.Config 0).Subnet}}' "$DAYLINE_PROXY_NETWORK")"
+  [[ "$dayline_trusted_proxy" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]] || { echo 'Expected an IPv4 proxy subnet.' >&2; exit 1; }
+  dayline_compose run --rm --no-deps gateway nginx -t > "$dayline_release/nginx-validation.log" 2>&1 || {
+    echo 'Nginx configuration failed validation; inspect the private nginx-validation.log.' >&2; exit 1;
+  }
+fi
+sed -i "s|^TRUST_PROXY=$|TRUST_PROXY=$dayline_trusted_proxy|" "$dayline_release/.runtime.env"
+dayline_check_port() {
+  local dayline_port="$1" dayline_owner="$2" dayline_owned=false
+  if [[ -n "$dayline_owner" ]]; then
+    if docker port "$dayline_owner" | grep -Eq ":$dayline_port$"; then dayline_owned=true; fi
+  fi
+  if [[ "$dayline_owned" == false ]] && {
     [[ -n "$(ss -H -ltn "sport = :$dayline_port")" ]] ||
     [[ -n "$(docker ps -q --filter "publish=$dayline_port")" ]];
   }; then
-    echo 'An Nginx entry port is already occupied. Existing services were not stopped.' >&2; exit 1;
+    echo 'A requested application or entry port is already occupied. Existing services were not stopped.' >&2; exit 1;
   fi
-done
+}
+dayline_check_port "$DAYLINE_APP_PORT" "$dayline_old_app"
+if [[ "$NGINX_MODE" == container ]]; then
+  dayline_check_port "$DAYLINE_HTTP_PORT" "$dayline_old_gateway"
+  dayline_check_port "$DAYLINE_HTTPS_PORT" "$dayline_old_gateway"
+fi
 while IFS='=' read -r dayline_key dayline_value; do export "$dayline_key=$dayline_value"; done < "$dayline_release/.database.env"
 dayline_db_exec=(docker exec --env PGUSER --env PGDATABASE --env PGPASSWORD \
   --env DAYLINE_DATABASE_NAME --env DAYLINE_DATABASE_USER --env DAYLINE_DATABASE_PASSWORD)
@@ -117,7 +144,7 @@ dayline_existing_id="$(dayline_compose ps -aq app)"
 if [[ -n "$dayline_existing_id" && ! -f "$dayline_previous/.deploy.env" ]]; then
   echo 'An application already uses this Compose project without a tracked release.' >&2; exit 1;
 fi
-if [[ -f "$dayline_previous/.deploy.env" ]]; then
+if [[ -n "$dayline_old_app" ]]; then
   dayline_old_compose stop app
   dayline_stopped=true
 fi
@@ -130,7 +157,7 @@ dayline_compose run --rm --no-deps app node apps/api/node_modules/prisma/build/i
   echo 'Migration failed; inspect the private migration.log.' >&2; exit 1;
 }
 dayline_started=true
-dayline_compose up -d --no-deps --wait --wait-timeout 180 app gateway
+dayline_compose up -d --no-deps --wait --wait-timeout 180 "${dayline_services[@]}"
 curl --fail --silent --show-error --connect-timeout 10 --max-time 20 \
   --dump-header "$dayline_release/public-health.headers" --output "$dayline_release/public-health.json" \
   "$SITE_URL/health/ready"

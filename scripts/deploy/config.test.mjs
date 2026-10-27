@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import { test, before, after } from 'node:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, cp, access, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
-import { deploymentConfig, validateOriginTls } from './config.mjs';
+import {
+  deploymentConfig,
+  validateOriginTls,
+  writeDeploymentFiles,
+} from './config.mjs';
 import { validateDispatch } from './dispatch.mjs';
 
 const password = 'special$#@:/ \'double"value';
@@ -122,10 +126,10 @@ test('dispatch rejects option injection and unpinned images before starting SSH'
     { DEPLOY_USER: 'user;bad' },
     { DAYLINE_IMAGE: 'ghcr.io/example/dayline:latest' },
     { DEPLOY_KNOWN_HOSTS: '' },
-    { TLS_KEY: '' },
     { SITE_URL: 'http://example.com' },
   ])
     assert.throws(() => validateDispatch({ ...env, ...override }));
+  validateDispatch({ ...env, TLS_CERT: '', TLS_KEY: '' });
 });
 
 test('validates gateway ports and a hostname safe for an Nginx configuration', () => {
@@ -133,11 +137,17 @@ test('validates gateway ports and a hostname safe for an Nginx configuration', (
   assert.equal(result.deployment.DAYLINE_HTTP_PORT, '80');
   assert.equal(result.deployment.DAYLINE_HTTPS_PORT, '443');
   assert.equal(result.deployment.DAYLINE_PROXY_NETWORK, 'dayline-proxy');
+  assert.equal(result.deployment.NGINX_MODE, 'host');
+  assert.equal(
+    config({ NGINX_MODE: 'container' }).deployment.NGINX_MODE,
+    'container',
+  );
   for (const overrides of [
     { NGINX_HTTP_PORT: '443' },
     { NGINX_HTTPS_PORT: '13000' },
     { NGINX_HTTPS_PORT: '443;evil' },
     { NGINX_BIND_ADDRESS: 'untrusted-value' },
+    { NGINX_MODE: 'unknown' },
   ])
     assert.throws(() => config(overrides));
   assert.throws(() => config({}, 'https://bad$(value).example'), /SITE_URL/);
@@ -220,4 +230,43 @@ test('rejects expired and wrong-hostname certificates before deployment', () => 
       ),
     /start/,
   );
+});
+
+test('host mode renders an example without reading or storing TLS credentials', async () => {
+  const input = join(tlsDirectory, 'host-input');
+  const output = join(tlsDirectory, 'host-output');
+  await cp(
+    new URL('../../infra/nginx', import.meta.url),
+    join(input, 'infra/nginx'),
+    { recursive: true },
+  );
+  await writeDeploymentFiles(config(), input, output);
+  const example = await readFile(
+    join(output, 'nginx/host.conf.example'),
+    'utf8',
+  );
+  assert.match(example, /proxy_pass http:\/\/127\.0\.0\.1:13000;/);
+  assert.match(example, /dayline\.example\.com/);
+  assert.equal((await stat(join(output, '.runtime.env'))).mode & 0o777, 0o600);
+  await assert.rejects(access(join(output, 'tls')));
+  await assert.rejects(access(join(output, 'nginx/default.conf')));
+  assert.match(
+    await readFile(join(output, '.deploy.env'), 'utf8'),
+    /^NGINX_MODE=host$/m,
+  );
+});
+
+test('container mode still requires a certificate before publishing runtime files', async () => {
+  const input = join(tlsDirectory, 'container-input');
+  const output = join(tlsDirectory, 'container-output');
+  await cp(
+    new URL('../../infra/nginx', import.meta.url),
+    join(input, 'infra/nginx'),
+    { recursive: true },
+  );
+  await assert.rejects(
+    writeDeploymentFiles(config({ NGINX_MODE: 'container' }), input, output),
+    /TLS_CERT and TLS_KEY/,
+  );
+  await assert.rejects(access(join(output, '.runtime.env')));
 });
