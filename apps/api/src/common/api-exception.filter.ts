@@ -3,6 +3,8 @@ import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import type { ApiErrorResult } from '@dayline/contracts';
 import { AppError } from './app-error.js';
+import { errorDiagnostics } from './error-diagnostics.js';
+import { requestLogRoute } from './request-logging.js';
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
@@ -40,9 +42,13 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
     if (status >= 500) {
       this.logger.error({
+        code,
         message: 'Request failed',
         requestId: request.requestId,
-        errorType: exception instanceof Error ? exception.name : 'unknown',
+        method: request.method,
+        route: requestLogRoute(request),
+        status,
+        ...errorDiagnostics(exception),
       });
     }
     const body: ApiErrorResult = {

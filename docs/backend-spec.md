@@ -1189,6 +1189,12 @@ active --申请并确认--> pending_deletion --未到期撤销--> active
 
 结构化日志默认记录 requestId、路由模板、状态、耗时、必要的内部用户 / 操作 ID；不记录完整请求 / 响应体。导入错误可以记录行号和错误码，不记录私人标题或整行。
 
+统一复用 Nest ConsoleLogger，输出 ISO 8601 UTC 毫秒时间、INFO / WARN / ERROR、进程号、模块名与结构化事件；请求范围内的模块日志自动关联 requestId。HTTP 2xx / 3xx 使用 INFO，4xx 使用 WARN，5xx 使用 ERROR，统一遵守 LOG_LEVEL。认证操作名仅按固定白名单记录，不输出原始 URL / query 或重置链接中的 token。
+
+5xx、邮件与维护失败、启动失败记录异常类型、稳定错误码及脱敏调用栈（源码位置与有限 cause 链）；不直接打印可能含 SQL、收件地址或凭据的异常 message、SDK 原始对象、请求 / 响应体。普通参数错误、认证失败和限流保留 WARN 摘要，不打印调用栈。邮件受理记录 MAIL_ACCEPTED 和可用的 messageId，不等于最终送达；失败记录 MAIL_DELIVERY_FAILED、提供商安全错误分类及 HTTP 状态。
+
+`/health/live`、`/health/ready` 的 `GET` / `HEAD` 请求返回 2xx 时不输出访问日志，失败时仍按日志等级保留记录；健康检查频率与业务请求日志不受此降噪规则影响。
+
 首版至少可观察：请求错误率与耗时、数据库连接使用、认证失败 / 限流、微信及邮件依赖失败、导入 / 合并成功失败、清理任务积压及最近成功时间。日志不是完整生活记录审计仓库。
 
 `/health/ready` 不能泄露数据库地址或密钥。必要的内部诊断由运行日志提供，不建立首版运营后台。

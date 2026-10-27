@@ -39,10 +39,14 @@ it('records a fixed mail failure event without recipient, link or provider error
       'https://example.com/reset?token=private',
     ),
   ).rejects.toMatchObject({ code: 'MAIL_UNAVAILABLE' });
-  expect(logged).toHaveBeenCalledWith({
-    code: 'MAIL_DELIVERY_FAILED',
-    purpose: 'password_reset',
-  });
+  expect(logged).toHaveBeenCalledWith(
+    expect.objectContaining({
+      code: 'MAIL_DELIVERY_FAILED',
+      purpose: 'password_reset',
+      errorType: 'Error',
+      stack: expect.stringContaining('security.test.ts:'),
+    }),
+  );
   expect(JSON.stringify(logged.mock.calls)).not.toContain('person@example.com');
   expect(JSON.stringify(logged.mock.calls)).not.toContain('private');
 });

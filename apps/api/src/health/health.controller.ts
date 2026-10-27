@@ -47,11 +47,13 @@ export class HealthController {
         }),
       ]);
       return { status: 'ok' };
-    } catch {
+    } catch (cause) {
       throw new AppError(
         503,
         'DATABASE_UNAVAILABLE',
         '数据库或基础迁移尚未就绪。',
+        undefined,
+        cause,
       );
     }
   }

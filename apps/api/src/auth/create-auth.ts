@@ -1,4 +1,6 @@
 import { requestBudget } from '../common/request-budget.js';
+import { Logger } from '@nestjs/common';
+import { errorDiagnostics } from '../common/error-diagnostics.js';
 import type { SecurityService } from '../security/security.service.js';
 import { AppError } from '../common/app-error.js';
 import { decodeJwt } from 'jose';
@@ -29,10 +31,23 @@ export function createAuth(
     provider: 'postgresql',
     transaction: true,
   });
+  const logger = new Logger('Authentication');
   return betterAuth({
     ...authModelOptions,
     appName: '日序 Dayline',
-    logger: { disabled: true },
+    logger: {
+      disabled: config.environment === 'test',
+      level: 'warn',
+      log: (level, _message, ...args: unknown[]) => {
+        const event = {
+          code: level === 'error' ? 'AUTH_INTERNAL_ERROR' : 'AUTH_WARNING',
+          ...errorDiagnostics(args.find((arg) => arg instanceof Error)),
+        };
+        // Better Auth's free-form messages and arguments can contain credentials.
+        if (level === 'error') logger.error(event);
+        else if (level === 'warn') logger.warn(event);
+      },
+    },
     secret: config.authSecret,
     baseURL: config.authBaseUrl,
     basePath: '/api/auth',

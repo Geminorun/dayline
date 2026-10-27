@@ -8,5 +8,5 @@ export interface TransactionalMail {
 }
 
 export interface MailTransport {
-  send(mail: TransactionalMail): Promise<void>;
+  send(mail: TransactionalMail): Promise<void | { messageId: string }>;
 }

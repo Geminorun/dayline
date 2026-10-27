@@ -107,6 +107,10 @@ PR 和其他分支的手动 CI 只运行检查，不推送镜像或产生可发�
 
 运行配置、备份文件 0600，私有目录 0700；不自动展示私人日志或上传 Actions artifact。入口应避免记录包含验证 / 重置凭据的原始 URL，示例关闭对应日志，诊断使用应用安全结构化记录。传输目录结束清理，断网遗留 `~/.dayline-incoming.*` 可由运营者通过控制台清理。
 
+应用日志带 UTC 时间、INFO / WARN / ERROR、模块名和 requestId；成功健康检查不记录请求日志，失败仍记录。排查邮件时查找 MAIL_ACCEPTED / MAIL_DELIVERY_FAILED；前者只代表传输受理，最终送达仍以 Resend 状态为准。LOG_LEVEL 默认 info，warn 隐藏成功业务请求，error 只保留错误。
+
+代码修改必须提交并推送 main，等待 Dayline checks 成功后，新建一次 Deploy Dayline 才会更新服务器；重启旧容器或重跑旧版本任务不会带入新代码。可用 `docker exec dayline-app-1 printenv RELEASE_REVISION` 核对运行版本，用 `docker logs --follow --since 5m dayline-app-1` 查看最近日志；旧日志会保留，不能仅凭历史健康检查记录判断新版本是否生效。
+
 发布前备份不代替每日备份。上线前设置每日任务、至少七天保留、受控异地副本并定期在新库恢复。脚本不自动删除历史发布、镜像或备份，恢复闸门见 [自托管与恢复](self-hosting.md)。
 
 ## 本机验证

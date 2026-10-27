@@ -7,7 +7,11 @@ import { FileMailTransport } from '../src/mail/file-mail.transport.js';
 import { MailService } from '../src/mail/mail.service.js';
 import { ResendMailTransport } from '../src/mail/resend-mail.transport.js';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
 describe('transactional mail', () => {
   it('sends through the Resend SDK with a timeout and the configured sender', async () => {
@@ -22,12 +26,13 @@ describe('transactional mail', () => {
       'test-only-key',
       'Dayline <noreply@example.com>',
     );
-    await transport.send({
+    const receipt = await transport.send({
       to: 'reader@example.com',
       subject: 'test',
       text: 'hello',
       html: '<p>hello</p>',
     });
+    expect(receipt).toEqual({ messageId: 'test-mail-id' });
     const call = fetchMock.mock.calls[0];
     if (!call) throw new Error('Missing Resend request');
     expect(call[0]).toBe('https://api.resend.com/emails');
@@ -88,6 +93,10 @@ describe('transactional mail', () => {
   });
 
   it('sanitizes mail provider errors', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -95,6 +104,7 @@ describe('transactional mail', () => {
           JSON.stringify({
             name: 'validation_error',
             message: 'private provider detail',
+            statusCode: 422,
           }),
           { status: 422, headers: { 'content-type': 'application/json' } },
         ),
@@ -111,6 +121,11 @@ describe('transactional mail', () => {
         html: '<p>test</p>',
         text: 'test',
       }),
-    ).rejects.toThrow('not accepted by the mail provider');
+    ).rejects.toMatchObject({
+      message: 'Transactional mail was not accepted by the mail provider.',
+      providerCode: 'validation_error',
+      providerStatus: 422,
+    });
+    expect(consoleError).not.toHaveBeenCalled();
   });
 });

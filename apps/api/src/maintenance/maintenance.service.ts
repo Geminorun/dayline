@@ -7,6 +7,7 @@ import { Clock } from '../records/clock.js';
 import { APP_CONFIG } from '../config/environment.js';
 import type { AppConfig } from '../config/environment.js';
 import { AppError } from '../common/app-error.js';
+import { errorDiagnostics } from '../common/error-diagnostics.js';
 
 const json = (v: unknown): Prisma.InputJsonValue =>
   JSON.parse(JSON.stringify(v)) as Prisma.InputJsonValue;
@@ -87,12 +88,13 @@ export class MaintenanceService
           hasMore: more,
         });
         this.target = undefined;
-      } catch {
+      } catch (cause) {
         this.failures++;
         this.logger.error({
           message: 'Maintenance batch failed; will retry',
           code: 'MAINTENANCE_FAILED',
           target: this.target,
+          ...errorDiagnostics(cause),
         });
         throw new AppError(
           503,

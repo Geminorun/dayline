@@ -1,4 +1,6 @@
 import { requestBudget } from '../common/request-budget.js';
+import { Logger } from '@nestjs/common';
+import { errorDiagnostics } from '../common/error-diagnostics.js';
 import type { SecurityService } from '../security/security.service.js';
 import type { NextFunction, Request, Response } from 'express';
 import { fromNodeHeaders } from 'better-auth/node';
@@ -20,6 +22,11 @@ export function nativeAuthPolicy(
   access: AuthAccessService,
   security: SecurityService,
 ) {
+  const logger = new Logger('Authentication');
+  function reportFailure(cause: unknown) {
+    if (!(cause instanceof AppError) || cause.getStatus() >= 500)
+      logger.error({ code: 'AUTH_UNAVAILABLE', ...errorDiagnostics(cause) });
+  }
   return async (
     request: Request,
     response: Response,
@@ -43,6 +50,7 @@ export function nativeAuthPolicy(
     try {
       security.native(request, response);
     } catch (error) {
+      reportFailure(error);
       if (error instanceof AppError)
         response
           .status(error.getStatus())
@@ -85,6 +93,7 @@ export function nativeAuthPolicy(
       }
       next();
     } catch (error) {
+      reportFailure(error);
       if (error instanceof AppError) {
         response
           .status(error.getStatus())

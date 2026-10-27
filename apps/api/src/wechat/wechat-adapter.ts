@@ -35,11 +35,13 @@ export class ProductionWechatAdapter implements WechatAdapter {
       });
       if (!response.ok) throw new Error('upstream');
       return response;
-    } catch {
+    } catch (cause) {
       throw new AppError(
         503,
         'WECHAT_UNAVAILABLE',
         '微信服务暂不可用，请重新获取登录凭据后重试。',
+        undefined,
+        cause,
       );
     }
   }

@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { AppError } from './app-error.js';
 export const requestBudget = new AsyncLocalStorage<{
   deadline: number;
+  requestId?: string;
   verificationUserId?: string;
   authEmail?: string;
   authPath?: string;

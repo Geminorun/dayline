@@ -1,5 +1,4 @@
 import 'reflect-metadata';
-import { requestBudget } from './common/request-budget.js';
 import { MaintenanceService } from './maintenance/maintenance.service.js';
 import { randomUUID } from 'node:crypto';
 import { RequestMethod } from '@nestjs/common';
@@ -15,6 +14,8 @@ import { ApiExceptionFilter } from './common/api-exception.filter.js';
 import { businessConfirmationBodyParser } from './common/business-body-parser.js';
 import { ApiResultInterceptor } from './common/api-result.interceptor.js';
 import { createStaticSite } from './web/static-site.js';
+import { ApplicationLogger } from './common/application-logger.js';
+import { requestLogging } from './common/request-logging.js';
 
 export async function createApp(
   config: AppConfig,
@@ -30,20 +31,11 @@ export async function createApp(
       logger:
         config.environment === 'test'
           ? false
-          : config.logLevel === 'error'
-            ? ['error']
-            : config.logLevel === 'warn'
-              ? ['warn', 'error']
-              : ['log', 'warn', 'error'],
+          : new ApplicationLogger(config.logLevel),
     },
   );
   app.set('trust proxy', config.trustProxy.length ? config.trustProxy : false);
   app.use(helmet({ referrerPolicy: { policy: 'no-referrer' } }));
-  app.use((request: Request, _response: Response, next: NextFunction) => {
-    if (!request.path.startsWith('/health/'))
-      app.get(MaintenanceService).assertReady();
-    next();
-  });
   app.use((request: Request, response: Response, next: NextFunction) => {
     const methodOverride = request.get('X-Dayline-Method-Override');
     if (
@@ -60,34 +52,11 @@ export async function createApp(
       response.setHeader('X-Dayline-Revision', config.releaseRevision);
     next();
   });
-  app.use((request: Request, response: Response, next: NextFunction) => {
-    const batch =
-      /^\/api\/v1\/(?:imports(?:\/|$)|guest-admissions(?:\/|$)|account-merges(?:\/|$))/.test(
-        request.path,
-      );
-    const timeout = batch ? config.batchTimeoutMs : config.requestTimeoutMs;
-    // No res.setTimeout/Promise.race: a response is only completed after its transaction settles.
-    const start = performance.now();
-    response.on('finish', () => {
-      if (config.environment !== 'test' && config.logLevel === 'info') {
-        const route: unknown = request.route?.path;
-        process.stdout.write(
-          JSON.stringify({
-            requestId: request.requestId,
-            method: request.method,
-            route:
-              typeof route === 'string'
-                ? route
-                : request.path.startsWith('/api/auth')
-                  ? '/api/auth/:operation'
-                  : 'unmatched',
-            status: response.statusCode,
-            durationMs: Math.round(performance.now() - start),
-          }) + '\n',
-        );
-      }
-    });
-    requestBudget.run({ deadline: Date.now() + timeout }, next);
+  app.use(requestLogging(config));
+  app.use((request: Request, _response: Response, next: NextFunction) => {
+    if (!request.path.startsWith('/health/'))
+      app.get(MaintenanceService).assertReady();
+    next();
   });
   app.use(businessConfirmationBodyParser);
   app.enableCors({

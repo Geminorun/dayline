@@ -2,6 +2,8 @@ import { AppError } from '../common/app-error.js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { MAIL_TRANSPORT } from './mail-transport.js';
 import type { MailTransport } from './mail-transport.js';
+import { errorDiagnostics } from '../common/error-diagnostics.js';
+import { MailDeliveryError } from './mail-delivery.error.js';
 
 @Injectable()
 export class MailService {
@@ -52,22 +54,36 @@ export class MailService {
         'Internal identity addresses cannot receive transactional mail.',
       );
     }
+    const purpose =
+      action === '重置密码'
+        ? 'password_reset'
+        : action === '验证待绑定邮箱'
+          ? 'email_binding'
+          : 'email_verification';
     try {
-      await this.transport.send({
+      const receipt = await this.transport.send({
         to,
         subject,
         text: `${description}\n\n${action}：${url}\n\n链接有时效，请勿转发。`,
         html: `<p>${description}</p><p><a href="${escapeHtml(url)}">${action}</a></p><p>链接有时效，请勿转发。</p>`,
       });
-    } catch {
+      this.logger.log({
+        code: 'MAIL_ACCEPTED',
+        purpose,
+        ...(receipt ? { messageId: receipt.messageId } : {}),
+      });
+    } catch (cause) {
       this.logger.error({
         code: 'MAIL_DELIVERY_FAILED',
-        purpose:
-          action === '重置密码'
-            ? 'password_reset'
-            : action === '验证待绑定邮箱'
-              ? 'email_binding'
-              : 'email_verification',
+        purpose,
+        ...(cause instanceof MailDeliveryError
+          ? {
+              provider: 'resend',
+              providerCode: cause.providerCode,
+              providerStatus: cause.providerStatus,
+            }
+          : {}),
+        ...errorDiagnostics(cause),
       });
       throw new AppError(
         503,
