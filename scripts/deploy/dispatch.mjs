@@ -15,6 +15,8 @@ export function validateDispatch(env) {
     'DEPLOY_SSH_KEY',
     'DEPLOY_KNOWN_HOSTS',
     'APP_ENV',
+    'TLS_CERT',
+    'TLS_KEY',
     'DAYLINE_IMAGE',
     'RELEASE_REVISION',
     'REGISTRY_USER',
@@ -118,6 +120,8 @@ async function dispatch() {
     await command('mkdir', ['-m', '700', payload]);
     for (const [file, keyName] of Object.entries({
       'app.env': 'APP_ENV',
+      'tls.crt': 'TLS_CERT',
+      'tls.key': 'TLS_KEY',
       'site.url': 'SITE_URL',
       'image.ref': 'DAYLINE_IMAGE',
       revision: 'RELEASE_REVISION',
@@ -135,6 +139,7 @@ async function dispatch() {
       resolve('.'),
       'compose.production.yaml',
       'scripts/deploy',
+      'infra/nginx',
       '-C',
       payload,
       '.',

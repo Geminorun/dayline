@@ -6,5 +6,8 @@
 !**/.env.example
 **/.local
 **/*.dump
+**/*.pem
+**/*.key
+**/*.crt
 **/coverage
 apps/api/src/generated

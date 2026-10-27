@@ -85,7 +85,7 @@
 | 事务邮件 | Resend；已确认 |
 | 仓库管理 | pnpm workspace |
 
-生产采用 GitHub Actions 构建发布，Web 与 API 合并为一个 Docker 镜像，复用现有 PostgreSQL 17 容器；初始化时仅在专用库 / 角色不存在时创建。HTTPS 沿用服务器反向代理，操作细节见 [部署指南](deployment.md)。业务逻辑不绑定域名、供应商或机器规格。首版不增加微服务、WebSocket 推送、Redis 或专用离线同步引擎。
+生产采用 GitHub Actions 构建发布，Web 与 API 合并为一个 Docker 镜像，复用现有 PostgreSQL 17 容器；初始化时仅在专用库 / 角色不存在时创建。HTTPS 使用独立 Nginx 入口容器和 Cloudflare Origin 证书，橙云开启并使用 Full (strict)，操作细节见 [部署指南](deployment.md)。业务逻辑不绑定域名、供应商或机器规格。首版不增加微服务、WebSocket 推送、Redis 或专用离线同步引擎。
 
 ### 2.2 工程边界
 
@@ -144,6 +144,7 @@ dayline/
 | D-027 | 2026-10-26 | 小程序不要求离线记录；Web 采用缓存和草稿手动提交（第 25 题 A） | 取代原自动补传要求：网络恢复只自动刷新，未提交草稿必须手动提交，游客本机记录规则保留 |
 | D-028 | 2026-10-26 | 接受简化存储方案 | PostgreSQL、不加 Redis、不建增量同步日志表；保留稳定 ID、版本检查及导入 / 合并幂等记录 |
 | D-029 | 2026-10-27 | 自动部署方案 | Web 与 API 一个 Docker 镜像，复用现有 PostgreSQL 17 容器并按需初始化专用数据库；Actions 构建、GHCR、SSH 发布，密码由用户提供，部署用户纳入 Secret |
+| D-030 | 2026-10-27 | HTTPS 入口 | 使用 Nginx，保留 Web / API 单应用镜像；Cloudflare DNS 橙云 + Origin 证书，TLS_CERT / TLS_KEY 纳入 GitHub Secrets，入口由生产 Compose 管理 |
 
 ### 2.4 可替换的部署背景
 

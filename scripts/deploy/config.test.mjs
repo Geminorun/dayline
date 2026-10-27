@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { deploymentConfig } from './config.mjs';
+import { test, before, after } from 'node:test';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { generateKeyPairSync } from 'node:crypto';
+import { deploymentConfig, validateOriginTls } from './config.mjs';
 import { validateDispatch } from './dispatch.mjs';
 
 const password = 'special$#@:/ \'double"value';
@@ -104,6 +109,8 @@ test('dispatch rejects option injection and unpinned images before starting SSH'
     DEPLOY_SSH_KEY: 'test-key',
     DEPLOY_KNOWN_HOSTS: 'test-host',
     APP_ENV: 'test',
+    TLS_CERT: 'test-certificate',
+    TLS_KEY: 'test-private-key',
     DAYLINE_IMAGE: 'ghcr.io/example/dayline@sha256:' + 'a'.repeat(64),
     RELEASE_REVISION: 'b'.repeat(40),
     REGISTRY_USER: 'example',
@@ -115,7 +122,102 @@ test('dispatch rejects option injection and unpinned images before starting SSH'
     { DEPLOY_USER: 'user;bad' },
     { DAYLINE_IMAGE: 'ghcr.io/example/dayline:latest' },
     { DEPLOY_KNOWN_HOSTS: '' },
+    { TLS_KEY: '' },
     { SITE_URL: 'http://example.com' },
   ])
     assert.throws(() => validateDispatch({ ...env, ...override }));
+});
+
+test('validates gateway ports and a hostname safe for an Nginx configuration', () => {
+  const result = config();
+  assert.equal(result.deployment.DAYLINE_HTTP_PORT, '80');
+  assert.equal(result.deployment.DAYLINE_HTTPS_PORT, '443');
+  assert.equal(result.deployment.DAYLINE_PROXY_NETWORK, 'dayline-proxy');
+  for (const overrides of [
+    { NGINX_HTTP_PORT: '443' },
+    { NGINX_HTTPS_PORT: '13000' },
+    { NGINX_HTTPS_PORT: '443;evil' },
+    { NGINX_BIND_ADDRESS: 'untrusted-value' },
+  ])
+    assert.throws(() => config(overrides));
+  assert.throws(() => config({}, 'https://bad$(value).example'), /SITE_URL/);
+});
+
+let tlsDirectory;
+let cert;
+let key;
+before(async () => {
+  tlsDirectory = await mkdtemp(join(tmpdir(), 'dayline-tls-test-'));
+  execFileSync(
+    'openssl',
+    [
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-nodes',
+      '-days',
+      '1',
+      '-subj',
+      '/CN=dayline.example.com',
+      '-addext',
+      'subjectAltName=DNS:dayline.example.com',
+      '-keyout',
+      join(tlsDirectory, 'key.pem'),
+      '-out',
+      join(tlsDirectory, 'cert.pem'),
+    ],
+    { stdio: 'ignore' },
+  );
+  cert = await readFile(join(tlsDirectory, 'cert.pem'), 'utf8');
+  key = await readFile(join(tlsDirectory, 'key.pem'), 'utf8');
+});
+after(async () => {
+  await rm(tlsDirectory, { recursive: true, force: true });
+});
+test('accepts a matching currently valid certificate covering the site hostname', () => {
+  validateOriginTls(cert, key, 'dayline.example.com');
+});
+test('rejects mismatched or invalid PEM keys without returning private values', () => {
+  const otherKey = generateKeyPairSync('ed25519').privateKey.export({
+    type: 'pkcs8',
+    format: 'pem',
+  });
+  assert.throws(
+    () => validateOriginTls(cert, otherKey, 'dayline.example.com'),
+    /do not match/,
+  );
+  assert.throws(
+    () =>
+      validateOriginTls(cert, 'private-invalid-value', 'dayline.example.com'),
+    (error) =>
+      !error.message.includes('private-invalid-value') &&
+      /TLS_KEY/.test(error.message),
+  );
+});
+test('rejects expired and wrong-hostname certificates before deployment', () => {
+  assert.throws(
+    () => validateOriginTls(cert, key, 'other.example.com'),
+    /hostname/,
+  );
+  assert.throws(
+    () =>
+      validateOriginTls(
+        cert,
+        key,
+        'dayline.example.com',
+        Date.now() + 3 * 86400000,
+      ),
+    /expiry/,
+  );
+  assert.throws(
+    () =>
+      validateOriginTls(
+        cert,
+        key,
+        'dayline.example.com',
+        Date.now() - 3 * 86400000,
+      ),
+    /start/,
+  );
 });

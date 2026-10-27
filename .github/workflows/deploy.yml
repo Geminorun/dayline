@@ -75,6 +75,8 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           APP_ENV: ${{ secrets.APP_ENV }}
+          TLS_CERT: ${{ secrets.TLS_CERT }}
+          TLS_KEY: ${{ secrets.TLS_KEY }}
           DAYLINE_IMAGE: ${{ needs.build.outputs.image }}
           RELEASE_REVISION: ${{ github.sha }}
           REGISTRY_USER: ${{ github.actor }}

@@ -15,7 +15,10 @@ import {
 } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
-import { createServer as createTlsServer } from 'node:https';
+import {
+  createServer as createTlsServer,
+  request as httpsRequest,
+} from 'node:https';
 import { request as httpRequest } from 'node:http';
 import { createServer as createTcpServer } from 'node:net';
 
@@ -82,6 +85,7 @@ const sql = (text, database = 'postgres') =>
     ],
     { capture: true },
   );
+const reservedPorts = new Set();
 async function availablePort() {
   const server = createTcpServer();
   await new Promise((resolveListen, reject) => {
@@ -92,9 +96,14 @@ async function availablePort() {
   assert.ok(address && typeof address === 'object');
   const port = address.port;
   await new Promise((resolveClose) => server.close(resolveClose));
+  if (reservedPorts.has(port)) return availablePort();
+  reservedPorts.add(port);
   return port;
 }
 const appPort = await availablePort();
+const httpPort = await availablePort();
+const httpsPort = await availablePort();
+const publicOrigin = `https://localhost:${httpsPort}`;
 let stripRevision = false;
 let tlsServer;
 const password = randomBytes(24).toString('hex') + '$#@:/ \'double"value';
@@ -110,6 +119,9 @@ const fields = {
   RESEND_API_KEY: 'deployment-verification-no-mail',
   MAIL_FROM: 'Dayline <noreply@example.com>',
   APP_PORT: String(appPort),
+  NGINX_HTTP_PORT: String(httpPort),
+  NGINX_HTTPS_PORT: String(httpsPort),
+  NGINX_BIND_ADDRESS: '127.0.0.1',
   DEPLOY_PROJECT: project,
 };
 async function writeEnvironment(overrides = {}) {
@@ -133,35 +145,69 @@ async function deploy(label, allowFailure = false) {
     },
   });
 }
+async function tlsFetch(url, headers = {}, body) {
+  const ca = await readFile(join(directory, 'tls.crt'));
+  return new Promise((resolveResponse, reject) => {
+    const req = httpsRequest(
+      url,
+      { ca, headers, method: body ? 'POST' : 'GET' },
+      (response) => {
+        let body = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+          body += chunk;
+        });
+        response.on('end', () =>
+          resolveResponse({
+            status: response.statusCode,
+            headers: new globalThis.Headers(response.headers),
+            text: async () => body,
+          }),
+        );
+      },
+    );
+    req.on('error', reject);
+    req.end(body);
+  });
+}
 async function publicCheck(expectedRevision) {
-  const origin = `http://127.0.0.1:${appPort}`;
+  const origin = publicOrigin;
+  const redirect = await fetch(
+    `http://127.0.0.1:${httpPort}/day?test=redirect`,
+    { redirect: 'manual' },
+  );
+  assert.equal(redirect.status, 308);
+  assert.equal(
+    redirect.headers.get('location'),
+    publicOrigin + '/day?test=redirect',
+  );
   for (const path of [
     '/day',
     '/entries/example',
     '/account-deletion',
     '/auth/email-binding?token=private-query',
   ]) {
-    const response = await fetch(origin + path);
+    const response = await tlsFetch(origin + path);
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('x-dayline-revision'), expectedRevision);
     assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
     assert.match(response.headers.get('cache-control') || '', /no-store/);
     assert.match(await response.text(), /id="app"/);
   }
-  const html = await (await fetch(origin + '/day')).text();
+  const html = await (await tlsFetch(origin + '/day')).text();
   const asset = html.match(/src="([^"]+\.js)"/)?.[1];
   assert.ok(asset);
-  const response = await fetch(origin + asset);
+  const response = await tlsFetch(origin + asset);
   assert.equal(response.status, 200);
   assert.match(response.headers.get('cache-control') || '', /immutable/);
-  assert.equal((await fetch(origin + '/api/v1/snapshot')).status, 401);
+  assert.equal((await tlsFetch(origin + '/api/v1/snapshot')).status, 401);
   for (const path of [
     '/assets/missing.js',
     '/.env',
     '/api/v1/missing',
     '/health/missing',
   ])
-    assert.equal((await fetch(origin + path)).status, 404);
+    assert.equal((await tlsFetch(origin + path)).status, 404);
 }
 let postgresStarted = false;
 try {
@@ -189,7 +235,7 @@ try {
   let ready = false;
   for (let attempt = 0; attempt < 60; attempt++) {
     const result = await docker(
-      ['exec', container, 'pg_isready', '-U', 'postgres'],
+      ['exec', container, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres'],
       { allowFailure: true },
     );
     if (result.code === 0) {
@@ -206,6 +252,7 @@ try {
   await cp('scripts/deploy', join(bundle, 'scripts/deploy'), {
     recursive: true,
   });
+  await cp('infra/nginx', join(bundle, 'infra/nginx'), { recursive: true });
   await writeFile(join(bundle, 'image.ref'), image, { mode: 0o600 });
   await writeEnvironment();
   await command('openssl', [
@@ -225,6 +272,8 @@ try {
     '-out',
     join(directory, 'tls.crt'),
   ]);
+  await cp(join(directory, 'tls.crt'), join(bundle, 'tls.crt'));
+  await cp(join(directory, 'tls.key'), join(bundle, 'tls.key'));
   tlsServer = createTlsServer(
     {
       key: await readFile(join(directory, 'tls.key')),
@@ -258,13 +307,27 @@ try {
   );
   const address = tlsServer.address();
   assert.ok(address && typeof address === 'object');
-  await writeFile(
-    join(bundle, 'site.url'),
-    `https://localhost:${address.port}`,
-    { mode: 0o600 },
-  );
+  await writeFile(join(bundle, 'site.url'), publicOrigin, { mode: 0o600 });
   await deploy('first');
   await publicCheck(revision('first'));
+  // A fixed nonexistent identity with changing forged IP headers must still
+  // hit the real peer's failure limit. Sign-in never sends provider email.
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const response = await tlsFetch(
+      publicOrigin + '/api/auth/sign-in/email',
+      {
+        'Content-Type': 'application/json',
+        Origin: publicOrigin,
+        'CF-Connecting-IP': `192.0.2.${attempt + 1}`,
+        'X-Forwarded-For': `198.51.100.${attempt + 1}`,
+      },
+      JSON.stringify({
+        email: `gateway-${suffix}@example.com`,
+        password: 'not-a-real-account-password',
+      }),
+    );
+    assert.equal(response.status, attempt < 5 ? 401 : 429);
+  }
   assert.equal(
     await sql(
       'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL',
@@ -289,6 +352,13 @@ try {
     '42',
   );
   assert.equal(await sql('SELECT value FROM public.unrelated_marker'), '17');
+  await writeFile(join(bundle, 'tls.key'), 'invalid-private-value', {
+    mode: 0o600,
+  });
+  const invalidTls = await deploy('invalid-tls', true);
+  assert.notEqual(invalidTls.code, 0);
+  await publicCheck(revision('second'));
+  await cp(join(directory, 'tls.key'), join(bundle, 'tls.key'));
   await writeEnvironment({ POSTGRES_PASSWORD: 'incorrect-password' });
   const wrongPassword = await deploy('wrong-password', true);
   assert.notEqual(wrongPassword.code, 0);
@@ -299,6 +369,11 @@ try {
   );
   await writeEnvironment();
   stripRevision = true;
+  await writeFile(
+    join(bundle, 'site.url'),
+    `https://localhost:${address.port}`,
+    { mode: 0o600 },
+  );
   const wrongPublicEndpoint = await deploy('wrong-public-endpoint', true);
   assert.notEqual(wrongPublicEndpoint.code, 0);
   assert.equal(
@@ -310,6 +385,7 @@ try {
     '42',
   );
   stripRevision = false;
+  await writeFile(join(bundle, 'site.url'), publicOrigin, { mode: 0o600 });
   await deploy('recovered');
   await publicCheck(revision('recovered'));
   assert.equal(
@@ -330,6 +406,10 @@ try {
     postgres: 17,
     migrations: 8,
     singleContainerWebAndApi: true,
+    nginxTlsGateway: true,
+    forgedForwardingHeadersRejected: true,
+    certificateAndKeyValidated: true,
+    invalidCertificatePreservesRunningRelease: true,
     repeatedDeploymentPreservesData: true,
     wrongPasswordPreservesRunningRelease: true,
     stalePublicEndpointRejected: true,
@@ -363,7 +443,7 @@ try {
     /* Keep private evidence when no deployment completed. */
   }
   if (postgresStarted) await docker(['rm', '-f', container]);
-  await docker(['network', 'rm', `${project}-database`], {
+  await docker(['network', 'rm', `${project}-database`, `${project}-proxy`], {
     allowFailure: true,
   });
   await log.close();

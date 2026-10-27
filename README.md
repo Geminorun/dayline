@@ -56,7 +56,7 @@ pnpm dev
 
 ## 生产部署
 
-生产复用服务器已有 PostgreSQL 17 / 18 容器，缺少专用账号 / 数据库时自动创建；Web 与 API 共用一个镜像。GitHub Actions 手动触发，检查后构建、推送 GHCR、SSH 发布、备份与迁移、验证公共入口。配置集中为六项 GitHub Secrets，具体见 [部署指南](docs/deployment.md) 和 [APP_ENV 模板](infra/production.env.example)。`compose.production.yaml` 是独立文件，不再与开发用 `compose.yaml` 叠加。
+生产复用服务器已有 PostgreSQL 17 / 18 容器，缺少专用账号 / 数据库时自动创建；Web 与 API 共用一个镜像，Nginx 入口容器使用 Cloudflare Origin 证书提供 HTTPS。GitHub Actions 手动触发，检查后构建、推送 GHCR、SSH 发布、备份与迁移、验证公共入口。配置集中为八项 GitHub Secrets（原六项加 TLS_CERT / TLS_KEY），具体见 [部署指南](docs/deployment.md) 和 [APP_ENV 模板](infra/production.env.example)。`compose.production.yaml` 是独立文件，不再与开发用 `compose.yaml` 叠加。
 
 ## 邮件配置
 

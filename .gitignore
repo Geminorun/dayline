@@ -151,3 +151,8 @@ vite.config.ts.timestamp-*
 # Local development mail previews contain one-time verification links.
 .local/
 apps/api/src/generated/
+
+# TLS material is supplied through deployment secrets.
+*.pem
+*.key
+*.crt
