@@ -1,7 +1,19 @@
 <script setup lang="ts">
 import AdmissionReview from './AdmissionReview.vue';
 import { useRouter, useRoute } from 'vue-router';
-import { watch, onMounted, onBeforeUnmount } from 'vue';
+import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
+import {
+  businessToday,
+  coversDate,
+  dateOrdinal,
+  isCalendarDate,
+  shiftDate,
+  shiftMonth,
+  weekDates,
+} from '@dayline/core';
+import { recordView } from './records/view-state';
+import PlannerIcon from './components/PlannerIcon.vue';
+import PlannerSymbols from './components/PlannerSymbols.vue';
 import { useWorkspace } from './records/workspace';
 import { useAccount } from './account';
 const workspace = useWorkspace();
@@ -61,55 +73,278 @@ onBeforeUnmount(() => {
   window.removeEventListener('online', online);
   document.removeEventListener('visibilitychange', visible);
 });
+const accountMenu = ref<HTMLDetailsElement | null>(null);
+watch(
+  () => route.fullPath,
+  () => {
+    if (accountMenu.value) accountMenu.value.open = false;
+  },
+);
+const calendarMonth = ref('');
+const calendarToday = computed(
+  () => workspace.snapshot.value?.businessToday ?? businessToday(),
+);
+const calendarSelected = computed(
+  () => recordView.selectedDate || calendarToday.value,
+);
+watch(
+  calendarSelected,
+  (date) => {
+    calendarMonth.value = date.slice(0, 7) + '-01';
+  },
+  { immediate: true },
+);
+const monthLabel = computed(
+  () =>
+    `${Number(calendarMonth.value.slice(0, 4))}年 ${Number(calendarMonth.value.slice(5, 7))}月`,
+);
+const calendarDays = computed(() => {
+  if (!isCalendarDate(calendarMonth.value)) return [];
+  const start = weekDates(calendarMonth.value)[0];
+  if (!start) return [];
+  return Array.from({ length: 42 }, (_, i) =>
+    dateOrdinal(start) + i <= dateOrdinal('9999-12-31')
+      ? shiftDate(start, i)
+      : null,
+  );
+});
+watch(
+  () => [route.path, mode.value, current.value?.id] as const,
+  ([path]) => {
+    if (path === '/timeline') recordView.activeView = 'timeline';
+    else if (path === '/day') recordView.activeView = 'day';
+  },
+  { immediate: true },
+);
+const pageLabel = computed(() =>
+  route.path.startsWith('/timeline')
+    ? '时间轴'
+    : ({
+        '/day': '每日回看',
+        '/categories':
+          recordView.activeView === 'timeline' ? '时间轴' : '每日回看',
+        '/trash': '回收站',
+        '/drafts': '草稿',
+        '/data': '数据管理',
+        '/settings': '设置',
+        '/identity': '账号关联',
+        '/account-deletion': '账号注销',
+      }[route.path] ??
+      (route.path.startsWith('/entries/')
+        ? recordView.activeView === 'timeline'
+          ? '时间轴'
+          : '每日回看'
+        : '账号')),
+);
+function selectCalendar(date: string) {
+  recordView.selectedDate = date;
+  void router.push({ path: '/day', query: { date } });
+}
+function selectCategory(id: string) {
+  recordView.filter.categoryId = recordView.filter.categoryId === id ? '' : id;
+  if (!['/day', '/timeline'].includes(route.path)) void router.push('/day');
+}
+function categoryCount(id: string) {
+  return (
+    workspace.snapshot.value?.entries.filter(
+      (entry) =>
+        entry.categoryId === id &&
+        (route.path === '/timeline' ||
+          coversDate(entry, calendarSelected.value, calendarToday.value)),
+    ).length ?? 0
+  );
+}
+function hasEvent(date: string) {
+  return workspace.snapshot.value?.entries.some((entry) =>
+    coversDate(entry, date, calendarToday.value),
+  );
+}
 </script>
 <template>
-  <div class="shell">
+  <PlannerSymbols />
+  <div class="app-shell">
     <aside class="sidebar">
-      <RouterLink class="brand" to="/day">日序 <span>Dayline</span></RouterLink>
-      <p class="muted">记录持续的经历</p>
-      <nav aria-label="主导航">
-        <RouterLink to="/day">每日回看</RouterLink
-        ><RouterLink to="/entries">全部记录</RouterLink
-        ><RouterLink to="/timeline">时间轴</RouterLink
-        ><RouterLink to="/categories">分类</RouterLink
-        ><RouterLink to="/trash">回收站</RouterLink
-        ><RouterLink to="/drafts">草稿</RouterLink
-        ><RouterLink to="/settings">设置</RouterLink>
+      <RouterLink class="brand" to="/day" aria-label="日序首页"
+        ><span class="brand-mark"><i></i><i></i><i></i></span
+        ><span>日序<small>DAYLINE</small></span></RouterLink
+      >
+      <div class="workspace-label">我的生活足迹</div>
+      <nav class="primary-nav" aria-label="主导航">
+        <RouterLink
+          class="nav-item"
+          :class="{
+            active: recordView.activeView === 'day',
+          }"
+          to="/day"
+          ><PlannerIcon name="calendar" />每日回看<span class="nav-dot"></span
+        ></RouterLink>
+        <RouterLink
+          class="nav-item"
+          :class="{ active: recordView.activeView === 'timeline' }"
+          to="/timeline"
+          ><PlannerIcon name="timeline" />时间轴<span class="nav-dot"></span
+        ></RouterLink>
       </nav>
-      <p class="sidebar-note">回看每天的重点。</p>
-    </aside>
-    <div class="main-shell">
-      <header>
-        <span>{{
-          mode === 'guest'
-            ? '游客 · 仅本机保存'
-            : `${current?.displayName ?? '账号'} · 云端记录`
-        }}</span>
-        <nav aria-label="账号导航">
-          <button
-            v-if="mode === 'account'"
-            class="secondary"
-            @click="switchMode('guest')"
+      <div class="mini-calendar">
+        <div class="mini-header">
+          <strong>{{ monthLabel }}</strong>
+          <div>
+            <button
+              class="icon-btn small"
+              aria-label="上个月"
+              :disabled="calendarMonth === '0001-01-01'"
+              @click="calendarMonth = shiftMonth(calendarMonth, -1)"
+            >
+              <PlannerIcon class="flip" name="chevron" />
+            </button>
+            <button
+              class="icon-btn small"
+              aria-label="下个月"
+              :disabled="calendarMonth === '9999-12-01'"
+              @click="calendarMonth = shiftMonth(calendarMonth, 1)"
+            >
+              <PlannerIcon name="chevron" />
+            </button>
+          </div>
+        </div>
+        <div class="mini-weekdays">
+          <span
+            v-for="day in ['一', '二', '三', '四', '五', '六', '日']"
+            :key="day"
+            >{{ day }}</span
           >
-            继续游客</button
-          ><RouterLink v-if="!current" to="/auth/login">登录</RouterLink
-          ><RouterLink v-if="!current" to="/auth/register">注册</RouterLink
-          ><RouterLink to="/settings">{{
-            current?.displayName ?? '设置'
-          }}</RouterLink>
-        </nav>
+        </div>
+        <div class="mini-days">
+          <template v-for="(date, index) in calendarDays" :key="date ?? index"
+            ><button
+              v-if="date"
+              :aria-label="date"
+              :aria-pressed="date === calendarSelected"
+              :class="{
+                'other-month': date.slice(0, 7) !== calendarMonth.slice(0, 7),
+                selected: date === calendarSelected,
+                'is-today': date === calendarToday,
+                'has-event': hasEvent(date),
+              }"
+              @click="selectCalendar(date)"
+            >
+              {{ Number(date.slice(8)) }}</button
+            ><span v-else></span
+          ></template>
+        </div>
+      </div>
+      <div class="side-section-title">
+        事项分类<RouterLink class="manage-link" to="/categories"
+          >管理</RouterLink
+        >
+      </div>
+      <div class="side-categories">
+        <div
+          v-for="category in workspace.snapshot.value?.categories ?? []"
+          :key="category.id"
+          class="side-category-row"
+          :style="{ '--category-color': category.color }"
+        >
+          <button
+            class="side-category"
+            :class="{ active: recordView.filter.categoryId === category.id }"
+            :aria-pressed="recordView.filter.categoryId === category.id"
+            @click="selectCategory(category.id)"
+          >
+            <i class="category-dot"></i><span>{{ category.name }}</span
+            ><span>{{ categoryCount(category.id) || '–' }}</span>
+          </button>
+          <RouterLink
+            class="icon-btn small"
+            :to="{ path: '/categories', query: { edit: category.id } }"
+            :aria-label="`编辑分类${category.name}`"
+            ><PlannerIcon name="edit"
+          /></RouterLink>
+          <RouterLink
+            class="icon-btn small"
+            :to="{ path: '/categories', query: { remove: category.id } }"
+            :aria-label="`删除分类${category.name}`"
+            ><PlannerIcon name="trash"
+          /></RouterLink>
+        </div>
+      </div>
+      <div class="sidebar-bottom">
+        <div class="little-spark">✧</div>
+        <p>时间有迹，生活有序。</p>
+        <span>为每一件小事，留一点空间。</span>
+      </div>
+      <div class="storage-label">
+        <span></span
+        >{{ mode === 'guest' ? '记录保存在当前浏览器' : '账号记录 · 云端保存' }}
+      </div>
+    </aside>
+    <main>
+      <header class="topbar">
+        <div class="breadcrumb">
+          我的空间<span>/</span><strong>{{ pageLabel }}</strong>
+        </div>
+        <div class="topbar-end">
+          <button
+            class="save-state"
+            :disabled="workspace.loading.value || workspace.busy.value"
+            aria-label="刷新记录"
+            @click="workspace.load()"
+          >
+            <PlannerIcon name="clock" />{{
+              workspace.loading.value
+                ? '正在读取记录'
+                : mode === 'guest'
+                  ? '游客 · 仅本机保存'
+                  : '云端记录 · 点击刷新'
+            }}
+          </button>
+          <details ref="accountMenu" class="account-menu">
+            <summary class="account-entry">
+              <span class="avatar">{{
+                current?.displayName?.slice(0, 1) ?? '客'
+              }}</span
+              ><span>{{ current?.displayName ?? '游客 · 登录' }}</span>
+            </summary>
+            <section class="profile-popover" aria-label="账号与更多功能">
+              <div class="profile-heading">
+                {{ current ? '我的账号' : '欢迎使用日序' }}
+              </div>
+              <strong class="profile-name">{{
+                current?.displayName ?? '每一段经历，都值得记录'
+              }}</strong>
+              <div class="account-actions">
+                <RouterLink v-if="!current" class="button" to="/auth/login"
+                  >登录</RouterLink
+                ><RouterLink v-if="!current" class="button" to="/auth/register"
+                  >注册</RouterLink
+                >
+                <button
+                  v-if="mode === 'account'"
+                  class="button"
+                  @click="switchMode('guest')"
+                >
+                  继续游客
+                </button>
+                <RouterLink class="button" to="/settings">设置</RouterLink
+                ><RouterLink class="button" to="/data">导入 / 导出</RouterLink
+                ><RouterLink class="button" to="/drafts">草稿</RouterLink
+                ><RouterLink class="button" to="/trash">回收站</RouterLink>
+              </div>
+            </section>
+          </details>
+        </div>
       </header>
-      <main>
+      <div class="main-content">
         <section
           v-if="identityState === 'unknown' || identityState === 'expired'"
           class="notice"
           role="status"
         >
           <p>身份尚未确认，私人缓存已隐藏；原账号草稿仍保留。</p>
-          <button class="secondary" @click="workspace.retryIdentity">
+          <button class="button subtle" @click="workspace.retryIdentity">
             重新验证已有会话</button
           ><RouterLink to="/auth/login">重新登录</RouterLink
-          ><button class="secondary" @click="switchMode('guest')">
+          ><button class="button subtle" @click="switchMode('guest')">
             明确继续游客
           </button>
         </section>
@@ -146,8 +381,10 @@ onBeforeUnmount(() => {
                 : 'business'
             "
         /></RouterView>
-      </main>
-      <footer>日序 Dayline · 每段经历都值得回看</footer>
-    </div>
+        <footer class="page-footer">
+          <span>日序 DAYLINE</span><span>慢慢来，每一天都算数。</span>
+        </footer>
+      </div>
+    </main>
   </div>
 </template>

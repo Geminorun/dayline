@@ -123,7 +123,7 @@ describe('routed auth and complete timeline accessibility', () => {
     const first = wrapper.findAll('.date-list button')[0];
     await first?.trigger('click');
     expect(wrapper.emitted('day')?.[0]?.[0]).toBe(focusDays[0]?.date);
-    await wrapper.findAll('.timeline-name')[1]?.trigger('click');
+    await wrapper.findAll('.timeline-name')[1]?.get('button').trigger('click');
     expect(wrapper.emitted('edit')?.[0]?.[0]).toMatchObject({ id: '0' });
     const viewport = wrapper.get('.timeline-viewport');
     viewport.element.scrollTop = 28000;
@@ -163,6 +163,7 @@ describe('routed auth and complete timeline accessibility', () => {
       routes: [
         { path: '/entries/:id', component: RecordsPage },
         { path: '/entries', component: RecordsPage },
+        { path: '/day', component: RecordsPage },
         {
           path: '/:pathMatch(.*)*',
           component: { template: '<div>other</div>' },
@@ -174,17 +175,21 @@ describe('routed auth and complete timeline accessibility', () => {
     const wrapper = mount(App, { global: { plugins: [router] } });
     wrappers.push(wrapper);
     await flushPromises();
-    expect(wrapper.get('input').element.value).toBe('深链事项');
-    await wrapper.get('input').setValue('尚未提交的深链输入');
+    expect(
+      wrapper.get<HTMLInputElement>('dialog form input').element.value,
+    ).toBe('深链事项');
+    await wrapper
+      .get<HTMLInputElement>('dialog form input')
+      .setValue('尚未提交的深链输入');
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     await button(wrapper, '关闭编辑').trigger('click');
     await flushPromises();
     expect(router.currentRoute.value.path).toBe('/entries/' + id);
-    expect(wrapper.get('input').element.value).toBe('尚未提交的深链输入');
-    await wrapper.get('form').trigger('submit');
-    await vi.waitFor(() =>
-      expect(router.currentRoute.value.path).toBe('/entries'),
-    );
+    expect(
+      wrapper.get<HTMLInputElement>('dialog form input').element.value,
+    ).toBe('尚未提交的深链输入');
+    await wrapper.get('dialog form').trigger('submit');
+    await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/day'));
     await flushPromises();
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(

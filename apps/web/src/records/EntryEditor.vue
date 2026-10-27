@@ -27,11 +27,14 @@ import {
   localEnvironment,
 } from '../adapters/local-repository';
 import { api } from '../api';
+import PlannerIcon from '../components/PlannerIcon.vue';
 const route = inject(routeLocationKey, undefined);
 const props = defineProps<{
   entry: EntryDto | null;
   categories: CategoryDto[];
   today: string;
+  initialDate?: string;
+  initialCategoryId?: string;
   local?: boolean;
   draft?: EntryDraft | undefined;
   save: (
@@ -52,13 +55,20 @@ const base = ref<EntryDto | null>(props.draft?.baseEntry ?? props.entry),
   );
 const title = ref(props.draft?.fields.title ?? props.entry?.title ?? ''),
   startDate = ref(
-    props.draft?.fields.startDate ?? props.entry?.startDate ?? props.today,
+    props.draft?.fields.startDate ??
+      props.entry?.startDate ??
+      props.initialDate ??
+      props.today,
   ),
   endDate = ref(props.draft?.fields.endDate ?? props.entry?.endDate ?? ''),
   categoryId = ref(
     props.draft?.fields.categoryId ??
       props.entry?.categoryId ??
-      props.categories[0]?.id ??
+      (props.categories.some(
+        (category) => category.id === props.initialCategoryId,
+      )
+        ? props.initialCategoryId
+        : props.categories[0]?.id) ??
       '',
   );
 const error = ref(''),
@@ -495,12 +505,25 @@ async function copy() {
 </script>
 <template>
   <section class="record-panel" aria-labelledby="editor-title">
-    <h2 id="editor-title">{{ entry ? '编辑事项' : '新建事项' }}</h2>
+    <div class="modal-header">
+      <div>
+        <span class="eyebrow">A LITTLE CHAPTER</span>
+        <h2 id="editor-title">{{ entry ? '编辑事项' : '新建事项' }}</h2>
+      </div>
+      <button
+        class="icon-btn"
+        type="button"
+        aria-label="关闭编辑"
+        @click="emit('close')"
+      >
+        <PlannerIcon name="close" />
+      </button>
+    </div>
     <p>
       {{
         local
-          ? '游客记录仅在本机保存；存储成功后才会显示在正式列表。'
-          : '输入仅暂存本机草稿；点击保存才发送到服务器，联网不会自动补传。'
+          ? '游客记录保存在当前浏览器。'
+          : '未保存的修改会暂存为本机草稿，点击保存后提交。'
       }}
     </p>
     <p v-if="status" role="status" class="notice">{{ status }}</p>
@@ -578,6 +601,7 @@ async function copy() {
       <label
         >标题（{{ [...title].length }} / 100 字）<input
           v-model="title"
+          placeholder="例如：玩《文明 VI》、阅读《置身事内》"
           required
       /></label>
       <div class="form-grid">

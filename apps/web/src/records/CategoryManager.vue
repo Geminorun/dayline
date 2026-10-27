@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, inject, watch } from 'vue';
+import { routeLocationKey } from 'vue-router';
+import PlannerIcon from '../components/PlannerIcon.vue';
 import type { CategoryDto, EntryDto, GuestMutation } from '@dayline/contracts';
 import { createCategorySchema } from '@dayline/contracts';
 import { records, errorMessage } from './record-service';
@@ -13,6 +15,8 @@ const props = defineProps<{
   ) => Promise<unknown>;
   busy: boolean;
 }>();
+const creating = ref(false);
+const route = inject(routeLocationKey, undefined);
 const name = ref('');
 const color = ref('#8B80D8');
 const edit = ref<CategoryDto | null>(null);
@@ -21,12 +25,14 @@ const newId = ref(crypto.randomUUID());
 const deleting = ref<CategoryDto | null>(null);
 const targetId = ref('');
 function start(category: CategoryDto) {
+  creating.value = true;
   edit.value = category;
   name.value = category.name;
   color.value = category.color;
   error.value = '';
 }
 function reset() {
+  creating.value = false;
   edit.value = null;
   name.value = '';
   color.value = '#8B80D8';
@@ -97,6 +103,25 @@ async function remove() {
     error.value = errorMessage(cause);
   }
 }
+watch(
+  () => [route?.query.edit, route?.query.remove, props.categories] as const,
+  () => {
+    const editing = props.categories.find(
+      (category) => category.id === route?.query.edit,
+    );
+    if (editing) start(editing);
+    const removing = props.categories.find(
+      (category) => category.id === route?.query.remove,
+    );
+    if (removing) {
+      deleting.value = removing;
+      targetId.value =
+        props.categories.find((category) => category.id !== removing.id)?.id ??
+        '';
+    }
+  },
+  { immediate: true },
+);
 </script>
 <template>
   <section class="record-panel">
@@ -127,19 +152,16 @@ async function remove() {
         </button>
       </li>
     </ul>
-    <form @submit.prevent="save">
+    <button v-if="!creating" class="add-inline" @click="creating = true">
+      <PlannerIcon name="plus" />添加分类
+    </button>
+    <form v-else @submit.prevent="save">
       <h3>{{ edit ? '修改分类' : '新建分类' }}</h3>
       <label>分类名称<input v-model="name" required :disabled="busy" /></label
       ><label
         >分类颜色<input v-model="color" type="color" :disabled="busy" /></label
       ><button :disabled="busy">{{ edit ? '保存分类修改' : '创建分类' }}</button
-      ><button
-        v-if="edit"
-        type="button"
-        class="secondary"
-        :disabled="busy"
-        @click="reset"
-      >
+      ><button type="button" class="secondary" :disabled="busy" @click="reset">
         取消修改
       </button>
     </form>
