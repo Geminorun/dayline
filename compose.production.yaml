@@ -1,5 +1,4 @@
-# Default deployment: reuse the host Nginx and existing PostgreSQL.
-# Add compose.nginx.yaml only for explicit NGINX_MODE=container.
+# Reuse the host Nginx and existing PostgreSQL; only the application is managed here.
 services:
   app:
     image: ${DAYLINE_IMAGE:?Set DAYLINE_IMAGE to the release image digest}

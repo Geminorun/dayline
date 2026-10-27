@@ -11,10 +11,14 @@ COPY --chown=node:node packages/api-client/package.json packages/api-client/pack
 RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
     npm install --global pnpm@11.25.0 --strict-ssl=true && pnpm install --frozen-lockfile --prod=false
-COPY --chown=node:node . .
+COPY --chown=node:node tsconfig.base.json ./
+COPY --chown=node:node packages ./packages
+COPY --chown=node:node apps/api ./apps/api
+COPY --chown=node:node apps/web ./apps/web
 RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
-    pnpm db:generate && pnpm build
+    pnpm db:generate && pnpm build:shared && \
+    pnpm --filter @dayline/api build && pnpm --filter @dayline/web build
 RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
     CI=true pnpm --filter @dayline/api deploy --legacy --prod /runtime-api
@@ -24,8 +28,8 @@ FROM node:24.19.0-bookworm-slim AS runtime
 WORKDIR /app
 COPY --from=build --chown=node:node /runtime-api ./apps/api
 COPY --from=build --chown=node:node /app/apps/web/dist ./apps/web/dist
-COPY --from=build --chown=node:node /app/scripts/deploy ./scripts/deploy
-COPY --from=build --chown=node:node /app/infra/container-entrypoint.sh ./infra/container-entrypoint.sh
+COPY --chown=node:node scripts/deploy ./scripts/deploy
+COPY --chown=node:node infra/container-entrypoint.sh ./infra/container-entrypoint.sh
 ENV HOST=0.0.0.0 PORT=3000 WEB_DIST_DIR=/app/apps/web/dist NODE_USE_ENV_PROXY=1
 USER node
 EXPOSE 3000

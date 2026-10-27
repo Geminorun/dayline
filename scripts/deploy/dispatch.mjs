@@ -118,8 +118,6 @@ async function dispatch() {
     await command('mkdir', ['-m', '700', payload]);
     for (const [file, keyName] of Object.entries({
       'app.env': 'APP_ENV',
-      'tls.crt': 'TLS_CERT',
-      'tls.key': 'TLS_KEY',
       'site.url': 'SITE_URL',
       'image.ref': 'DAYLINE_IMAGE',
       revision: 'RELEASE_REVISION',
@@ -140,7 +138,6 @@ async function dispatch() {
       '-C',
       resolve('.'),
       'compose.production.yaml',
-      'compose.nginx.yaml',
       'scripts/deploy',
       'infra/nginx',
       '-C',

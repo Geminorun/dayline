@@ -146,6 +146,7 @@ dayline/
 | D-029 | 2026-10-27 | 自动部署方案 | Web 与 API 一个 Docker 镜像，复用现有 PostgreSQL 17 容器并按需初始化专用数据库；Actions 构建、GHCR、SSH 发布，密码由用户提供，部署用户纳入 Secret |
 | D-030 | 2026-10-27 | HTTPS 入口 | 使用 Nginx，保留 Web / API 单应用镜像；Cloudflare DNS 橙云 + Origin 证书，TLS_CERT / TLS_KEY 纳入 GitHub Secrets，入口由生产 Compose 管理 |
 | D-031 | 2026-10-27 | 复用本机 Nginx | 默认 host 模式仅部署应用，不启动入口容器、不修改 / 重载本机 Nginx 或证书；默认六项 Secrets，container 模式保留为可选 |
+| D-032 | 2026-10-27 | 精简发布并彻底移除 Nginx 容器 | 取代 D-030 / D-031 的容器入口分支：只复用本机 Nginx，证书由宿主管理，不再传输 TLS Secrets；main CI 一次测试、构建和演练，手动发布仅复用相同 SHA 的已验证镜像并执行备份、迁移和健康检查 |
 
 ### 2.4 可替换的部署背景
 

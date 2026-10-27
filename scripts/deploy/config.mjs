@@ -2,8 +2,6 @@ import process from 'node:process';
 import console from 'node:console';
 import { createRequire } from 'node:module';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { X509Certificate, createPrivateKey } from 'node:crypto';
-import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { join, resolve, dirname } from 'node:path';
 
@@ -27,10 +25,8 @@ const allowed = new Set([
   'WECHAT_MINIAPP_ENV',
   'APP_PORT',
   'DEPLOY_PROJECT',
+  // Accept the former default without requiring existing APP_ENV to be edited.
   'NGINX_MODE',
-  'NGINX_HTTP_PORT',
-  'NGINX_HTTPS_PORT',
-  'NGINX_BIND_ADDRESS',
 ]);
 
 export function deploymentConfig(text, siteUrl, image, revision, proxyIp = '') {
@@ -40,6 +36,10 @@ export function deploymentConfig(text, siteUrl, image, revision, proxyIp = '') {
     if (/[\r\n\0]/.test(value))
       throw new Error(`APP_ENV field must be a single line: ${key}`);
   }
+  if (input.NGINX_MODE && input.NGINX_MODE !== 'host')
+    throw new Error(
+      'Only the existing host Nginx is supported; remove NGINX_MODE.',
+    );
   function required(key) {
     if (!input[key]?.trim()) throw new Error(`Missing APP_ENV field: ${key}`);
     return input[key];
@@ -80,20 +80,6 @@ export function deploymentConfig(text, siteUrl, image, revision, proxyIp = '') {
   const port = input.APP_PORT || '13000';
   if (!/^\d+$/.test(port) || Number(port) < 1024 || Number(port) > 65535)
     throw new Error('APP_PORT must be between 1024 and 65535.');
-  const nginxMode = input.NGINX_MODE || 'host';
-  if (!['host', 'container'].includes(nginxMode))
-    throw new Error('NGINX_MODE must be host or container.');
-  const httpPort = input.NGINX_HTTP_PORT || '80';
-  const httpsPort = input.NGINX_HTTPS_PORT || '443';
-  for (const value of [httpPort, httpsPort]) {
-    if (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 65535)
-      throw new Error('Nginx ports must be between 1 and 65535.');
-  }
-  if (new Set([Number(port), Number(httpPort), Number(httpsPort)]).size !== 3)
-    throw new Error('Application and Nginx ports must be distinct.');
-  const bindAddress = input.NGINX_BIND_ADDRESS || '0.0.0.0';
-  if (!['0.0.0.0', '127.0.0.1'].includes(bindAddress))
-    throw new Error('NGINX_BIND_ADDRESS must be 0.0.0.0 or 127.0.0.1.');
   if (proxyIp && !/^(?:\d{1,3}\.){3}\d{1,3}$/.test(proxyIp))
     throw new Error('Invalid Docker proxy gateway.');
   const db = identifier('POSTGRES_DB', 'dayline');
@@ -156,14 +142,9 @@ export function deploymentConfig(text, siteUrl, image, revision, proxyIp = '') {
       DAYLINE_DATABASE_PASSWORD: password,
     },
     deployment: {
-      NGINX_MODE: nginxMode,
       DAYLINE_IMAGE: image,
       DAYLINE_APP_PORT: port,
       DAYLINE_DB_NETWORK: `${project}-database`,
-      DAYLINE_PROXY_NETWORK: `${project}-proxy`,
-      DAYLINE_HTTP_PORT: httpPort,
-      DAYLINE_HTTPS_PORT: httpsPort,
-      DAYLINE_NGINX_BIND: bindAddress,
       DEPLOY_PROJECT: project,
       POSTGRES_CONTAINER: container,
       POSTGRES_DB: db,
@@ -175,33 +156,6 @@ export function deploymentConfig(text, siteUrl, image, revision, proxyIp = '') {
   };
 }
 
-export function validateOriginTls(certPem, keyPem, hostname, now = Date.now()) {
-  let certificate;
-  let key;
-  try {
-    certificate = new X509Certificate(certPem);
-    key = createPrivateKey(keyPem);
-  } catch {
-    throw new Error(
-      'TLS_CERT and TLS_KEY must contain a PEM certificate and an unencrypted private key.',
-    );
-  }
-  if (!certificate.checkPrivateKey(key))
-    throw new Error('TLS_CERT and TLS_KEY do not match.');
-  const matches = isIP(hostname)
-    ? certificate.checkIP(hostname)
-    : certificate.checkHost(hostname);
-  if (!matches)
-    throw new Error('TLS_CERT does not cover the SITE_URL hostname.');
-  if (
-    now < Date.parse(certificate.validFrom) ||
-    now >= Date.parse(certificate.validTo)
-  )
-    throw new Error(
-      'TLS_CERT is not currently valid; check its start and expiry dates.',
-    );
-}
-
 export async function writeDeploymentFiles(config, inputDirectory, directory) {
   const hostname = new URL(config.runtime.WEB_BASE_URL).hostname;
   const realIpConfig = await readFile(
@@ -209,37 +163,12 @@ export async function writeDeploymentFiles(config, inputDirectory, directory) {
     'utf8',
   );
   await mkdir(join(directory, 'nginx'), { mode: 0o700, recursive: true });
-  const containerMode = config.deployment.NGINX_MODE === 'container';
-  if (containerMode) {
-    let cert;
-    let key;
-    try {
-      cert = await readFile(join(inputDirectory, 'tls.crt'), 'utf8');
-      key = await readFile(join(inputDirectory, 'tls.key'), 'utf8');
-    } catch {
-      throw new Error(
-        'TLS_CERT and TLS_KEY are required for NGINX_MODE=container.',
-      );
-    }
-    validateOriginTls(cert, key, hostname);
-    await mkdir(join(directory, 'tls'), { mode: 0o700, recursive: true });
-    await writeFile(join(directory, 'tls/tls.crt'), cert, { mode: 0o600 });
-    await writeFile(join(directory, 'tls/tls.key'), key, { mode: 0o600 });
-  }
   const nginxTemplate = await readFile(
-    join(
-      inputDirectory,
-      'infra/nginx',
-      containerMode ? 'default.conf.template' : 'host.conf.template',
-    ),
+    join(inputDirectory, 'infra/nginx/host.conf.template'),
     'utf8',
   );
   await writeFile(
-    join(
-      directory,
-      'nginx',
-      containerMode ? 'default.conf' : 'host.conf.example',
-    ),
+    join(directory, 'nginx/host.conf.example'),
     nginxTemplate
       .replaceAll('@SITE_HOST@', hostname)
       .replaceAll('@SITE_URL@', config.runtime.WEB_BASE_URL)

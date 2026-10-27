@@ -24,8 +24,6 @@ import { createServer as createTcpServer } from 'node:net';
 import { startTestHostNginx } from './test-host-nginx.mjs';
 import { redactDiagnostics } from './deployment-diagnostics.mjs';
 
-const mode = process.env.DAYLINE_TEST_NGINX_MODE || 'host';
-assert.ok(['host', 'container'].includes(mode));
 const suffix = randomUUID().slice(0, 8);
 const project = `dayline-deploy-${suffix}`;
 const container = `${project}-postgres`;
@@ -125,11 +123,7 @@ const fields = {
   RESEND_API_KEY: 'deployment-verification-no-mail',
   MAIL_FROM: 'Dayline <noreply@example.com>',
   APP_PORT: String(appPort),
-  NGINX_HTTP_PORT: String(httpPort),
-  NGINX_HTTPS_PORT: String(httpsPort),
-  NGINX_BIND_ADDRESS: '127.0.0.1',
   DEPLOY_PROJECT: project,
-  NGINX_MODE: mode,
 };
 async function writeEnvironment(overrides = {}) {
   await writeFile(
@@ -144,7 +138,7 @@ const revision = (label) =>
   createHash('sha1').update(`${suffix}:${label}`).digest('hex');
 async function deploy(label, allowFailure = false) {
   checkpoint = `deploy ${label}`;
-  console.log(`[${mode}] ${checkpoint}`);
+  console.log(`[host] ${checkpoint}`);
   await writeFile(join(bundle, 'revision'), revision(label), { mode: 0o600 });
   return command('bash', [join(bundle, 'scripts/deploy/apply.sh'), bundle], {
     allowFailure,
@@ -265,7 +259,6 @@ try {
     'CREATE TABLE public.unrelated_marker(value integer); INSERT INTO public.unrelated_marker VALUES (17)',
   );
   await cp('compose.production.yaml', join(bundle, 'compose.production.yaml'));
-  await cp('compose.nginx.yaml', join(bundle, 'compose.nginx.yaml'));
   await cp('scripts/deploy', join(bundle, 'scripts/deploy'), {
     recursive: true,
   });
@@ -289,23 +282,16 @@ try {
     '-out',
     join(directory, 'tls.crt'),
   ]);
-  if (mode === 'container') {
-    await cp(join(directory, 'tls.crt'), join(bundle, 'tls.crt'));
-    await cp(join(directory, 'tls.key'), join(bundle, 'tls.key'));
-  } else {
-    hostNginx = await startTestHostNginx({
-      directory,
-      bundle,
-      appPort,
-      httpPort,
-      httpsPort,
-      publicOrigin,
-      project,
-      docker,
-      command,
-      log,
-    });
-  }
+  hostNginx = await startTestHostNginx({
+    directory,
+    bundle,
+    appPort,
+    httpPort,
+    httpsPort,
+    publicOrigin,
+    command,
+    log,
+  });
   tlsServer = createTlsServer(
     {
       key: await readFile(join(directory, 'tls.key')),
@@ -344,22 +330,20 @@ try {
   await deploy('first');
   await publicCheck(revision('first'));
   checkpoint = 'verify client IP handling';
-  if (mode === 'host') {
-    assert.equal(
-      await docker(
-        [
-          'ps',
-          '-aq',
-          '--filter',
-          `label=com.docker.compose.project=${project}`,
-          '--filter',
-          'label=com.docker.compose.service=gateway',
-        ],
-        { capture: true },
-      ),
-      '',
-    );
-  }
+  assert.equal(
+    await docker(
+      [
+        'ps',
+        '-aq',
+        '--filter',
+        `label=com.docker.compose.project=${project}`,
+        '--filter',
+        'label=com.docker.compose.service=gateway',
+      ],
+      { capture: true },
+    ),
+    '',
+  );
   // A fixed nonexistent identity with changing forged IP headers must still
   // hit the real peer's failure limit. Sign-in never sends provider email.
   for (let attempt = 0; attempt < 6; attempt++) {
@@ -378,26 +362,24 @@ try {
     );
     assert.equal(response.status, attempt < 5 ? 401 : 429);
   }
-  if (mode === 'host') {
-    // Real different loopback peers must remain distinct after host -> Docker
-    // forwarding. No trusted-IP test overrides or production debug routes.
-    for (let attempt = 0; attempt < 6; attempt++) {
-      const response = await tlsFetch(
-        publicOrigin + '/api/auth/sign-in/email',
-        {
-          'Content-Type': 'application/json',
-          Origin: publicOrigin,
-          'CF-Connecting-IP': '192.0.2.99',
-          'X-Forwarded-For': '198.51.100.99',
-        },
-        JSON.stringify({
-          email: `gateway-${suffix}@example.com`,
-          password: 'not-a-real-account-password',
-        }),
-        `127.0.0.${attempt + 2}`,
-      );
-      assert.equal(response.status, 401);
-    }
+  // Real different loopback peers must remain distinct after host -> Docker
+  // forwarding. No trusted-IP test overrides or production debug routes.
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const response = await tlsFetch(
+      publicOrigin + '/api/auth/sign-in/email',
+      {
+        'Content-Type': 'application/json',
+        Origin: publicOrigin,
+        'CF-Connecting-IP': '192.0.2.99',
+        'X-Forwarded-For': '198.51.100.99',
+      },
+      JSON.stringify({
+        email: `gateway-${suffix}@example.com`,
+        password: 'not-a-real-account-password',
+      }),
+      `127.0.0.${attempt + 2}`,
+    );
+    assert.equal(response.status, 401);
   }
   assert.equal(
     await sql(
@@ -423,15 +405,6 @@ try {
     '42',
   );
   assert.equal(await sql('SELECT value FROM public.unrelated_marker'), '17');
-  if (mode === 'container') {
-    await writeFile(join(bundle, 'tls.key'), 'invalid-private-value', {
-      mode: 0o600,
-    });
-    const invalidTls = await deploy('invalid-tls', true);
-    assert.notEqual(invalidTls.code, 0);
-    await publicCheck(revision('second'));
-    await cp(join(directory, 'tls.key'), join(bundle, 'tls.key'));
-  }
   await writeEnvironment({ POSTGRES_PASSWORD: 'incorrect-password' });
   const wrongPassword = await deploy('wrong-password', true);
   assert.notEqual(wrongPassword.code, 0);
@@ -480,13 +453,11 @@ try {
     postgres: 17,
     migrations: 8,
     singleContainerWebAndApi: true,
-    nginxMode: mode,
+    nginxMode: 'host',
     nginxTlsGateway: true,
-    independentHostNginxPreserved: mode === 'host',
-    hostForwardedClientIpsValidated: mode === 'host',
+    independentHostNginxPreserved: true,
+    hostForwardedClientIpsValidated: true,
     forgedForwardingHeadersRejected: true,
-    certificateAndKeyValidated: mode === 'container',
-    invalidCertificatePreservesRunningRelease: mode === 'container',
     repeatedDeploymentPreservesData: true,
     wrongPasswordPreservesRunningRelease: true,
     stalePublicEndpointRejected: true,
@@ -514,7 +485,7 @@ try {
     console.error(
       `${label}\n${redactDiagnostics(text, privateValues).slice(-12000)}`,
     );
-  console.error(`[${mode}] Failed during ${checkpoint}`);
+  console.error(`[host] Failed during ${checkpoint}`);
   report(
     'Smoke-test command output:',
     await readFile(join(directory, 'commands.log'), 'utf8'),
@@ -523,11 +494,7 @@ try {
     () => [],
   );
   for (const release of releases) {
-    for (const name of [
-      'nginx-validation.log',
-      'migration.log',
-      'database-init.log',
-    ]) {
+    for (const name of ['migration.log', 'database-init.log']) {
       const text = await readFile(
         join(serverDirectory, 'releases', release, name),
         'utf8',
@@ -577,9 +544,6 @@ try {
       join(current, '.deploy.env'),
       '-f',
       join(current, 'compose.production.yaml'),
-      ...(mode === 'container'
-        ? ['-f', join(current, 'compose.nginx.yaml')]
-        : []),
       'down',
     ]);
   } catch {
@@ -587,16 +551,8 @@ try {
   }
   if (hostNginx) await hostNginx.stop();
   if (postgresStarted) await docker(['rm', '-f', container]);
-  await docker(
-    [
-      'network',
-      'rm',
-      `${project}-database`,
-      ...(mode === 'container' ? [`${project}-proxy`] : []),
-    ],
-    {
-      allowFailure: true,
-    },
-  );
+  await docker(['network', 'rm', `${project}-database`], {
+    allowFailure: true,
+  });
   await log.close();
 }

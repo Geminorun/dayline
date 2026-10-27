@@ -14,27 +14,10 @@ export async function startTestHostNginx({
   httpPort,
   httpsPort,
   publicOrigin,
-  project,
-  docker,
   command,
   log,
 }) {
-  let binary = process.env.DAYLINE_TEST_HOST_NGINX;
-  if (!binary) {
-    const tool = `${project}-nginx-tool`;
-    await docker([
-      'create',
-      '--name',
-      tool,
-      'nginx:1.28.0@sha256:552e7481ca93ffccd046aa658dbbed22caefbc09c66fa7cd247cbb90b8a5c609',
-    ]);
-    try {
-      binary = join(directory, 'host-nginx');
-      await docker(['cp', `${tool}:/usr/sbin/nginx`, binary]);
-    } finally {
-      await docker(['rm', tool]);
-    }
-  }
+  const binary = process.env.DAYLINE_TEST_HOST_NGINX || 'nginx';
   const quote = (path) => '"' + path.replace(/[\\"$]/g, '\\$&') + '"';
   const site = (
     await readFile(join(bundle, 'infra/nginx/host.conf.template'), 'utf8')

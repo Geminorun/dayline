@@ -20,9 +20,9 @@ pnpm dev
 
 ## 生产发布
 
-生产流程、默认六项 GitHub Secrets、现有 PG 容器初始化及 HTTPS 入口要求以 [部署指南](deployment.md) 为准。`compose.production.yaml` 已改为独立生产文件，默认只包含 app；NGINX_MODE=container 才叠加独立入口文件；不要再与开发 `compose.yaml` 叠加，也不要创建第二个生产数据库或将 localhost 当作容器内的数据库。
+生产流程、默认六项 GitHub Secrets、现有 PG 容器初始化及 HTTPS 入口要求以 [部署指南](deployment.md) 为准。`compose.production.yaml` 是独立生产文件，只包含 app，Nginx 由宿主机管理；不要再与开发 `compose.yaml` 叠加，也不要创建第二个生产数据库或将 localhost 当作容器内的数据库。
 
-容器应用直接提供 Web / SPA 深链接，保留 API 的 no-store、安全响应头及不记录敏感 query 的日志。本机 Nginx 通过宿主回环端口转发至应用，API 仅信任宿主网关及回环地址。可选入口容器通过专用 proxy 网段连接，API 仅信任该网段。入口应仅信任 Cloudflare 官方网段提供的访客 IP，并覆盖转发头。应用诊断端口仅绑定宿主 `127.0.0.1:13000`，既有 PG 的端口和防火墙由原配置管理。
+容器应用直接提供 Web / SPA 深链接，保留 API 的 no-store、安全响应头及不记录敏感 query 的日志。本机 Nginx 通过宿主回环端口转发至应用，API 仅信任宿主网关及回环地址。入口应仅信任 Cloudflare 官方网段提供的访客 IP，并覆盖转发头。应用诊断端口仅绑定宿主 `127.0.0.1:13000`，既有 PG 的端口和防火墙由原配置管理。
 
 受管理云环境本机构建仍需使用 `--secret id=proxy_ca,src="$CODEX_PROXY_CERT"` 提供环境公开 CA。运行需要外部 HTTPS 的测试容器时同样挂载 CA 并设置 NODE_EXTRA_CA_CERTS；不要关闭 TLS 校验。GitHub 托管 runner 和普通服务器使用自己的正常系统信任，无需复制当前会话 CA 或代理凭据。
 

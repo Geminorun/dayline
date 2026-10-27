@@ -2,7 +2,7 @@
 
 默认复用服务器已有的本机 Nginx：Cloudflare 橙云 → 本机 Nginx / HTTPS → `127.0.0.1:13000` → Web + API 应用容器 → 已有 PostgreSQL 17 / 18。Web 与 API 共用一个镜像，数据库保持独立。
 
-`NGINX_MODE=host` 为默认模式。Workflow 只更新应用，不安装、启动、停止或重载本机 Nginx，不写 `/etc/nginx`，不管理本机证书或其他站点。也不会启动 Nginx 容器或占用 80 / 443。空服务器仍可显式选择 `NGINX_MODE=container`，见后文。
+只支持服务器本机 Nginx。Workflow 只更新应用，不安装、启动、停止或重载生产服务器的 Nginx，不写 `/etc/nginx`，不管理证书或其他站点，不占用 80 / 443。Nginx 容器、对应 Compose 文件、TLS Secrets 和相关演练已移除。
 
 ## 一次准备
 
@@ -62,39 +62,46 @@ sudo systemctl reload nginx
 | DEPLOY_KNOWN_HOSTS | 可信的完整 SSH known_hosts 记录 |
 | APP_ENV | [生产配置模板](../infra/production.env.example) 的多行内容 |
 
-APP_ENV 必填字段：`POSTGRES_CONTAINER`、`POSTGRES_PASSWORD`、`BETTER_AUTH_SECRET`、`ACTION_PROOF_SECRET`、`RESEND_API_KEY`、`MAIL_FROM`。使用 `NGINX_MODE=host`（省略时也默认 host）。TLS_CERT / TLS_KEY 在此模式不要求填写，已配置的旧 Secrets 不参与本机证书管理。
+APP_ENV 必填字段：`POSTGRES_CONTAINER`、`POSTGRES_PASSWORD`、`BETTER_AUTH_SECRET`、`ACTION_PROOF_SECRET`、`RESEND_API_KEY`、`MAIL_FROM`。不再需要 NGINX_MODE 或 Nginx 端口参数；已有的 `NGINX_MODE=host` 兼容保留，不影响发布。TLS_CERT / TLS_KEY 不再读取或传输，GitHub 中的旧值可以删除；证书由本机 Nginx 管理。
 
 数据库密码由运营者提供；两个应用密钥分别用独立的至少 32 字符随机值，生成后固定保存。可在可信本机分别执行 `openssl rand -hex 32`，不在每次发布时重新生成。数据库 / 应用角色默认 `dayline`，与数据库管理员分开，新角色不授予超级用户等管理权限。密码含 `#`、空格或引号时使用适当 dotenv 引号；禁止未知项、多行值或直接覆盖 DATABASE_URL。管理员密码不进入应用环境。
 
-## 可选：由 Compose 管理 Nginx 容器
-
-只有显式设置 `NGINX_MODE=container`，才叠加 [compose.nginx.yaml](../compose.nginx.yaml)，启动 Nginx 并绑定入口端口。此时需要额外 GitHub Secrets `TLS_CERT`、`TLS_KEY`（完整 PEM），总计八项；默认要求 80 / 443 空闲。已有本机 Nginx 的服务器应使用 host 模式。
-
-Cloudflare SSL/TLS → Origin Server → Create Certificate，可生成包含本站域名或相应通配符的 Origin 证书及未加密私钥，分别填入 TLS_CERT / TLS_KEY。保留真实换行，无需 Base64；证书到期前更新 Secrets 并重新发布。Origin 证书由 Cloudflare 信任，适合橙云；普通浏览器直接绕过 Cloudflare 访问源站可能不信任它。本模式不自动续期。
-
-容器模式在停机前检查证书域名、有效期、私钥匹配、Nginx 配置及端口。TLS 只读挂载入口容器，不放进镜像或应用环境。Nginx 通过专用 proxy 网段连接应用，API 仅信任该网段；宿主模式则只信任 Docker 宿主网关及回环地址。Nginx / 应用版本、端口等其他选项见模板。
-
-如果以前已经成功部署了受管 Nginx 容器，切换到 host 前需显式迁移入口并停用项目自己的 gateway；脚本发现仍运行的受管 gateway 会提前拒绝，不会自动停止它、删容器或接管本机 Nginx。由 host 切换为容器时，同样不会自动停止占用端口的本机服务。
-
 ## 发布过程
 
-Workflow 合入默认分支后，Actions → Deploy Dayline → Run workflow，选择可信分支 / 标签。推送仅触发检查，不自动生产发布；PR 不读取生产 Secrets。
+保留两个 workflow，不增加 Secrets，也不自动发布生产环境：
 
-只排查构建或演练问题时，勾选 `verify_only`：仍构建镜像并验证两种入口，但跳过服务器部署，不读取生产 Secrets。演练失败会在 Actions 输出检查阶段及脱敏测试日志；这些日志只来自临时测试数据库和生成的测试凭据，不上传生产配置或备份。
+| Workflow | 触发方式 | 工作 |
+| --- | --- | --- |
+| Dayline checks（backend.yml） | 推送 main、PR、手动运行 | 检查代码及 PG17 / 18；main 检查通过后构建一个 Web + API 镜像，在原生 Nginx 进程后完成隔离演练，保存已验证的镜像 digest |
+| Deploy Dayline（deploy.yml） | 手动运行，选择 main | 查找同一提交成功 CI 的发布清单，复用镜像；SSH 备份、迁移、启动应用和验证公共 HTTPS |
 
-1. PostgreSQL 17 / 18 分别执行格式、lint、类型、单元 / 配置和真实数据库接口测试。
-2. GitHub 构建 Web + API 镜像、推送 GHCR，以不可变 digest 部署；分别演练本机入口和可选容器入口。
-3. 严格 SSH 校验后传输私有临时包；GITHUB_TOKEN 只临时拉取镜像，随后清理 registry 登录和 token。
-4. Actions concurrency / 服务端 flock 串行发布，在 `~/dayline/releases/<SHA>.<随机后缀>` 生成配置。host 模式只生成 Nginx 配置示例，不触碰实际 Nginx / TLS；container 模式才检查并生成入口文件。应用端口若被其他程序占用，提前报错。
-5. 创建专用 Docker 数据库网络，为原 PG 增加 `dayline-postgres` 别名；角色 / 数据库不存在才创建，已有角色及库先核对归属和实际连接。不改已有密码、owner 或其他数据库。
-6. 仅停止上一版应用写入，备份目标库，再执行 Prisma migrate deploy。备份失败且迁移未开始时，尝试恢复上一版应用；不重启外部 Nginx。禁止 reset、drop 或 db push。
-7. 启动所选模式的应用服务，检查 readiness，再从公共 HTTPS 验证发布 SHA 和网页；通过后才更新 `current` 和 `deployed-revision`。
+PR 和其他分支的手动 CI 只运行检查，不推送镜像或产生可发布清单。main 的 CI、演练均不读取生产 Secrets，不访问生产服务器；原生 Nginx 仅安装在临时 CI runner 中。
+
+日常发布只需：
+
+1. 推送或合并到 main，等待 **Dayline checks** 成功；这一步自动完成测试、构建与演练。
+2. Actions → **Deploy Dayline** → **Run workflow**，选择 main。发布不重新测试、构建或演练。
+3. 查看发布任务结果；公共 readiness、版本 SHA 和网页都通过才记为成功。
+
+需要先确认发布清单时，勾选 `verify_only`；只查询和校验已准备的清单，不连接服务器、不读取生产 Secrets。发布清单是普通 JSON，只含仓库、提交 SHA、镜像 digest 和 CI run / attempt，不含配置或凭据，保留 90 天。
+
+只接受 main 上 **相同 SHA** 的成功 CI 产物，不按“最近一次成功”退回旧版本，不使用可变 latest tag。若 CI 仍在运行、失败、没有发布清单或清单过期，发布会提前停止，提示等待或手动运行 **Dayline checks** 一次；需要重新运行旧任务时，也应从 main 新开发布任务，旧任务仍引用其原提交的 workflow。
+
+服务器执行过程保留这些步骤：
+
+1. 严格 SSH 主机校验后传输私有临时包；临时 GITHUB_TOKEN 拉取固定 digest 后清理 registry 登录和 token。
+2. Actions concurrency / 服务端 flock 串行发布，在 `~/dayline/releases/<SHA>.<随机后缀>` 生成配置。只生成本站 Nginx 配置示例，不应用到本机；应用端口占用时提前报错。
+3. 创建专用数据库网络，为原 PG 增加 `dayline-postgres` 别名。专用角色 / 数据库不存在才创建；已有值先核对归属和实际连接，不改密码、owner 或其他数据库。
+4. 仅停止上一版应用写入，备份目标库，再执行 Prisma migrate deploy。备份失败且迁移未开始时，尝试恢复上一版应用；不重启 Nginx。禁止 reset、drop 或 db push。
+5. 启动应用、检查 readiness，再从公共 HTTPS 验证 SHA 和网页；通过后更新 `current` 和 `deployed-revision`。
+
+总体验证和镜像准备仍需时间，但每个 main 提交只做一次；后续发布复用结果。Docker 构建只编译共享包、API 和 Web，小程序由 CI 独立验证；文档、workflow 与部署脚本修改不再使应用编译层失效。实际发布耗时仍取决于镜像下载、数据库备份和迁移，不承诺固定两分钟。
 
 首次不必手动建库。更新只补未执行的迁移，密码轮换需先在数据库显式完成再同步 Secret。PG 被其原 Compose 重建后，需要重新补回专用网络连接；长期可在原 PG 配置声明同一外部网络，自动重启策略也由原服务管理。
 
 ## 失败与恢复
 
-迁移开始后失败，保留数据库、备份、私有日志和上一版成功记录，不自动降级数据库或启动兼容性未知的旧版。已启动的新应用会停止；host 模式始终保留外部 Nginx 运行，container 模式才停止本轮受管入口。修正配置 / 迁移后重发；确认数据库兼容时才选择旧版。重发镜像不等于数据库回滚。
+迁移开始后失败，保留数据库、备份、私有日志和上一版成功记录，不自动降级数据库或启动兼容性未知的旧版。已启动的新应用会停止，本机 Nginx 始终保持运行。修正配置 / 迁移后重发；确认数据库兼容时才选择旧版。重发镜像不等于数据库回滚。
 
 运行配置、备份文件 0600，私有目录 0700；不自动展示私人日志或上传 Actions artifact。入口应避免记录包含验证 / 重置凭据的原始 URL，示例关闭对应日志，诊断使用应用安全结构化记录。传输目录结束清理，断网遗留 `~/.dayline-incoming.*` 可由运营者通过控制台清理。
 
@@ -105,15 +112,10 @@ Workflow 合入默认分支后，Actions → Deploy Dayline → Run workflow，�
 ```bash
 pnpm test:deployment
 pnpm verify:containers
-DAYLINE_TEST_NGINX_MODE=container pnpm verify:containers
 ```
 
-默认演练使用独立本机 Nginx 进程，通过宿主回环端口连接实际应用，并确认部署和失败恢复不停止或改写该进程；可选模式验证受管入口。测试只创建本轮隔离 PG17、随机回环端口、临时证书及私有目录，不安装系统服务或改 `/etc/nginx`，保留新卷和 `.local/deployment` 报告。真实生产 SSH / GHCR、Cloudflare 及邮件 / 微信仍需实际配置后验收。
+演练需要本机已安装 Nginx；非标准路径可设置 `DAYLINE_TEST_HOST_NGINX=/path/to/nginx`。CI 在临时 runner 安装原生 Nginx，不使用 Nginx 镜像；生产服务器始终使用已有 Nginx。
 
-## 本次验证记录（2026-10-27）
+演练通过独立原生 Nginx 进程转发实际应用，验证 PG17 八条迁移、Web / API / TLS、真实来源 IP 与伪造转发头、重复部署保留数据、错误密码提前拒绝、错误公共版本拒绝以及恢复重发。测试确认 Nginx 主进程及配置未被部署修改，其他数据库标记、四份 0600 备份和数据库卷保留。失败时在 Actions 显示阶段和脱敏测试日志，生产私人日志、配置和备份不上传。
 
-- 12 项部署配置测试及格式、ESLint、ShellCheck、actionlint 通过；实际 Dockerfile 构建通过，应用业务代码与迁移未改变。
-- host 模式在独立本机 Nginx 进程后完成 PG17 八迁移、实际 TLS / HTTP 308 / Web / API / 资源检查、重复更新、错误密码拦截、公共入口错版本拒绝及修复重发。未提供 TLS 文件，未创建 gateway 容器；Nginx 主进程 PID 与配置内容全程保持不变。
-- 同一身份更换伪造 CF / XFF 头仍触发失败限制；使用不同真实回环来源地址的请求保持独立，验证了本机 Nginx → Docker 的访客 IP 信任配置。
-- container 模式通过同样的完整部署 / 恢复演练，并验证 TLS 私钥错误时保留旧版；两种模式分别保留四份非空 0600 备份及其他库的标记。
-- 两轮仅清理本轮测试进程、容器和网络，保留新旧数据库卷；未接触生产服务器、系统 Nginx 配置或真实 Cloudflare / 邮件 / 微信配置。
+本机构建与演练只创建随机命名的测试 PG / 应用容器、回环端口、测试证书及私有目录，不改 `/etc/nginx`。真实 SSH / GHCR、Cloudflare 和邮件 / 微信仍需提供实际配置后验收。
