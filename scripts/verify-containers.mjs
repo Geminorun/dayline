@@ -326,6 +326,18 @@ try {
   );
   const address = tlsServer.address();
   assert.ok(address && typeof address === 'object');
+  // A failed first public check leaves a stopped Compose app but no current
+  // release. Retrying it must work without removing containers or database data.
+  stripRevision = true;
+  await writeFile(
+    join(bundle, 'site.url'),
+    `https://localhost:${address.port}`,
+    { mode: 0o600 },
+  );
+  const firstFailure = await deploy('initial-public-failure', true);
+  assert.notEqual(firstFailure.code, 0);
+  await assert.rejects(readlink(join(serverDirectory, 'current')));
+  stripRevision = false;
   await writeFile(join(bundle, 'site.url'), publicOrigin, { mode: 0o600 });
   await deploy('first');
   await publicCheck(revision('first'));
@@ -442,7 +454,7 @@ try {
   const current = await readlink(join(serverDirectory, 'current'));
   assert.equal((await stat(join(current, '.runtime.env'))).mode & 0o777, 0o600);
   const backups = await readdir(join(serverDirectory, 'backups'));
-  assert.equal(backups.length, 4);
+  assert.equal(backups.length, 5);
   for (const backup of backups) {
     const info = await stat(join(serverDirectory, 'backups', backup));
     assert.equal(info.mode & 0o777, 0o600);
@@ -459,6 +471,7 @@ try {
     hostForwardedClientIpsValidated: true,
     forgedForwardingHeadersRejected: true,
     repeatedDeploymentPreservesData: true,
+    failedFirstDeploymentCanBeRetried: true,
     wrongPasswordPreservesRunningRelease: true,
     stalePublicEndpointRejected: true,
     explicitRecoveryPreservesData: true,

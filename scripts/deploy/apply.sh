@@ -111,7 +111,23 @@ docker run --rm --network "$DAYLINE_DB_NETWORK" --env-file "$dayline_release/.ru
 # Do not touch an unrelated application already using this Compose project name.
 dayline_existing_id="$(dayline_compose ps -aq app)"
 if [[ -n "$dayline_existing_id" && ! -f "$dayline_previous/.deploy.env" ]]; then
-  echo 'An application already uses this Compose project without a tracked release.' >&2; exit 1;
+  # A failed first deployment has no current link. Only reuse its stopped app
+  # when Compose points to our retained release and the database target matches.
+  dayline_existing_config="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$dayline_existing_id")"
+  dayline_existing_release="$(dirname "$dayline_existing_config")"
+  [[ "$dayline_existing_config" == "$dayline_root/releases/"*/compose.production.yaml &&
+     -f "$dayline_existing_release/.deploy.env" &&
+     -f "$dayline_existing_release/migration.log" &&
+     "$(docker inspect --format '{{.State.Running}}' "$dayline_existing_id")" == false ]] || {
+    echo 'An untracked application uses this Compose project. Only a stopped failed release from this deployment directory can be retried.' >&2; exit 1;
+  }
+  for dayline_key in DEPLOY_PROJECT POSTGRES_CONTAINER POSTGRES_DB POSTGRES_USER DAYLINE_DB_NETWORK; do
+    dayline_old_value="$(sed -n "s/^$dayline_key=//p" "$dayline_existing_release/.deploy.env")"
+    [[ "${!dayline_key}" == "$dayline_old_value" ]] || {
+      echo 'The stopped application belongs to a different database target.' >&2; exit 1;
+    }
+  done
+  echo 'Retrying the stopped application from a failed initial deployment; database retained.'
 fi
 if [[ -n "$dayline_old_app" ]]; then
   dayline_old_compose stop app
@@ -127,6 +143,7 @@ dayline_compose run --rm --no-deps app node apps/api/node_modules/prisma/build/i
 }
 dayline_started=true
 dayline_compose up -d --no-deps --wait --wait-timeout 180 app
+echo "Checking the configured public endpoint: $SITE_URL"
 curl --fail --silent --show-error --connect-timeout 10 --max-time 20 \
   --dump-header "$dayline_release/public-health.headers" --output "$dayline_release/public-health.json" \
   "$SITE_URL/health/ready"
