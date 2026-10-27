@@ -47,20 +47,45 @@ const message = ref(
       : '',
 );
 const error = ref('');
+const rateLimited = ref(false);
 const retrySeconds = ref(0);
+const errorTip = computed(() =>
+  rateLimited.value && retrySeconds.value > 0
+    ? `操作过于频繁，请等待 ${retrySeconds.value} 秒后再试。`
+    : error.value,
+);
+const submitLabels: Record<string, string> = {
+  login: '邮箱登录',
+  register: '注册并发送验证邮件',
+  verify: '重发验证邮件',
+  'forgot-password': '发送密码重置邮件',
+  'reset-password': '重置密码',
+  'change-password': '修改密码',
+};
+const submitLabel = computed(() => {
+  if (busy.value) return '处理中…';
+  if (retrySeconds.value > 0) return `${retrySeconds.value} 秒后可重试`;
+  return submitLabels[mode.value] ?? '提交';
+});
 let retryTimer: ReturnType<typeof setInterval> | undefined;
 function stopRetry() {
   if (retryTimer) clearInterval(retryTimer);
   retryTimer = undefined;
   retrySeconds.value = 0;
+  if (rateLimited.value) error.value = '';
+  rateLimited.value = false;
 }
 function waitForRetry(seconds: number) {
   stopRetry();
+  rateLimited.value = true;
   const until = Date.now() + seconds * 1000;
   retrySeconds.value = seconds;
   retryTimer = setInterval(() => {
     retrySeconds.value = Math.max(0, Math.ceil((until - Date.now()) / 1000));
-    if (!retrySeconds.value) stopRetry();
+    if (!retrySeconds.value) {
+      stopRetry();
+      message.value = '等待已结束，可以重新提交。';
+    }
   }, 1000);
 }
 const unsubscribeRetry = api.onIdentityChange(stopRetry);
@@ -329,9 +354,9 @@ onBeforeUnmount(() => {
     <p class="eyebrow">DAYLINE · 账号</p>
     <h1>{{ titles[mode] ?? '账号' }}</h1>
     <p v-if="message" role="status" class="notice">{{ message }}</p>
-    <p v-if="error" role="alert" class="error">{{ error }}</p>
-    <p v-if="retrySeconds > 0" role="status">
-      服务器要求等待 {{ retrySeconds }} 秒后再试。
+    <p v-if="errorTip" role="alert" class="error">{{ errorTip }}</p>
+    <p v-if="retrySeconds > 0" class="muted">
+      请等待倒计时结束后手动重试，系统不会自动重复提交。
     </p>
     <form v-if="mode !== 'verified'" @submit.prevent="submit">
       <label v-if="mode === 'register'"
@@ -379,7 +404,7 @@ onBeforeUnmount(() => {
           required
       /></label>
       <button type="submit" :disabled="busy || retrySeconds > 0">
-        {{ busy ? '处理中…' : mode === 'login' ? '邮箱登录' : '提交' }}
+        {{ submitLabel }}
       </button>
     </form>
     <div class="links">

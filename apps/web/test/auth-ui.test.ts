@@ -188,11 +188,19 @@ it('uses server Retry-After for email resend, disables repeated requests, then p
   await wrapper.get('input[name="email"]').setValue('test@example.com');
   await wrapper.get('form').trigger('submit');
   await flushPromises();
-  expect(wrapper.text()).toContain('等待 2 秒');
+  expect(wrapper.get('[role="alert"]').text()).toContain('等待 2 秒');
+  expect(wrapper.get('form button').text()).toBe('2 秒后可重试');
   expect(wrapper.get('form button').attributes('disabled')).toBeDefined();
   await wrapper.get('form').trigger('submit');
   expect(fetch).toHaveBeenCalledOnce();
-  await vi.advanceTimersByTimeAsync(2000);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(wrapper.get('[role="alert"]').text()).toContain('等待 1 秒');
+  expect(wrapper.text()).not.toContain('等待 2 秒');
+  expect(wrapper.get('form button').text()).toBe('1 秒后可重试');
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+  expect(wrapper.get('[role="status"]').text()).toContain('可以重新提交');
+  expect(wrapper.get('form button').text()).toBe('重发验证邮件');
   expect(wrapper.get('form button').attributes('disabled')).toBeUndefined();
   await wrapper.get('form').trigger('submit');
   await flushPromises();
@@ -200,3 +208,38 @@ it('uses server Retry-After for email resend, disables repeated requests, then p
   wrapper.unmount();
   expect(vi.getTimerCount()).toBe(0);
 });
+
+it.each([
+  {
+    status: 429,
+    code: 'RATE_LIMITED',
+    tip: '操作过于频繁，请稍后重试。',
+  },
+  {
+    status: 503,
+    code: 'MAIL_UNAVAILABLE',
+    tip: '邮件暂时无法发送，请稍后重新申请。',
+  },
+])(
+  'shows $code without an invented wait or successful delivery message',
+  async ({ status, code, tip }) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json(
+          { code, message: 'private provider details' },
+          { status },
+        ),
+      ),
+    );
+    const wrapper = await page('verify');
+    await wrapper.get('input[name="email"]').setValue('test@example.com');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toBe(tip);
+    expect(wrapper.text()).not.toContain('private provider');
+    expect(wrapper.find('[role="status"]').exists()).toBe(false);
+    expect(wrapper.get('form button').text()).toBe('重发验证邮件');
+    expect(wrapper.get('form button').attributes('disabled')).toBeUndefined();
+  },
+);
