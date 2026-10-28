@@ -68,20 +68,24 @@ APP_ENV 必填字段：`POSTGRES_CONTAINER`、`POSTGRES_PASSWORD`、`BETTER_AUTH
 
 ## 发布过程
 
-保留两个 workflow，不增加 Secrets，也不自动发布生产环境：
+保留两个 workflow，不增加 Secrets；main 推送后先检查，通过后自动发布：
 
 | Workflow | 触发方式 | 工作 |
 | --- | --- | --- |
 | Dayline checks（backend.yml） | 推送 main、PR、手动运行 | main 并行执行代码 / PG17 / 18 检查与镜像构建 / 本机 Nginx 演练，保存镜像 digest；整次 CI 全部成功后才允许发布 |
-| Deploy Dayline（deploy.yml） | 手动运行，选择 main | 查找同一提交成功 CI 的发布清单，复用镜像；SSH 备份、迁移、启动应用和验证公共 HTTPS |
+| Deploy Dayline（deploy.yml） | main 推送的 Dayline checks 成功后自动触发；也保留手动运行 | 自动发布绑定触发它的 CI 提交、运行 ID 和 attempt，手动发布查找同一提交成功 CI；复用镜像，SSH 备份、迁移、启动应用和验证公共 HTTPS |
 
 PR 和其他分支的手动 CI 只运行检查，不推送镜像或产生可发布清单。main 的 CI、演练均不读取生产 Secrets，不访问生产服务器；原生 Nginx 仅安装在临时 CI runner 中。
 
 日常发布只需：
 
-1. 推送或合并到 main，等待 **Dayline checks** 成功；这一步自动完成测试、构建与演练。
-2. Actions → **Deploy Dayline** → **Run workflow**，选择 main。发布不重新测试、构建或演练。
-3. 查看发布任务结果；公共 readiness、版本 SHA 和网页都通过才记为成功。
+1. 推送或合并到 main，自动运行 **Dayline checks**，完成测试、构建与演练。
+2. 全部成功后，**Deploy Dayline** 自动发布同一次 CI 生成的镜像，不重复测试、构建或演练。
+3. 查看自动发布结果；公共 readiness、版本 SHA 和网页都通过才记为成功。
+
+失败、取消、PR 或其他仓库的 CI 不会发布；仅手动运行 Dayline checks 也不会自动发布。自动发布开始 SSH 操作前再次核对 main 的最新提交，已有新提交时跳过旧版本。发布串行执行，进行中的备份 / 迁移不会被新推送取消。
+
+需要手动重试时，Actions → **Deploy Dayline** → **Run workflow**，选择 main。仍保留 `verify_only`，仅验证可复用的发布清单，不连接生产服务器。若 `production` Environment 已设置审批规则，自动触发后仍遵守该规则。
 
 需要先确认发布清单时，勾选 `verify_only`；只查询和校验已准备的清单，不连接服务器、不读取生产 Secrets。发布清单是普通 JSON，只含仓库、提交 SHA、镜像 digest 和 CI run / attempt，不含配置或凭据，保留 90 天。
 
@@ -109,7 +113,7 @@ PR 和其他分支的手动 CI 只运行检查，不推送镜像或产生可发�
 
 应用日志带 UTC 时间、INFO / WARN / ERROR、模块名和 requestId；成功健康检查不记录请求日志，失败仍记录。排查邮件时查找 MAIL_ACCEPTED / MAIL_DELIVERY_FAILED；前者只代表传输受理，最终送达仍以 Resend 状态为准。LOG_LEVEL 默认 info，warn 隐藏成功业务请求，error 只保留错误。
 
-代码修改必须提交并推送 main，等待 Dayline checks 成功后，新建一次 Deploy Dayline 才会更新服务器；重启旧容器或重跑旧版本任务不会带入新代码。可用 `docker exec dayline-app-1 printenv RELEASE_REVISION` 核对运行版本，用 `docker logs --follow --since 5m dayline-app-1` 查看最近日志；旧日志会保留，不能仅凭历史健康检查记录判断新版本是否生效。
+代码修改提交并推送 main 后，Dayline checks 成功即自动更新服务器；手动重试发布时新建一次 Deploy Dayline，重启旧容器或重跑旧版本任务不会带入新代码。可用 `docker exec dayline-app-1 printenv RELEASE_REVISION` 核对运行版本，用 `docker logs --follow --since 5m dayline-app-1` 查看最近日志；旧日志会保留，不能仅凭历史健康检查记录判断新版本是否生效。
 
 发布前备份不代替每日备份。上线前设置每日任务、至少七天保留、受控异地副本并定期在新库恢复。脚本不自动删除历史发布、镜像或备份，恢复闸门见 [自托管与恢复](self-hosting.md)。
 

@@ -1,6 +1,10 @@
 name: Deploy Dayline
 
 on:
+  workflow_run:
+    workflows: [Dayline checks]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       verify_only:
@@ -18,12 +22,21 @@ concurrency:
 
 jobs:
   release:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 3
     outputs:
       image: ${{ steps.release.outputs.image }}
+      revision: ${{ steps.ci.outputs.revision }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
@@ -34,7 +47,7 @@ jobs:
         run: node scripts/deploy/release.mjs select
       - uses: actions/download-artifact@v4
         with:
-          name: dayline-release-${{ github.sha }}
+          name: dayline-release-${{ steps.ci.outputs.revision }}
           path: ${{ runner.temp }}/dayline-release
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.ci.outputs.run_id }}
@@ -56,10 +69,18 @@ jobs:
       packages: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.release.outputs.revision }}
       - uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
+      - name: Check whether an automatic release is still current
+        id: current
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/deploy/release.mjs current
       - name: Deploy over verified SSH
+        if: steps.current.outputs.current == 'true'
         env:
           SITE_URL: ${{ secrets.SITE_URL }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -68,7 +89,7 @@ jobs:
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           APP_ENV: ${{ secrets.APP_ENV }}
           DAYLINE_IMAGE: ${{ needs.release.outputs.image }}
-          RELEASE_REVISION: ${{ github.sha }}
+          RELEASE_REVISION: ${{ needs.release.outputs.revision }}
           REGISTRY_USER: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/deploy/dispatch.mjs

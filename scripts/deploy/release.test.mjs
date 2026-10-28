@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
-import { validateRelease, selectReleaseRun } from './release.mjs';
+import {
+  validateRelease,
+  selectReleaseRun,
+  releaseSource,
+  automaticReleaseIsCurrent,
+} from './release.mjs';
 
 const repository = 'Geminorun/dayline';
 const revision = 'a'.repeat(40);
@@ -127,6 +132,90 @@ test('a retained earlier successful run of the same commit can be reused', async
   assert.deepEqual(result, { runId: 123, runAttempt: 2 });
 });
 
+test('automatic releases use the triggering CI SHA instead of the workflow default-branch SHA', () => {
+  assert.deepEqual(
+    releaseSource(repository, 'c'.repeat(40), 'workflow_run', {
+      workflow_run: run,
+    }),
+    { revision, runId: 123, runAttempt: 2 },
+  );
+  assert.deepEqual(releaseSource(repository, revision, 'workflow_dispatch'), {
+    revision,
+  });
+  for (const override of [
+    { event: 'pull_request' },
+    { event: 'workflow_dispatch' },
+    { head_repository: { full_name: 'someone/else' } },
+    { head_branch: 'feature' },
+    { path: '.github/workflows/untrusted.yml' },
+    { status: 'in_progress' },
+    { conclusion: 'failure' },
+    { conclusion: 'cancelled' },
+    { head_sha: 'invalid' },
+    { id: 0 },
+    { run_attempt: 0 },
+  ])
+    assert.throws(() =>
+      releaseSource(repository, revision, 'workflow_run', {
+        workflow_run: { ...run, ...override },
+      }),
+    );
+  assert.throws(() => releaseSource(repository, revision, 'workflow_run', {}));
+});
+
+test('automatic releases revalidate only the triggering run and attempt without selecting a different successful run', async () => {
+  const paths = [];
+  const source = { runId: 123, runAttempt: 2 };
+  const result = await selectReleaseRun(
+    repository,
+    revision,
+    async (path) => {
+      paths.push(path);
+      return path.includes('/artifacts?') ? { artifacts: [artifact] } : run;
+    },
+    source,
+  );
+  assert.deepEqual(result, source);
+  assert.equal(paths[0], `/repos/${repository}/actions/runs/123`);
+  for (const override of [
+    { id: 124 },
+    { run_attempt: 3 },
+    { conclusion: 'failure' },
+    { head_sha: 'c'.repeat(40) },
+  ]) {
+    let calls = 0;
+    await assert.rejects(
+      selectReleaseRun(
+        repository,
+        revision,
+        async () => {
+          calls++;
+          return { ...run, ...override };
+        },
+        source,
+      ),
+      /No prepared release/,
+    );
+    assert.equal(calls, 1);
+  }
+});
+
+test('superseded automatic releases skip SSH deployment and a failed main lookup cannot authorize deployment', async () => {
+  for (const sha of [revision, 'c'.repeat(40)]) {
+    assert.equal(
+      await automaticReleaseIsCurrent(repository, revision, async (path) => {
+        assert.equal(path, `/repos/${repository}/git/ref/heads/main`);
+        return { object: { sha } };
+      }),
+      sha === revision,
+    );
+  }
+  await assert.rejects(
+    automaticReleaseIsCurrent(repository, revision, async () => ({})),
+    /Invalid release revision/,
+  );
+});
+
 test('manifest CLI writes and reads Actions metadata and rejects a different run attempt', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'dayline-release-'));
   const manifest = join(directory, 'release.json');
@@ -144,6 +233,7 @@ test('manifest CLI writes and reads Actions metadata and rejects a different run
     RELEASE_MANIFEST: manifest,
     GITHUB_OUTPUT: output,
     GITHUB_STEP_SUMMARY: join(directory, 'summary'),
+    GITHUB_EVENT_NAME: 'workflow_dispatch',
   };
   try {
     execFileSync(process.execPath, ['scripts/deploy/release.mjs', 'write'], {
@@ -167,6 +257,61 @@ test('manifest CLI writes and reads Actions metadata and rejects a different run
       }),
     );
     assert.equal(await readFile(output, 'utf8'), `image=${image}\n`);
+    execFileSync(process.execPath, ['scripts/deploy/release.mjs', 'current'], {
+      env,
+    });
+    assert.equal(
+      await readFile(output, 'utf8'),
+      `image=${image}\ncurrent=true\n`,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('automatic manifest CLI validates the source SHA even when GITHUB_SHA points at a newer commit', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'dayline-auto-release-'));
+  const output = join(directory, 'output');
+  const manifest = join(directory, 'release.json');
+  const eventPath = join(directory, 'event.json');
+  try {
+    await writeFile(manifest, JSON.stringify(release));
+    await writeFile(eventPath, JSON.stringify({ workflow_run: run }));
+    const env = {
+      ...process.env,
+      GITHUB_REPOSITORY: repository,
+      GITHUB_SHA: 'c'.repeat(40),
+      GITHUB_REF: 'refs/heads/main',
+      GITHUB_EVENT_NAME: 'workflow_run',
+      GITHUB_EVENT_PATH: eventPath,
+      RELEASE_RUN_ID: '123',
+      RELEASE_RUN_ATTEMPT: '2',
+      RELEASE_MANIFEST: manifest,
+      GITHUB_OUTPUT: output,
+      GITHUB_STEP_SUMMARY: join(directory, 'summary'),
+    };
+    execFileSync(process.execPath, ['scripts/deploy/release.mjs', 'read'], {
+      env,
+    });
+    assert.equal(await readFile(output, 'utf8'), `image=${image}\n`);
+    await writeFile(manifest, JSON.stringify({ ...release, runId: 124 }));
+    assert.throws(() =>
+      execFileSync(process.execPath, ['scripts/deploy/release.mjs', 'read'], {
+        env: { ...env, RELEASE_RUN_ID: '124' },
+        stdio: 'pipe',
+      }),
+    );
+    await writeFile(manifest, JSON.stringify(release));
+    await writeFile(
+      eventPath,
+      JSON.stringify({ workflow_run: { ...run, conclusion: 'failure' } }),
+    );
+    assert.throws(() =>
+      execFileSync(process.execPath, ['scripts/deploy/release.mjs', 'read'], {
+        env,
+        stdio: 'pipe',
+      }),
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

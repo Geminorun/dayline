@@ -40,25 +40,57 @@ export function validateRelease(release, expected) {
   return release;
 }
 
-export async function selectReleaseRun(repository, revision, getJson) {
-  validateContext(repository, revision);
-  const { workflow_runs: runs = [] } = await getJson(
-    `/repos/${repository}/actions/workflows/backend.yml/runs?head_sha=${revision}&branch=main&status=success&per_page=30`,
+function eligibleRun(run, repository, revision) {
+  return (
+    run?.head_sha === revision &&
+    run.head_branch === 'main' &&
+    run.head_repository?.full_name?.toLowerCase() ===
+      repository.toLowerCase() &&
+    run.path === '.github/workflows/backend.yml' &&
+    ['push', 'workflow_dispatch'].includes(run.event) &&
+    run.status === 'completed' &&
+    run.conclusion === 'success' &&
+    Number.isSafeInteger(run.id) &&
+    run.id > 0 &&
+    Number.isSafeInteger(run.run_attempt) &&
+    run.run_attempt > 0
   );
+}
+
+export function releaseSource(repository, revision, eventName, event) {
+  if (eventName !== 'workflow_run') {
+    validateContext(repository, revision);
+    return { revision };
+  }
+  const run = event?.workflow_run;
+  validateContext(repository, run?.head_sha);
+  if (run.event !== 'push' || !eligibleRun(run, repository, run.head_sha))
+    throw new Error(
+      'Automatic deployment requires successful main push CI from this repository.',
+    );
+  return { revision: run.head_sha, runId: run.id, runAttempt: run.run_attempt };
+}
+
+export async function selectReleaseRun(
+  repository,
+  revision,
+  getJson,
+  source = {},
+) {
+  validateContext(repository, revision);
+  const runs =
+    source.runId !== undefined
+      ? [await getJson(`/repos/${repository}/actions/runs/${source.runId}`)]
+      : ((
+          await getJson(
+            `/repos/${repository}/actions/workflows/backend.yml/runs?head_sha=${revision}&branch=main&status=success&per_page=30`,
+          )
+        ).workflow_runs ?? []);
   for (const run of runs) {
     if (
-      run.head_sha !== revision ||
-      run.head_branch !== 'main' ||
-      run.head_repository?.full_name?.toLowerCase() !==
-        repository.toLowerCase() ||
-      run.path !== '.github/workflows/backend.yml' ||
-      !['push', 'workflow_dispatch'].includes(run.event) ||
-      run.status !== 'completed' ||
-      run.conclusion !== 'success' ||
-      !Number.isSafeInteger(run.id) ||
-      run.id < 1 ||
-      !Number.isSafeInteger(run.run_attempt) ||
-      run.run_attempt < 1
+      !eligibleRun(run, repository, revision) ||
+      (source.runId !== undefined && run.id !== source.runId) ||
+      (source.runAttempt !== undefined && run.run_attempt !== source.runAttempt)
     )
       continue;
     const { artifacts = [] } = await getJson(
@@ -80,10 +112,40 @@ export async function selectReleaseRun(repository, revision, getJson) {
   );
 }
 
+async function getGitHubJson(repositoryPath) {
+  if (!process.env.GITHUB_TOKEN)
+    throw new Error('Missing GitHub Actions token.');
+  const response = await fetch(`https://api.github.com${repositoryPath}`, {
+    headers: {
+      Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+    signal: globalThis.AbortSignal.timeout(20000),
+  });
+  if (!response.ok)
+    throw new Error(`GitHub release lookup failed (HTTP ${response.status}).`);
+  return response.json();
+}
+
+export async function automaticReleaseIsCurrent(repository, revision, getJson) {
+  validateContext(repository, revision);
+  const ref = await getJson(`/repos/${repository}/git/ref/heads/main`);
+  validateContext(repository, ref?.object?.sha);
+  return ref.object.sha === revision;
+}
+
 async function main() {
   const repository = process.env.GITHUB_REPOSITORY;
-  const revision = process.env.GITHUB_SHA;
-  validateContext(repository, revision);
+  const source = releaseSource(
+    repository,
+    process.env.GITHUB_SHA,
+    process.env.GITHUB_EVENT_NAME,
+    process.env.GITHUB_EVENT_NAME === 'workflow_run'
+      ? JSON.parse(await readFile(process.env.GITHUB_EVENT_PATH, 'utf8'))
+      : undefined,
+  );
+  const { revision } = source;
   if (process.env.GITHUB_REF !== 'refs/heads/main')
     throw new Error('Prepare and deploy releases from main.');
   const mode = process.argv[2];
@@ -95,28 +157,27 @@ async function main() {
         .join(''),
     );
   if (mode === 'select') {
-    if (!process.env.GITHUB_TOKEN)
-      throw new Error('Missing GitHub Actions token.');
     const selected = await selectReleaseRun(
       repository,
       revision,
-      async (path) => {
-        const response = await fetch(`https://api.github.com${path}`, {
-          headers: {
-            Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
-            Accept: 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
-          signal: globalThis.AbortSignal.timeout(20000),
-        });
-        if (!response.ok)
-          throw new Error(
-            `GitHub release lookup failed (HTTP ${response.status}).`,
-          );
-        return response.json();
-      },
+      getGitHubJson,
+      source,
     );
-    await output({ run_id: selected.runId, run_attempt: selected.runAttempt });
+    await output({
+      revision,
+      run_id: selected.runId,
+      run_attempt: selected.runAttempt,
+    });
+  } else if (mode === 'current') {
+    const current =
+      process.env.GITHUB_EVENT_NAME !== 'workflow_run' ||
+      (await automaticReleaseIsCurrent(repository, revision, getGitHubJson));
+    await output({ current: String(current) });
+    if (!current)
+      await appendFile(
+        process.env.GITHUB_STEP_SUMMARY,
+        `Skipped automatic deployment of \`${revision}\`: main has a newer commit.\n`,
+      );
   } else if (mode === 'write') {
     const release = validateRelease(
       {
@@ -138,8 +199,9 @@ async function main() {
       {
         repository,
         revision,
-        runId: Number(process.env.RELEASE_RUN_ID),
-        runAttempt: Number(process.env.RELEASE_RUN_ATTEMPT),
+        runId: source.runId ?? Number(process.env.RELEASE_RUN_ID),
+        runAttempt:
+          source.runAttempt ?? Number(process.env.RELEASE_RUN_ATTEMPT),
       },
     );
     await output({ image: release.image });
@@ -147,7 +209,10 @@ async function main() {
       process.env.GITHUB_STEP_SUMMARY,
       `Prepared release: \`${revision}\`\n\nImage: \`${release.image}\`\n\n[Successful CI run](https://github.com/${repository}/actions/runs/${release.runId})\n`,
     );
-  } else throw new Error('Expected release command: select, write or read.');
+  } else
+    throw new Error(
+      'Expected release command: select, current, write or read.',
+    );
 }
 
 if (
