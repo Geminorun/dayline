@@ -84,6 +84,17 @@ function camera(start: number, days: number) {
   emit('camera', { day: start + days * TIMELINE_RECENT_POSITION, days });
 }
 function wheel(event: WheelEvent) {
+  const el = viewport.value;
+  if (!el) return;
+  const name = el.querySelector('.timeline-name');
+  // The sticky name column keeps native vertical scrolling, including its buttons.
+  if (
+    (event.target instanceof Element &&
+      event.target.closest('.timeline-name')) ||
+    event.clientX <
+      (name?.getBoundingClientRect().right ?? el.getBoundingClientRect().left)
+  )
+    return;
   // Leave browser page zoom and horizontal trackpad scrolling alone.
   if (
     event.ctrlKey ||
@@ -98,8 +109,6 @@ function wheel(event: WheelEvent) {
     (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 500 : 1);
   wheelDelta += delta;
   if (Math.abs(wheelDelta) < 4) return;
-  const el = viewport.value;
-  if (!el) return;
   const label =
     el.querySelector('.timeline-name')?.getBoundingClientRect().width ?? 240;
   const ratio = Math.max(
@@ -302,7 +311,7 @@ defineExpose({ locateToday });
     class="timeline-viewport gantt-scroll"
     :class="{ 'is-dragging': dragging }"
     tabindex="0"
-    aria-label="时间轴，滚轮缩放，拖动空白区域或方向键左右浏览"
+    aria-label="时间轴，左侧滚轮浏览事项，右侧滚轮缩放，拖动空白区域或方向键左右浏览"
     @pointerdown="pointerDown"
     @pointermove="pointerMove"
     @pointerup="pointerEnd"

@@ -152,6 +152,15 @@ it('zooms around the pointer and allows an item click immediately after panning'
       }),
     );
     expect(w.emitted('camera')).toHaveLength(1);
+    const leftWheel = new WheelEvent('wheel', {
+      deltaY: 100,
+      clientX: 0,
+      bubbles: true,
+      cancelable: true,
+    });
+    w.get('.gantt-row-label').element.dispatchEvent(leftWheel);
+    expect(leftWheel.defaultPrevented).toBe(false);
+    expect(w.emitted('camera')).toHaveLength(1);
     function pointer(target: Element, type: string, x: number, id = 1) {
       const event = new MouseEvent(type, {
         button: 0,

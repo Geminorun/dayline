@@ -2007,3 +2007,7 @@ dd {
 .date-panel .week-strip {
   padding-bottom: 8px;
 }
+
+.gantt-scroll .timeline-name {
+  cursor: default;
+}

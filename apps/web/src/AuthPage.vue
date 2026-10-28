@@ -48,6 +48,8 @@ let resetToken: string | null = callback.token;
 const name = ref('');
 const email = ref(savedEmail.email);
 const flow = ref<EmailFlow | undefined>(savedEmail.flow);
+const registeredMessage =
+  '该邮箱已注册并完成验证，请使用原密码登录，或通过“忘记密码”重新设置。';
 const password = ref('');
 const currentPassword = ref('');
 const confirmPassword = ref('');
@@ -57,7 +59,10 @@ const message = ref(
     ? '链接已失效或验证失败，请重新申请。'
     : mode.value === 'verified'
       ? '如已通过邮件链接验证，请使用邮箱和密码登录。登录时将由服务器确认验证状态。'
-      : '',
+      : mode.value === 'login' &&
+          savedEmail.flow?.accountStatus === 'registered'
+        ? registeredMessage
+        : '',
 );
 const error = ref('');
 const rateLimited = ref(false);
@@ -149,7 +154,11 @@ function mailFeedback(result: EmailFlow, startCooldown = true) {
     error.value = '账号仍保留，验证邮件发送失败，请稍后重发，无需重新注册。';
   else if (result.mailStatus === 'unconfirmed')
     error.value = '邮件发送结果尚未确认，请先检查邮箱，未收到可稍后重发。';
-  else message.value = '没有可发送的验证邮件，请注册账号或登录已有账号。';
+  else
+    message.value =
+      result.accountStatus === 'pending_verification'
+        ? '邮箱尚未验证，请查收之前的验证邮件，或点击下方重新发送。'
+        : '没有可发送的验证邮件，请注册账号或登录已有账号。';
   if (startCooldown) {
     writeAuthEmail({
       email: email.value.trim().toLowerCase(),
@@ -161,21 +170,26 @@ function mailFeedback(result: EmailFlow, startCooldown = true) {
   }
 }
 async function applyEmailFlow(result: EmailFlow) {
+  // RouterView remounts auth pages by path. Persist guidance before navigating,
+  // otherwise the result is written only into the disposed source page.
+  writeAuthEmail({
+    email: email.value.trim().toLowerCase(),
+    flow: result,
+    retryUntil: Date.now() + result.retryAfterSeconds * 1000,
+    retryScope: 'mail',
+    limited: false,
+  });
   if (result.nextStep === 'login') {
-    writeAuthEmail({
-      email: email.value.trim().toLowerCase(),
-      retryUntil: 0,
-      limited: false,
-    });
     flow.value = undefined;
     stopRetry();
     await router.replace('/login');
+    if (disposed) return;
     waitForRetry(result.retryAfterSeconds, false, false);
-    message.value =
-      '该邮箱已注册，请使用原密码登录，或通过“忘记密码”重新设置。';
+    message.value = registeredMessage;
     return;
   }
   await router.replace('/verify');
+  if (disposed) return;
   mailFeedback(result);
 }
 async function requestVerification() {
@@ -207,6 +221,12 @@ watch(mode, () => {
   confirmPassword.value = '';
 });
 onMounted(() => {
+  if (mode.value === 'login' && flow.value?.accountStatus === 'registered') {
+    flow.value = undefined;
+    const { flow: previousFlow, ...remembered } = savedEmail;
+    void previousFlow;
+    writeAuthEmail(remembered);
+  }
   if (mode.value === 'verify' && flow.value) mailFeedback(flow.value, false);
   const remaining = Math.max(
     0,
@@ -380,10 +400,16 @@ async function submit() {
     )
       return;
     if (cause instanceof ClientError && cause.code === 'EMAIL_NOT_VERIFIED') {
-      flow.value = undefined;
-      await router.replace('/verify');
-      message.value =
-        '邮箱尚未验证，请查收之前的验证邮件，或点击下方重新发送。';
+      const remembered = readAuthEmail();
+      await applyEmailFlow({
+        nextStep: 'verify_email',
+        accountStatus: 'pending_verification',
+        mailStatus: 'not_sent',
+        retryAfterSeconds: Math.max(
+          0,
+          Math.ceil((remembered.retryUntil - Date.now()) / 1000),
+        ),
+      });
       return;
     }
     error.value = feedback(cause);

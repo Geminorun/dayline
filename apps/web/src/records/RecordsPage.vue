@@ -674,7 +674,7 @@ const recent = computed(
           <div class="timeline-toolbar">
             <div class="timeline-heading">
               <h2>每一段经历，都有自己的跨度</h2>
-              <p>滚轮缩放 · 拖动空白区域平移 · 点击事项查看</p>
+              <p>左侧滚动事项 · 右侧缩放与拖动 · 点击事项查看</p>
             </div>
             <div class="timeline-controls">
               <select v-model="filter.sort" aria-label="排序方式">

@@ -205,3 +205,86 @@ describe('routed auth and complete timeline accessibility', () => {
     ).toBe('尚未提交的深链输入');
   });
 });
+
+it.each([
+  {
+    status: 'registered',
+    mail: 'not_sent',
+    next: 'login',
+    path: '/login',
+    feedback: '该邮箱已注册',
+  },
+  {
+    status: 'pending_verification',
+    mail: 'accepted',
+    next: 'verify_email',
+    path: '/verify',
+    feedback: '本次未修改原密码',
+  },
+  {
+    status: 'created',
+    mail: 'failed',
+    next: 'verify_email',
+    path: '/verify',
+    feedback: '验证邮件发送失败',
+  },
+])(
+  'keeps signup guidance across the actual keyed RouterView for $status',
+  async ({ status, mail, next, path, feedback }) => {
+    sessionStorage.clear();
+    await useWorkspace().switchMode('guest');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: RequestInfo | URL) => {
+        if (url === '/api/v1/auth/session')
+          return Response.json({
+            data: { authenticated: false },
+            meta: {
+              requestId: 'anonymous',
+              serverTime: '2026-10-28T00:00:00.000Z',
+            },
+          });
+        return Response.json({
+          emailFlow: {
+            accountStatus: status,
+            mailStatus: mail,
+            nextStep: next,
+            retryAfterSeconds: 60,
+          },
+        });
+      }),
+    );
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/:mode', component: AuthPage }],
+    });
+    await router.push('/register');
+    await router.isReady();
+    const wrapper = mount(App, { global: { plugins: [router] } });
+    wrappers.push(wrapper);
+    await flushPromises();
+    await wrapper.get('input[name="name"]').setValue('测试');
+    await wrapper.get('input[name="email"]').setValue('routing@example.com');
+    for (const input of wrapper.findAll('input[type="password"]'))
+      await input.setValue('Never-store-this-password!');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe(path);
+    expect(wrapper.text()).toContain(feedback);
+    expect(wrapper.get('input[name="email"]').element).toHaveProperty(
+      'value',
+      'routing@example.com',
+    );
+    expect(sessionStorage.getItem('dayline:auth-email')).not.toContain(
+      'Never-store-this-password',
+    );
+    if (path === '/login')
+      expect(
+        wrapper.get('form button[type=submit]').attributes('disabled'),
+      ).toBeUndefined();
+    else
+      expect(
+        wrapper.get('form button[type=submit]').attributes('disabled'),
+      ).toBeDefined();
+  },
+);
