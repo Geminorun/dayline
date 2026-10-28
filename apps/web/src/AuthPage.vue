@@ -26,8 +26,8 @@ const mode = computed(() =>
   route.params.mode === 'verify-email' ? 'verify' : String(route.params.mode),
 );
 const titles: Record<string, string> = {
-  login: '欢迎回来',
-  register: '创建日序账号',
+  login: '登录日序',
+  register: '注册日序账号',
   verify: '验证邮箱',
   verified: '邮箱验证结果',
   'forgot-password': '找回密码',
@@ -517,14 +517,20 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="card auth-card" :aria-busy="busy">
-    <p class="eyebrow">DAYLINE · 账号</p>
     <h1>{{ titles[mode] ?? '账号' }}</h1>
+    <p v-if="mode === 'login'" class="auth-description">
+      登录后，在不同设备上继续你的记录。
+    </p>
+    <p v-else-if="mode === 'register'" class="auth-description">
+      创建账号，验证邮箱后开始同步。
+    </p>
     <nav
       v-if="['login', 'register'].includes(mode)"
       class="auth-tabs"
       aria-label="登录或注册"
     >
       <button
+        class="auth-tab"
         type="button"
         :aria-pressed="mode === 'login'"
         :disabled="busy"
@@ -533,6 +539,7 @@ onBeforeUnmount(() => {
         登录
       </button>
       <button
+        class="auth-tab"
         type="button"
         :aria-pressed="mode === 'register'"
         :disabled="busy"

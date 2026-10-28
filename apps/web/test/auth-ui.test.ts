@@ -273,7 +273,7 @@ it.each([
     accountStatus: 'registered',
     mailStatus: 'not_sent',
     nextStep: 'login',
-    heading: '欢迎回来',
+    heading: '登录日序',
     feedback: '该邮箱已注册',
   },
 ])(

@@ -81,7 +81,7 @@ const groups = computed(() =>
 );
 function color(entry: EntryDto) {
   return (
-    props.categories?.find((c) => c.id === entry.categoryId)?.color ?? '#7970CF'
+    props.categories?.find((c) => c.id === entry.categoryId)?.color ?? '#315C4D'
   );
 }
 function bar(entry: EntryDto) {

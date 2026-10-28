@@ -61,23 +61,75 @@ function focus() {
 function online() {
   if (document.visibilityState === 'visible') workspace.networkRestored();
 }
+function outsideAccountMenu(event: PointerEvent) {
+  if (
+    event.target instanceof Node &&
+    !accountMenu.value?.contains(event.target)
+  )
+    closeAccountMenu();
+}
 onMounted(() => {
   void workspace.ensure();
   window.addEventListener('focus', focus);
   window.addEventListener('online', online);
+  window.addEventListener('pointerdown', outsideAccountMenu);
   document.addEventListener('visibilitychange', visible);
 });
 onBeforeUnmount(() => {
   workspace.lifecycle(false);
   window.removeEventListener('focus', focus);
   window.removeEventListener('online', online);
+  window.removeEventListener('pointerdown', outsideAccountMenu);
   document.removeEventListener('visibilitychange', visible);
 });
 const accountMenu = ref<HTMLDetailsElement | null>(null);
+let menuCloseTimer: ReturnType<typeof setTimeout> | undefined;
+let menuHovered = false;
+function closeAccountMenu() {
+  if (menuCloseTimer !== undefined) clearTimeout(menuCloseTimer);
+  menuCloseTimer = undefined;
+  menuHovered = false;
+  if (accountMenu.value) accountMenu.value.open = false;
+}
+function enterAccountMenu(event: PointerEvent) {
+  if (event.pointerType !== 'mouse') return;
+  if (menuCloseTimer !== undefined) clearTimeout(menuCloseTimer);
+  menuCloseTimer = undefined;
+  menuHovered = true;
+  if (accountMenu.value) accountMenu.value.open = true;
+}
+function leaveAccountMenu(event: PointerEvent) {
+  if (event.pointerType !== 'mouse') return;
+  menuHovered = false;
+  menuCloseTimer = setTimeout(closeAccountMenu, 120);
+}
+function focusAccountMenu(event: FocusEvent) {
+  if (
+    event.target instanceof HTMLElement &&
+    event.target.matches(':focus-visible') &&
+    accountMenu.value
+  )
+    accountMenu.value.open = true;
+}
+function blurAccountMenu(event: FocusEvent) {
+  if (
+    !menuHovered &&
+    !(
+      event.relatedTarget instanceof Node &&
+      accountMenu.value?.contains(event.relatedTarget)
+    )
+  )
+    closeAccountMenu();
+}
+function toggleAccountMenu(event: MouseEvent) {
+  // Pointer hover owns the desktop state; taps and keyboard keep native details behavior.
+  if (event.detail > 0 && menuHovered) event.preventDefault();
+}
+onBeforeUnmount(closeAccountMenu);
 watch(
   () => route.fullPath,
   () => {
-    if (accountMenu.value) accountMenu.value.open = false;
+    closeAccountMenu();
   },
 );
 const calendarMonth = ref('');
@@ -298,8 +350,16 @@ function hasEvent(date: string) {
                   : '云端记录 · 点击刷新'
             }}
           </button>
-          <details ref="accountMenu" class="account-menu">
-            <summary class="account-entry">
+          <details
+            ref="accountMenu"
+            class="account-menu"
+            @pointerenter="enterAccountMenu"
+            @pointerleave="leaveAccountMenu"
+            @focusin="focusAccountMenu"
+            @focusout="blurAccountMenu"
+            @keydown.esc.stop.prevent="closeAccountMenu"
+          >
+            <summary class="account-entry" @click="toggleAccountMenu">
               <span class="avatar">{{
                 current?.displayName?.slice(0, 1) ?? '客'
               }}</span
@@ -313,7 +373,10 @@ function hasEvent(date: string) {
                 current?.displayName ?? '每一段经历，都值得记录'
               }}</strong>
               <div class="account-actions">
-                <RouterLink v-if="!current" class="button" to="/login"
+                <RouterLink
+                  v-if="!current"
+                  class="button account-signin"
+                  to="/login"
                   >登录·注册</RouterLink
                 >
                 <button

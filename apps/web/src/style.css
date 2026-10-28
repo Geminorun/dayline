@@ -43,22 +43,22 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 .notice {
-  background: #f0eefb;
-  color: #76649a;
+  background: var(--accent-soft);
+  color: var(--ink-soft);
 }
 .error {
   background: #fff0ef;
   color: #a34f55;
 }
 .muted {
-  color: #9295a5;
+  color: var(--muted);
   font-size: 12px;
   line-height: 1.8;
 }
 .card,
 .record-panel {
   padding: 28px;
-  border: 1px solid #eceef4;
+  border: 1px solid var(--line);
   border-radius: 12px;
   background: white;
   margin: 20px 0;
@@ -74,24 +74,29 @@ button:disabled {
 }
 .auth-tabs {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   margin: 0 0 24px;
   padding: 4px;
-  background: #f3f1fb;
+  background: var(--accent-soft);
   border-radius: 8px;
 }
 .auth-tabs button {
   flex: 1;
   border: 0;
   background: transparent;
-  color: #76649a;
-  padding: 10px;
+  color: var(--ink-soft);
+  min-height: 42px;
+  margin: 0;
+  padding: 10px 16px;
   border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
 }
 .auth-tabs button[aria-pressed='true'] {
-  background: white;
-  color: #5745a1;
-  box-shadow: 0 1px 4px #65539318;
+  background: var(--accent);
+  color: white;
+  font-weight: 650;
+  box-shadow: none;
 }
 .auth-fields {
   border: 0;
@@ -108,11 +113,11 @@ button:disabled {
 .record-panel p {
   font-size: 12px;
   line-height: 1.8;
-  color: #9290a0;
+  color: var(--muted);
 }
 :where(.card, .record-panel, .confirmation, .notice, .file-row)
-  button:not(.icon-btn) {
-  background: #7b70cf;
+  button:not(:where(.icon-btn, .auth-tab)) {
+  background: var(--accent);
   color: white;
   min-height: 36px;
   border-radius: 7px;
@@ -122,24 +127,24 @@ button:disabled {
 }
 :where(.card, .record-panel, .confirmation, .notice, .file-row)
   button.secondary {
-  background: #f0eefb;
-  color: #76649a;
+  background: var(--accent-soft);
+  color: var(--ink-soft);
 }
 :where(.card, .record-panel, .confirmation) label {
   display: block;
   margin: 18px 0;
   font-size: 12px;
-  color: #81778d;
+  color: var(--ink-soft);
 }
 :where(.card, .record-panel, .confirmation) input,
 :where(.card, .record-panel, .confirmation) select {
   display: block;
   width: 100%;
   padding: 11px 12px;
-  border: 1px solid #e5deed;
+  border: 1px solid var(--line);
   border-radius: 7px;
   background: #fdfcfe;
-  color: #60556f;
+  color: var(--ink-soft);
   margin-top: 9px;
   min-width: 0;
 }
@@ -155,10 +160,10 @@ button:disabled {
 .card a,
 .record-panel a,
 .notice a {
-  color: #8270ac;
+  color: var(--accent);
 }
 .card .eyebrow {
-  color: #a9a5ba;
+  color: var(--muted);
 }
 .links {
   display: flex;
@@ -170,15 +175,90 @@ button:disabled {
 .qr {
   margin-top: 24px;
   padding-top: 24px;
-  border-top: 1px solid #eef0f5;
+  border-top: 1px solid var(--line);
 }
 .qr img {
   display: block;
   max-width: 100%;
   margin: auto;
 }
+.auth-card {
+  max-width: 480px;
+  padding: 32px;
+}
+.auth-card h1 {
+  margin: 0 0 8px;
+  font-size: 26px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.auth-card .auth-description {
+  margin: 0 0 24px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.auth-fields label {
+  margin: 0 0 20px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.auth-fields input {
+  min-height: 44px;
+  margin-top: 8px;
+  font-size: 14px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.auth-fields > button[type='submit'] {
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.auth-card .error {
+  color: #963e3e;
+}
+.account-menu[open]::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 100%;
+  height: 12px;
+}
+.profile-popover {
+  padding: 20px;
+  border-color: var(--line);
+  box-shadow: 0 12px 32px #26352d16;
+}
+.profile-heading {
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.profile-name {
+  color: var(--ink);
+}
+.profile-popover .account-actions {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  gap: 4px;
+}
+.profile-popover .account-actions .button {
+  min-height: 40px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.profile-popover .account-actions .account-signin {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
 dt {
-  color: #9295a5;
+  color: var(--muted);
   font-size: 12px;
   margin-top: 18px;
 }
@@ -195,11 +275,11 @@ dd {
   z-index: 50;
   padding: 28px;
   background: #fff;
-  border: 1px solid #e7deef;
+  border: 1px solid var(--line);
   border-radius: 14px;
   box-shadow:
-    0 0 0 100vmax #26203366,
-    0 20px 70px #30214026;
+    0 0 0 100vmax #26352d66,
+    0 20px 70px #26352d26;
   font-size: 13px;
   line-height: 1.8;
 }
@@ -217,7 +297,7 @@ dd {
   border: none;
 }
 .planner-dialog .record-panel + .record-panel {
-  border-top: 1px solid #eee8f5;
+  border-top: 1px solid var(--line);
   margin-top: 24px;
   padding-top: 18px;
 }
@@ -233,13 +313,13 @@ dd {
 }
 .category-list li {
   padding: 12px 0;
-  border-bottom: 1px solid #f0edf5;
+  border-bottom: 1px solid var(--line);
   font-size: 12px;
   line-height: 1.8;
 }
 .file-row {
   padding: 16px 0;
-  border-top: 1px solid #eef0f5;
+  border-top: 1px solid var(--line);
   overflow-wrap: anywhere;
 }
 .file-category {
@@ -279,7 +359,7 @@ dd {
   position: relative;
   height: 68px;
   background: #fcfbfe;
-  border-bottom: 1px solid #ebe5f2;
+  border-bottom: 1px solid var(--line);
 }
 .timeline-row {
   display: flex;
@@ -303,10 +383,10 @@ dd {
 .timeline-bar.future {
   background: repeating-linear-gradient(
     45deg,
-    #eee8f6,
-    #eee8f6 4px,
-    #f9f7fc 4px,
-    #f9f7fc 8px
+    var(--accent-soft),
+    var(--accent-soft) 4px,
+    var(--surface-subtle) 4px,
+    var(--surface-subtle) 8px
   );
   border-style: dashed;
 }
@@ -339,6 +419,9 @@ dd {
   }
   .main-content > .notice {
     margin-top: 0;
+  }
+  .auth-card {
+    padding: 24px;
   }
 }
 .manager-close {

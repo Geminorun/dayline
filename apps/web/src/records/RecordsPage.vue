@@ -404,7 +404,7 @@ const distribution = computed(() =>
     .sort((a, b) => b.count - a.count),
 );
 const donutBackground = computed(() => {
-  if (!summary.value.count) return '#f0eef7';
+  if (!summary.value.count) return 'var(--line)';
   let end = 0;
   return `conic-gradient(${distribution.value
     .map((category) => {

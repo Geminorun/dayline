@@ -14,6 +14,7 @@ afterEach(() => {
   wrapper = undefined;
   useAccount().clear();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 it('keeps only two primary tabs and redirects old record-list links with the date preserved', async () => {
@@ -126,6 +127,19 @@ it('connects the reference calendar, modal editor, daily focus, categories and t
     .setValue('不存在的筛选词');
   await flushPromises();
   expect(wrapper.get('.timeline-empty').text()).toContain('还没有匹配的记录');
+  vi.useFakeTimers();
+  const accountMenu = wrapper.get('details.account-menu');
+  await accountMenu.trigger('pointerenter', { pointerType: 'mouse' });
+  expect(accountMenu.attributes('open')).toBeDefined();
+  await accountMenu.trigger('pointerleave', { pointerType: 'mouse' });
+  await vi.advanceTimersByTimeAsync(60);
+  await accountMenu.trigger('pointerenter', { pointerType: 'mouse' });
+  await vi.advanceTimersByTimeAsync(120);
+  expect(accountMenu.attributes('open')).toBeDefined();
+  await accountMenu.trigger('pointerleave', { pointerType: 'mouse' });
+  await vi.advanceTimersByTimeAsync(120);
+  expect(accountMenu.attributes('open')).toBeUndefined();
+  vi.useRealTimers();
   expect(
     wrapper.findAll('.account-actions a').map((link) => link.text()),
   ).toContain('登录·注册');
