@@ -285,7 +285,7 @@ it.each(['success', 'failure'])(
     await flushPromises();
     await wrapper
       .findAll('button')
-      .find((b) => b.text() === '查询已完成合并')
+      .find((b) => b.attributes('aria-label') === '查询已完成合并')
       ?.trigger('click');
     await flushPromises();
     const select = wrapper.get('select');

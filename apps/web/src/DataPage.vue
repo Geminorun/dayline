@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import AccountExports from './AccountExports.vue';
+import IconButton from './components/IconButton.vue';
+import PlannerIcon from './components/PlannerIcon.vue';
+import ColorPicker from './components/ColorPicker.vue';
 import { useAccount } from './account';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { createImportsClient, ClientError } from '@dayline/api-client';
@@ -31,6 +34,7 @@ import { localRepository, localEnvironment } from './adapters/local-repository';
 import { errorMessage } from './records/record-service';
 const account = useAccount();
 defineProps<{ action?: 'import' | 'export' }>();
+const emit = defineEmits<{ viewChange: [view: 'summary' | 'details'] }>();
 const space = useWorkspace(),
   client = createImportsClient(api),
   operation = ref<FileOperation | null>(null),
@@ -46,9 +50,35 @@ const space = useWorkspace(),
   page = ref(0),
   draftWarning = ref(false),
   downloadFormat = ref<'csv' | 'json'>('json');
-const rows = computed(
-  () => plan.value?.rows.slice(page.value * 50, page.value * 50 + 50) ?? [],
+const view = ref<'summary' | 'details'>('summary');
+watch(view, (next) => emit('viewChange', next), { immediate: true });
+const fileName = ref('');
+const rowFilter = ref<'problems' | 'all'>('problems');
+const problemRows = computed(
+  () =>
+    plan.value?.rows.filter(
+      (r) => r.action === 'needs_review' || r.file?.errors.length,
+    ) ?? [],
 );
+const visibleRows = computed(() =>
+  rowFilter.value === 'problems' && problemRows.value.length
+    ? problemRows.value
+    : (plan.value?.rows ?? []),
+);
+const rows = computed(() =>
+  visibleRows.value.slice(page.value * 50, page.value * 50 + 50),
+);
+const importCount = computed(
+  () => (plan.value?.counts?.create ?? 0) + (plan.value?.counts?.update ?? 0),
+);
+watch(rowFilter, () => {
+  page.value = 0;
+});
+function details() {
+  view.value = 'details';
+  page.value = 0;
+}
+
 const choices = ref<Record<string, ImportReviewInput['rows'][number]>>({});
 const categories = ref<ImportReviewInput['categories']>([]);
 const categoryReviewBaseline = ref('');
@@ -92,6 +122,8 @@ function clear() {
   error.value = '';
   notice.value = '';
   draftWarning.value = false;
+  view.value = 'summary';
+  fileName.value = '';
 }
 let mounted = false,
   initializationIntent = 0;
@@ -328,7 +360,20 @@ async function select(event: Event) {
   if (!(target instanceof HTMLInputElement)) return;
   const file = target.files?.[0];
   if (!file) return;
+  await loadFile(file);
+  target.value = '';
+}
+async function drop(event: DragEvent) {
+  const file = event.dataTransfer?.files[0];
+  if (file && !blocked.value && !space.readonly.value) await loadFile(file);
+}
+async function loadFile(file: File) {
   await run(async (c) => {
+    plan.value = null;
+    choices.value = {};
+    categories.value = [];
+    fileName.value = file.name;
+    view.value = 'summary';
     if (file.size > MAX_FILE_BYTES)
       throw new FileError('IMPORT_INVALID', '文件不能超过 10 MiB。');
     const format = file.name.toLowerCase().endsWith('.csv')
@@ -367,9 +412,10 @@ async function select(event: Event) {
     await persist(op);
     if (!valid(c)) return;
     operation.value = op;
+    fileName.value = file.name;
+    view.value = 'summary';
     await prepare(c, op);
   });
-  target.value = '';
 }
 function choose(
   row: ImportRow,
@@ -428,7 +474,10 @@ async function review() {
     if (valid(c) && next) {
       show(next);
       if (op.scope === 'guest') operation.value = { ...op, localPlan: next };
-      notice.value = '核对已保存，请检查新摘要后确认导入。';
+      notice.value = next.canCommit
+        ? '已保存处理结果，可以导入。'
+        : '处理结果已保存，请继续解决剩余问题。';
+      if (next.canCommit) view.value = 'summary';
     }
   });
 }
@@ -574,7 +623,7 @@ onMounted(() => {
 });
 const actionLabel = (r: ImportRow) =>
   ({
-    create_copy: '新增副本',
+    create_copy: '新增记录',
     skip: '跳过',
     needs_review: '等待核对',
     apply_update: '更新',
@@ -639,148 +688,292 @@ const fieldLabel: Record<string, string> = {
       space.mode.value === 'account'
     "
   />
-  <template v-else>
-    <section class="records-page">
-      <h1>
-        {{
-          action === 'import'
-            ? '导入记录'
-            : action === 'export'
-              ? '导出记录'
-              : '导入与导出'
-        }}
-      </h1>
-      <p v-if="scopeKey">
-        {{
-          space.mode.value === 'guest'
-            ? '此设备上的游客记录'
-            : '当前账号的云端记录'
-        }}
-      </p>
-      <p v-if="initializing || recovering" role="status" class="notice">
-        {{
-          initializing
-            ? '正在确认数据空间，请稍候。'
-            : '正在恢复本空间的文件任务，请稍候。'
-        }}
-      </p>
-      <div v-else-if="!scopeKey" role="status" class="notice">
-        <p>当前数据空间尚未准备完成。请先确认身份或重新读取记录。</p>
-        <button class="secondary" @click="initialize">重新准备数据管理</button>
-      </div>
-      <p>
-        {{
-          action === 'import'
-            ? '选择 CSV 或 JSON 文件，先核对预览再导入。文件中未包含的记录会保留。'
-            : action === 'export'
-              ? 'CSV 导出全部活动事项；完整 JSON 包含分类配色、重点及回收站记录。'
-              : 'CSV 包含全部活动事项；完整 JSON 包含分类配色、重点及仍保留的回收站。缺少文件行不会删除现有记录。'
-        }}
-      </p>
-      <p v-if="error" role="alert" class="error">{{ error }}</p>
-      <p v-if="notice" role="status" class="notice">{{ notice }}</p>
-      <section class="record-panel data-file-actions">
-        <h2 class="sr-only">文件操作</h2>
-        <button
-          v-if="action !== 'export'"
-          class="secondary"
-          @click="download(csvTemplate(), 'csv', true)"
-        >
-          下载 CSV 模板
-        </button>
-        <button
-          v-if="action !== 'import'"
-          :disabled="blocked"
-          @click="exportFile('csv')"
-        >
-          导出 CSV</button
-        ><button
-          v-if="action !== 'import'"
-          :disabled="blocked"
-          @click="exportFile('json')"
-        >
-          导出完整 JSON
-        </button>
-        <label v-if="action !== 'export'"
-          >选择 CSV / JSON 文件（UTF-8，最多 10 MiB）<input
-            type="file"
-            accept=".csv,.json,text/csv,application/json"
-            :disabled="blocked || space.readonly.value"
-            @change="select"
-        /></label>
-        <p v-if="action !== 'export'">
-          日期填写
-          YYYY-MM-DD，多重点日用分号隔开。先预览并处理所有错误与冲突，确认后整笔保存。
+  <section v-else class="records-page data-page themed-form">
+    <div class="data-heading">
+      <IconButton
+        v-if="view === 'details'"
+        icon="back"
+        label="返回导入摘要"
+        :disabled="busy"
+        @click="view = 'summary'"
+      />
+      <div>
+        <h1>
+          {{
+            view === 'details'
+              ? '导入详情'
+              : action === 'export'
+                ? '导出记录'
+                : action === 'import'
+                  ? '导入记录'
+                  : '导入与导出'
+          }}
+        </h1>
+        <p class="muted">
+          {{ space.mode.value === 'guest' ? '保存到此设备' : '保存到当前账号' }}
         </p>
-        <div v-if="draftWarning" role="status">
-          <p>
-            有尚未提交的本机草稿。可先去草稿页手动保存，或继续只导出云端已保存记录。
-          </p>
-          <RouterLink to="/drafts">查看草稿</RouterLink
+      </div>
+    </div>
+    <p v-if="initializing || recovering" role="status" class="notice">
+      {{ initializing ? '正在确认数据空间…' : '正在恢复上次导入…' }}
+    </p>
+    <div v-else-if="!scopeKey" role="status" class="notice">
+      <p>当前数据空间尚未准备完成。</p>
+      <button type="button" class="button subtle" @click="initialize">
+        重新读取
+      </button>
+    </div>
+    <p v-if="error" role="alert" class="error">{{ error }}</p>
+    <p v-if="notice" role="status" class="notice">{{ notice }}</p>
+    <template v-if="view === 'summary'">
+      <section
+        v-if="action !== 'import'"
+        class="record-panel data-file-actions"
+      >
+        <h2 v-if="!action">导出记录</h2>
+        <p>CSV 便于查看与编辑；完整 JSON 同时保留分类、重点和回收站。</p>
+        <div class="action-bar">
+          <button
+            type="button"
+            class="button primary"
+            :disabled="blocked"
+            @click="exportFile('csv')"
+          >
+            <PlannerIcon name="download" />导出 CSV</button
           ><button
+            type="button"
+            class="button subtle"
+            :disabled="blocked"
+            @click="exportFile('json')"
+          >
+            <PlannerIcon name="download" />导出完整 JSON
+          </button>
+        </div>
+        <div v-if="draftWarning" role="status" class="notice">
+          <p>有尚未提交的本机修改，可先继续编辑，或只导出云端已保存记录。</p>
+          <RouterLink to="/drafts">查看未提交修改</RouterLink
+          ><button
+            type="button"
+            class="button subtle"
             :disabled="blocked"
             @click="exportFile(downloadFormat, true)"
           >
             继续只导出云端记录
           </button>
         </div>
-        <button
-          v-if="action !== 'export'"
-          class="secondary"
-          :disabled="blocked"
-          @click="recover"
-        >
-          查询或恢复原任务
-        </button>
-        <button
-          v-if="action !== 'export' && operation && !plan"
-          :disabled="blocked"
-          @click="retry"
-        >
-          用原文件重试准备
-        </button>
-        <button
-          v-if="action !== 'export' && operation && !plan"
-          class="secondary"
-          :disabled="blocked"
-          @click="repreview"
-        >
-          保留原文件，重新建立预览
-        </button>
       </section>
-      <section v-if="action !== 'export' && plan" class="record-panel">
-        <h2>
-          {{
-            plan.status === 'committed'
-              ? '导入完成'
-              : plan.status === 'preview'
-                ? '核对导入预览'
-                : plan.status === 'expired'
-                  ? '预览已过期'
-                  : '任务已取消'
-          }}
-        </h2>
-        <button
+      <section v-if="action !== 'export'" class="import-summary">
+        <h2 v-if="!action">导入记录</h2>
+        <label
+          class="file-drop"
+          :class="{ 'file-drop-disabled': blocked || space.readonly.value }"
+          @dragover.prevent
+          @drop.prevent="drop"
+        >
+          <input
+            class="file-input"
+            type="file"
+            accept=".csv,.json,text/csv,application/json"
+            aria-label="选择 CSV / JSON 文件"
+            :disabled="blocked || space.readonly.value"
+            @change="select"
+          />
+          <PlannerIcon :name="plan ? 'check' : 'upload'" />
+          <strong>{{
+            busy
+              ? '正在分析文件…'
+              : fileName ||
+                (plan
+                  ? `上次选择的 ${plan.kind.toUpperCase()} 文件`
+                  : '选择文件，或拖放到这里')
+          }}</strong>
+          <span>{{ plan ? '点击更换文件' : 'CSV 或 JSON，最大 10 MiB' }}</span>
+        </label>
+        <template v-if="plan">
+          <div
+            class="import-result"
+            :class="{
+              'import-has-problems':
+                (!plan.canCommit || unreviewedSelections) &&
+                plan.status === 'preview',
+            }"
+          >
+            <h2>
+              {{
+                plan.status === 'committed'
+                  ? '导入完成'
+                  : plan.status === 'expired'
+                    ? '预览已过期'
+                    : plan.status === 'cancelled'
+                      ? '导入已取消'
+                      : unreviewedSelections
+                        ? '处理结果待保存'
+                        : plan.canCommit
+                          ? '文件已准备好'
+                          : '有内容需要处理'
+              }}
+            </h2>
+            <p class="import-total">
+              共 {{ plan.sourceSummary.entries }} 条记录
+            </p>
+            <div class="import-counts">
+              <span
+                >新增 <strong>{{ plan.counts?.create ?? 0 }}</strong></span
+              ><span
+                >更新 <strong>{{ plan.counts?.update ?? 0 }}</strong></span
+              ><span
+                >不变 <strong>{{ plan.counts?.unchanged ?? 0 }}</strong></span
+              ><span
+                >跳过 <strong>{{ plan.counts?.skip ?? 0 }}</strong></span
+              ><span v-if="plan.counts?.needsReview"
+                >待处理 <strong>{{ plan.counts.needsReview }}</strong></span
+              ><span v-if="plan.counts?.errors"
+                >错误 <strong>{{ plan.counts.errors }}</strong></span
+              >
+            </div>
+            <p v-if="plan.result" role="status">
+              已新增 {{ plan.result.created }} 条，更新
+              {{ plan.result.updated ?? 0 }} 条，跳过
+              {{ plan.result.skipped }} 条。
+            </p>
+            <p
+              v-if="
+                plan.status === 'preview' &&
+                (!plan.canCommit || unreviewedSelections)
+              "
+              class="muted"
+            >
+              {{
+                unreviewedSelections
+                  ? '请到详情保存处理结果后导入。'
+                  : '请在详情中处理分类、记录冲突或文件错误后继续。'
+              }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="button subtle import-details-link"
+            :disabled="blocked"
+            @click="details"
+          >
+            <PlannerIcon name="list" />{{
+              plan.status === 'preview' && !plan.canCommit
+                ? '处理待确认内容'
+                : '查看详情'
+            }}<PlannerIcon name="chevron" />
+          </button>
+        </template>
+        <p v-else class="muted import-help">
+          自动匹配已有分类，为新分类分配颜色。已有记录会保留。
+        </p>
+        <div v-if="operation && !plan" class="notice">
+          <p>可以查询上次文件任务，或使用原文件重试。</p>
+          <div class="action-bar">
+            <IconButton
+              icon="refresh"
+              label="查询或恢复原任务"
+              :disabled="blocked"
+              @click="recover"
+            /><button
+              type="button"
+              class="button subtle"
+              :disabled="blocked"
+              @click="retry"
+            >
+              用原文件重试准备</button
+            ><button
+              type="button"
+              class="button subtle"
+              :disabled="blocked"
+              @click="repreview"
+            >
+              保留原文件，重新建立预览
+            </button>
+          </div>
+        </div>
+        <footer class="import-footer">
+          <button
+            type="button"
+            class="button subtle"
+            :disabled="blocked"
+            @click="details"
+          >
+            <PlannerIcon name="list" />格式说明与模板
+          </button>
+          <button
+            v-if="plan?.status === 'preview'"
+            type="button"
+            class="button primary"
+            :disabled="
+              blocked ||
+              !plan.canCommit ||
+              unreviewedSelections ||
+              space.readonly.value
+            "
+            @click="commit"
+          >
+            {{
+              busy
+                ? '正在导入…'
+                : importCount
+                  ? `导入 ${importCount} 条`
+                  : '完成导入'
+            }}
+          </button>
+          <button
+            v-else-if="plan && plan.status !== 'committed'"
+            type="button"
+            class="button primary"
+            :disabled="blocked"
+            @click="repreview"
+          >
+            重新分析文件
+          </button>
+        </footer>
+      </section>
+    </template>
+    <template v-else>
+      <div class="import-detail-tools">
+        <IconButton
+          icon="download"
+          label="下载 CSV 模板"
+          @click="download(csvTemplate(), 'csv', true)"
+        /><IconButton
           v-if="operation"
-          class="secondary"
+          icon="download"
+          label="下载本次原文件"
           :disabled="blocked"
           @click="download(operation.text, operation.format)"
-        >
-          下载本次原文件
-        </button>
+        /><IconButton
+          v-if="operation"
+          icon="refresh"
+          label="查询或恢复原任务"
+          :disabled="blocked"
+          @click="recover"
+        /><IconButton
+          v-if="plan?.status === 'preview'"
+          icon="close"
+          label="取消本次导入"
+          :disabled="blocked"
+          @click="cancel"
+        />
+      </div>
+      <details class="import-format" :open="!plan">
+        <summary>文件格式说明</summary>
         <p>
-          共 {{ plan.sourceSummary.entries }} 条；新增
-          {{ plan.counts?.create ?? 0 }}、更新
-          {{ plan.counts?.update ?? 0 }}、不变
-          {{ plan.counts?.unchanged ?? 0 }}、待核对
-          {{ plan.counts?.needsReview ?? 0 }}、错误
-          {{ plan.counts?.errors ?? 0 }}、跳过 {{ plan.counts?.skip ?? 0 }}。
+          CSV 使用 UTF-8 编码，至少包含 title、start_date。日期填写
+          YYYY-MM-DD，多个重点日用分号隔开。新记录需提供分类名称；未提供颜色时自动分配。JSON
+          使用日序完整备份文件。
         </p>
-        <p v-if="plan.result">
-          已新增 {{ plan.result.created }} 条，更新
-          {{ plan.result.updated ?? 0 }} 条，跳过
-          {{ plan.result.skipped }} 条。原始文件及未出现在文件中的记录均保留。
-        </p>
+        <button
+          type="button"
+          class="button subtle"
+          @click="download(csvTemplate(), 'csv', true)"
+        >
+          <PlannerIcon name="download" />下载 CSV 模板
+        </button>
+      </details>
+      <section v-if="plan" class="record-panel import-details">
         <template v-if="plan.status === 'preview'">
           <h3>分类映射</h3>
           <div
@@ -806,13 +999,20 @@ const fieldLabel: Record<string, string> = {
             ><label
               >分类名称<input
                 v-model="c.name"
-                :disabled="blocked || !!c.targetId" /></label
-            ><label
-              >颜色<input
-                v-model="c.color"
-                type="color"
                 :disabled="blocked || !!c.targetId"
             /></label>
+            <div class="file-category-color">
+              <span
+                class="category-dot"
+                :style="{ backgroundColor: c.color }"
+              ></span
+              ><ColorPicker
+                v-model="c.color"
+                :label="`更改${c.name}颜色`"
+                :used="categories.map((category) => category.color)"
+                :disabled="blocked || !!c.targetId"
+              />
+            </div>
             <p v-if="plan.categoryMappings[index]?.restoreDefault">
               空白空间的默认分类将按备份恢复：{{
                 plan.categoryMappings[index]?.restoreDefault?.name
@@ -834,7 +1034,17 @@ const fieldLabel: Record<string, string> = {
               >需要明确核对</span
             >
           </div>
-          <h3>逐项差异</h3>
+          <div class="detail-section-heading">
+            <h3>记录详情</h3>
+            <label v-if="problemRows.length" class="inline-check"
+              ><input
+                v-model="rowFilter"
+                type="checkbox"
+                true-value="all"
+                false-value="problems"
+              />显示全部记录</label
+            >
+          </div>
           <article v-for="row in rows" :key="row.sourceKey" class="file-row">
             <h4>
               {{ row.file?.location }} · {{ row.source.title }} ·
@@ -845,7 +1055,9 @@ const fieldLabel: Record<string, string> = {
               {{
                 row.file?.endPresent
                   ? (row.source.endDate ?? '未结束')
-                  : '保持当前结束日期'
+                  : row.file?.current
+                    ? '保持当前结束日期'
+                    : '未结束'
               }}；重点
               {{
                 row.file?.focusPresent
@@ -853,7 +1065,9 @@ const fieldLabel: Record<string, string> = {
                       .filter((f) => f.focused)
                       .map((f) => f.date)
                       .join('、') || '清空'
-                  : '保持当前重点'
+                  : row.file?.current
+                    ? '保持当前重点'
+                    : '无'
               }}
             </p>
             <table v-if="row.file?.current" class="file-diff">
@@ -943,22 +1157,22 @@ const fieldLabel: Record<string, string> = {
                   个重点日
                 </p>
                 <p>{{ focusSlice(row, side).join('、') || '无重点日期' }}</p>
-                <button
-                  class="secondary"
+                <IconButton
+                  icon="chevron"
+                  label="前 50 个日期"
+                  class="chevron-back"
                   :disabled="!(focusPages[row.sourceKey + side] ?? 0)"
                   @click="focusMove(row, side, -1)"
-                >
-                  前 50 个日期</button
-                ><button
-                  class="secondary"
+                />
+                <IconButton
+                  icon="chevron"
+                  label="后 50 个日期"
                   :disabled="
                     ((focusPages[row.sourceKey + side] ?? 0) + 1) * 50 >=
                     focusDates(row, side).length
                   "
                   @click="focusMove(row, side, 1)"
-                >
-                  后 50 个日期
-                </button>
+                />
               </div>
             </details>
             <p v-if="row.file?.differences.length">
@@ -971,19 +1185,20 @@ const fieldLabel: Record<string, string> = {
               {{ e }}
             </p>
             <template v-if="!row.file?.errors.length"
-              ><button
-                class="secondary"
+              ><IconButton
+                icon="skip"
+                label="跳过此项"
                 :disabled="blocked"
                 @click="choose(row, 'skip')"
-              >
-                跳过此项</button
-              ><button
-                class="secondary"
+              />
+              <IconButton
+                icon="copy"
+                label="保留为新副本"
                 :disabled="blocked"
                 @click="choose(row, 'create_copy')"
-              >
-                保留为新副本</button
-              ><button
+              />
+              <button
+                class="button primary"
                 v-if="row.file?.current && !row.source.deletedAt"
                 :disabled="blocked"
                 @click="
@@ -1004,50 +1219,63 @@ const fieldLabel: Record<string, string> = {
             >
           </article>
           <div class="toolbar">
-            <button class="secondary" :disabled="page === 0" @click="page--">
-              上一页</button
-            ><span
+            <IconButton
+              icon="chevron"
+              label="上一页"
+              class="chevron-back"
+              :disabled="page === 0"
+              @click="page--"
+            />
+            <span
               >{{ page + 1 }} /
-              {{ Math.max(1, Math.ceil(plan.rows.length / 50)) }}</span
-            ><button
-              class="secondary"
-              :disabled="(page + 1) * 50 >= plan.rows.length"
+              {{ Math.max(1, Math.ceil(visibleRows.length / 50)) }}</span
+            ><IconButton
+              icon="chevron"
+              label="下一页"
+              :disabled="(page + 1) * 50 >= visibleRows.length"
               @click="page++"
-            >
-              下一页
-            </button>
+            />
           </div>
-          <button :disabled="blocked || space.readonly.value" @click="review">
-            保存核对并更新预览</button
-          ><button
-            :disabled="
-              blocked ||
-              !plan.canCommit ||
-              unreviewedSelections ||
-              space.readonly.value
-            "
-            @click="commit"
-          >
-            确认整体导入</button
-          ><button class="secondary" :disabled="blocked" @click="cancel">
-            取消本次导入
-          </button>
-          <p v-if="unreviewedSelections" role="status">
-            分类或逐项选择尚未保存核对，请先保存核对并更新预览。
-          </p>
-          <p v-if="!plan.canCommit">
-            请先修正文件错误、分类映射或逐项冲突。错误行不能静默跳过。
-          </p>
         </template>
+        <p v-else>
+          {{
+            plan.status === 'committed'
+              ? '本次导入已完成。'
+              : '本次预览已结束，可用原文件重新分析。'
+          }}
+        </p>
         <button
           v-if="plan.status !== 'committed'"
-          class="secondary"
+          type="button"
+          class="button subtle"
           :disabled="blocked"
           @click="repreview"
         >
           保留原文件，重新建立预览
         </button>
       </section>
-    </section>
-  </template>
+      <footer class="import-footer">
+        <button
+          type="button"
+          class="button subtle"
+          :disabled="blocked"
+          @click="view = 'summary'"
+        >
+          返回摘要
+        </button>
+        <button
+          v-if="plan?.status === 'preview'"
+          type="button"
+          class="button primary"
+          :disabled="blocked || space.readonly.value"
+          @click="review"
+        >
+          保存处理结果
+        </button>
+      </footer>
+      <p v-if="unreviewedSelections" role="status" class="muted">
+        选择尚未保存，保存核对后再导入。
+      </p>
+    </template>
+  </section>
 </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import IconButton from '../components/IconButton.vue';
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
 import type {
   CategoryDto,
@@ -540,10 +541,8 @@ async function copy() {
     <p v-if="status" role="status" class="notice">{{ status }}</p>
     <p v-if="localError" role="alert" class="error">{{ localError }}</p>
     <div v-if="durable" class="actions">
-      <button type="button" class="secondary" @click="copy">复制输入</button
-      ><button type="button" class="secondary" @click="download">
-        下载草稿
-      </button>
+      <IconButton icon="copy" label="复制输入" @click="copy" />
+      <IconButton icon="download" label="下载草稿" @click="download" />
     </div>
     <section v-if="conflict || missing" class="notice" aria-label="冲突核对">
       <h3>服务器与草稿核对</h3>
@@ -580,10 +579,16 @@ async function copy() {
           </tr>
         </tbody>
       </table>
-      <button v-if="conflict" type="button" @click="useServer">
+      <button
+        class="button primary"
+        v-if="conflict"
+        type="button"
+        @click="useServer"
+      >
         放弃草稿，使用服务器内容
       </button>
       <button
+        class="button primary"
         v-if="conflict && !conflict.deletedAt"
         type="button"
         :disabled="busy"
@@ -591,12 +596,17 @@ async function copy() {
       >
         核对后按当前版本保存
       </button>
-      <button type="button" :disabled="busy" @click="copyEntry">
+      <button
+        class="button primary"
+        type="button"
+        :disabled="busy"
+        @click="copyEntry"
+      >
         另存一份
       </button>
       <button
         type="button"
-        class="secondary"
+        class="button subtle"
         @click="
           conflict = null;
           missing = false;
@@ -657,24 +667,29 @@ async function copy() {
         <button
           v-if="acknowledgement.length > acknowledgementLimit"
           type="button"
-          class="secondary"
+          class="button subtle"
           @click="acknowledgementLimit += 100"
         >
           显示更多受影响日期
         </button>
-        <button type="button" :disabled="busy" @click="submit(true)">
+        <button
+          class="button primary"
+          type="button"
+          :disabled="busy"
+          @click="submit(true)"
+        >
           确认移除这些重点并保存</button
         ><button
           type="button"
-          class="secondary"
+          class="button subtle"
           @click="acknowledgement = null"
         >
           取消确认
         </button>
       </div>
-      <button type="submit" :disabled="busy">
+      <button class="button primary" type="submit" :disabled="busy">
         {{ busy ? '正在保存…' : local ? '保存到本机' : '保存到服务器' }}</button
-      ><button type="button" class="secondary" @click="emit('close')">
+      ><button type="button" class="button subtle" @click="emit('close')">
         关闭编辑
       </button>
     </form>

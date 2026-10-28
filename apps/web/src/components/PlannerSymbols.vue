@@ -2,6 +2,44 @@
 <template>
   <svg class="sprite" aria-hidden="true">
     <defs>
+      <symbol id="i-eye-off" viewBox="0 0 24 24">
+        <path
+          d="m3 3 18 18M10.5 5.2 12 5c6.5 0 10 7 10 7a19 19 0 0 1-3 4M6 6a22 22 0 0 0-4 6s3.5 7 10 7c2 0 3.8-.6 5.3-1.6M10 10a3 3 0 0 0 4 4"
+        />
+      </symbol>
+      <symbol id="i-palette" viewBox="0 0 24 24">
+        <path
+          d="M12 3a9 9 0 1 0 0 18h1.2a2.3 2.3 0 0 0 1.6-3.9c-.8-.8-.2-2.1.9-2.1H18a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z"
+        />
+        <path d="M7 10h.01M10 6h.01M15 7h.01M18 11h.01" stroke-width="3" />
+      </symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24">
+        <path
+          d="M20 7v5h-5M4 17v-5h5M5.1 8a8 8 0 0 1 13.2-3L20 7M4 17l1.7 2A8 8 0 0 0 19 16"
+        />
+      </symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24">
+        <rect x="8" y="8" width="12" height="13" rx="2" />
+        <path d="M16 8V3H3v13h5" />
+      </symbol>
+      <symbol id="i-restore" viewBox="0 0 24 24">
+        <path d="M3 4v6h6M3 10a9 9 0 1 1 1 7M12 7v5l3 2" />
+      </symbol>
+      <symbol id="i-back" viewBox="0 0 24 24">
+        <path d="m10 5-7 7 7 7M3 12h18" />
+      </symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24">
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+        <circle cx="12" cy="12" r="3" />
+      </symbol>
+      <symbol id="i-skip" viewBox="0 0 24 24">
+        <path d="m5 5 10 7L5 19V5Zm14 0v14" />
+      </symbol>
+      <symbol id="i-wand" viewBox="0 0 24 24">
+        <path
+          d="m4 20 11-11 3 3L7 23 4 20Zm9-9 3 3M13 3v3m-7 6H3M19 3v3m1 3h3"
+        />
+      </symbol>
       <symbol id="i-upload" viewBox="0 0 24 24">
         <path d="M12 16V3m-4 4 4-4 4 4M4 16v4h16v-4" />
       </symbol>

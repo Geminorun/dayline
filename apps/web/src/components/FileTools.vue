@@ -6,6 +6,7 @@ import { useWorkspace } from '../records/workspace';
 const workspace = useWorkspace();
 const DataPage = defineAsyncComponent(() => import('../DataPage.vue'));
 const action = ref<'import' | 'export' | null>(null);
+const detailed = ref(false);
 </script>
 <template>
   <div class="file-tools" role="group" aria-label="导入与导出">
@@ -32,7 +33,7 @@ const action = ref<'import' | 'export' | null>(null);
       v-if="action"
       :label="action === 'import' ? '导入记录' : '导出记录'"
       class="data-dialog"
-      :class="{ 'data-export-dialog': action === 'export' }"
+      :class="{ 'data-detail-dialog': action === 'import' && detailed }"
       @close="action = null"
     >
       <button
@@ -40,9 +41,12 @@ const action = ref<'import' | 'export' | null>(null);
         aria-label="关闭数据工具"
         @click="action = null"
       >
-        ×
+        <PlannerIcon name="close" />
       </button>
-      <DataPage :action="action" />
+      <DataPage
+        :action="action"
+        @view-change="detailed = $event === 'details'"
+      />
     </PlannerDialog>
   </div>
 </template>

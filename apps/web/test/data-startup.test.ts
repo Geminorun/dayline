@@ -32,7 +32,9 @@ function deferred() {
   return { promise, release };
 }
 function button(w: ReturnType<typeof mount>, label: string) {
-  const found = w.findAll('button').find((b) => b.text() === label);
+  const found = w
+    .findAll('button')
+    .find((b) => b.text() === label || b.attributes('aria-label') === label);
   if (!found) throw new Error('Missing ' + label);
   return found;
 }
@@ -152,13 +154,11 @@ describe('routed data management startup readiness', () => {
     expect(w.get<HTMLInputElement>('input[type=file]').element.disabled).toBe(
       true,
     );
-    expect(button(w, '查询或恢复原任务').attributes('disabled')).toBeDefined();
+    expect(w.find('[aria-label="查询或恢复原任务"]').exists()).toBe(false);
     await button(w, '导出完整 JSON').trigger('click');
     expect(requests.filter((p) => p.startsWith('/api/v1/exports'))).toEqual([]);
     identity.release();
-    await vi.waitFor(() =>
-      expect(w.text()).toContain('正在恢复本空间的文件任务'),
-    );
+    await vi.waitFor(() => expect(w.text()).toContain('正在恢复上次导入'));
     expect(api.getAccount()).toBe(id);
     expect(button(w, '导出完整 JSON').attributes('disabled')).toBeDefined();
     expect(w.get<HTMLInputElement>('input[type=file]').element.disabled).toBe(
@@ -169,7 +169,7 @@ describe('routed data management startup readiness', () => {
       expect(button(w, '导出完整 JSON').attributes('disabled')).toBeUndefined(),
     );
     await button(w, '导出完整 JSON').trigger('click');
-    await vi.waitFor(() => expect(w.text()).toContain('有尚未提交的本机草稿'));
+    await vi.waitFor(() => expect(w.text()).toContain('有尚未提交的本机修改'));
     expect(requests.filter((p) => p.startsWith('/api/v1/exports'))).toEqual([]);
     const createObjectURL = vi.fn(() => 'blob:startup'),
       revokeObjectURL = vi.fn();
@@ -206,7 +206,7 @@ describe('routed data management startup readiness', () => {
       expect(button(w, '导出完整 JSON').attributes('disabled')).toBeUndefined(),
     );
     await button(w, '导出完整 JSON').trigger('click');
-    await vi.waitFor(() => expect(w.text()).toContain('有尚未提交的本机草稿'));
+    await vi.waitFor(() => expect(w.text()).toContain('有尚未提交的本机修改'));
     expect(
       requests.filter((p) => p.startsWith('/api/v1/exports')),
     ).toHaveLength(1);

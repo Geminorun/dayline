@@ -198,19 +198,23 @@ it('uses server Retry-After for email resend, disables repeated requests, then p
   await wrapper.get('form').trigger('submit');
   await flushPromises();
   expect(wrapper.get('[role="alert"]').text()).toContain('等待 2 秒');
-  expect(wrapper.get('form button').text()).toBe('2 秒后可重试');
-  expect(wrapper.get('form button').attributes('disabled')).toBeDefined();
+  expect(wrapper.get('form button[type=submit]').text()).toBe('2 秒后可重试');
+  expect(
+    wrapper.get('form button[type=submit]').attributes('disabled'),
+  ).toBeDefined();
   await wrapper.get('form').trigger('submit');
   expect(fetch).toHaveBeenCalledOnce();
   await vi.advanceTimersByTimeAsync(1000);
   expect(wrapper.get('[role="alert"]').text()).toContain('等待 1 秒');
   expect(wrapper.text()).not.toContain('等待 2 秒');
-  expect(wrapper.get('form button').text()).toBe('1 秒后可重试');
+  expect(wrapper.get('form button[type=submit]').text()).toBe('1 秒后可重试');
   await vi.advanceTimersByTimeAsync(1000);
   expect(wrapper.find('[role="alert"]').exists()).toBe(false);
   expect(wrapper.get('[role="status"]').text()).toContain('可以重新提交');
-  expect(wrapper.get('form button').text()).toBe('重发验证邮件');
-  expect(wrapper.get('form button').attributes('disabled')).toBeUndefined();
+  expect(wrapper.get('form button[type=submit]').text()).toBe('重发验证邮件');
+  expect(
+    wrapper.get('form button[type=submit]').attributes('disabled'),
+  ).toBeUndefined();
   await wrapper.get('form').trigger('submit');
   await flushPromises();
   expect(fetch).toHaveBeenCalledTimes(2);
@@ -249,8 +253,10 @@ it.each([
     expect(wrapper.get('[role="alert"]').text()).toBe(tip);
     expect(wrapper.text()).not.toContain('private provider');
     expect(wrapper.find('[role="status"]').exists()).toBe(false);
-    expect(wrapper.get('form button').text()).toBe('重发验证邮件');
-    expect(wrapper.get('form button').attributes('disabled')).toBeUndefined();
+    expect(wrapper.get('form button[type=submit]').text()).toBe('重发验证邮件');
+    expect(
+      wrapper.get('form button[type=submit]').attributes('disabled'),
+    ).toBeUndefined();
   },
 );
 
@@ -314,12 +320,18 @@ it.each([
       'Never-store-this-password',
     );
     if (nextStep === 'verify_email') {
-      expect(wrapper.get('form button').text()).toBe('3 秒后可重试');
-      expect(wrapper.get('form button').attributes('disabled')).toBeDefined();
+      expect(wrapper.get('form button[type=submit]').text()).toBe(
+        '3 秒后可重试',
+      );
+      expect(
+        wrapper.get('form button[type=submit]').attributes('disabled'),
+      ).toBeDefined();
       await wrapper.get('a[href="/login"]').trigger('click');
       await flushPromises();
-      expect(wrapper.get('form button').text()).toBe('邮箱登录');
-      expect(wrapper.get('form button').attributes('disabled')).toBeUndefined();
+      expect(wrapper.get('form button[type=submit]').text()).toBe('邮箱登录');
+      expect(
+        wrapper.get('form button[type=submit]').attributes('disabled'),
+      ).toBeUndefined();
     }
   },
 );
@@ -373,9 +385,9 @@ it('restores the remaining cooldown after navigation without restarting it or bl
     }),
   );
   const wrapper = await page('verify');
-  expect(wrapper.get('form button').text()).toBe('4 秒后可重试');
+  expect(wrapper.get('form button[type=submit]').text()).toBe('4 秒后可重试');
   await vi.advanceTimersByTimeAsync(4000);
-  expect(wrapper.get('form button').text()).toBe('重发验证邮件');
+  expect(wrapper.get('form button[type=submit]').text()).toBe('重发验证邮件');
 });
 
 it('prefills a new-tab verification callback email as a hint without claiming authenticated or verified status', async () => {
@@ -418,5 +430,5 @@ it('keeps an expired-link error visible instead of restoring an old successful m
   const wrapper = await page('verify');
   expect(wrapper.get('[role="alert"]').text()).toContain('链接已失效');
   expect(wrapper.text()).not.toContain('邮件已提交发送');
-  expect(wrapper.get('form button').text()).toBe('重发验证邮件');
+  expect(wrapper.get('form button[type=submit]').text()).toBe('重发验证邮件');
 });

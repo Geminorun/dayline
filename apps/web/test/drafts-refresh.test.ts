@@ -181,7 +181,7 @@ describe('durable manual drafts and identity transitions', () => {
     await first.get('form').trigger('focusout');
     await flushPromises();
     expect(first.text()).toContain('本机草稿暂存失败');
-    expect(first.text()).toContain('下载草稿');
+    expect(first.find('button[aria-label="下载草稿"]').exists()).toBe(true);
     expect(first.get('input').element.value).toBe('尚未写入');
   });
   it('ignores an account-switch intent when the user selected guest while /me was pending', async () => {

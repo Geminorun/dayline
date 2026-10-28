@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import IconButton from './components/IconButton.vue';
+import ColorPicker from './components/ColorPicker.vue';
 import { admissionStatusLabel } from '@dayline/contracts';
 import { formatBeijingTime } from '@dayline/core';
 import { reviewSelectionKey } from '@dayline/contracts';
@@ -115,13 +117,16 @@ function chooseRow(index: number, event: Event) {
       <h3>逐项分类映射</h3>
       <div v-for="(c, index) in categories" :key="c.sourceId" class="form-grid">
         <label
-          >分类名称<input
-            v-model="c.name"
+          >分类名称<input v-model="c.name" :disabled="busy" maxlength="24"
+        /></label>
+        <div class="mapping-color">
+          <ColorPicker
+            v-model="c.color"
             :disabled="busy"
-            maxlength="24" /></label
-        ><label
-          >颜色<input v-model="c.color" :disabled="busy" type="color" /></label
-        ><label
+            label="更改分类颜色"
+          />
+        </div>
+        <label
           >目标<select
             :value="c.targetId ?? ''"
             :disabled="busy"
@@ -169,26 +174,32 @@ function chooseRow(index: number, event: Event) {
         >
       </details>
       <div class="actions">
-        <button class="secondary" :disabled="page === 0" @click="page--">
-          上一页记录</button
-        ><span
+        <IconButton
+          icon="chevron"
+          label="上一页记录"
+          class="chevron-back"
+          :disabled="page === 0"
+          @click="page--"
+        />
+        <span
           >第 {{ page + 1 }} / {{ pageCount }} 页，共
           {{ job.rows.length }} 条</span
-        ><button
-          class="secondary"
+        ><IconButton
+          icon="chevron"
+          label="下一页记录"
           :disabled="page + 1 >= pageCount"
           @click="page++"
-        >
-          下一页记录
-        </button>
+        />
       </div>
-      <button :disabled="busy" @click="review">更新并核对计划</button
+      <button class="button primary" :disabled="busy" @click="review">
+        更新并核对计划</button
       ><button
+        class="button primary"
         :disabled="busy || !job.canCommit || unreviewedSelections"
         @click="commit"
       >
         确认接入此计划</button
-      ><button class="secondary" :disabled="busy" @click="action('cancel')">
+      ><button class="button subtle" :disabled="busy" @click="action('cancel')">
         暂不导入
       </button>
       <p v-if="unreviewedSelections" role="status">
@@ -199,7 +210,7 @@ function chooseRow(index: number, event: Event) {
       </p></template
     >
     <p v-else>本次计划已取消或过期，原本机记录保留，可重新准备。</p>
-    <button class="secondary" :disabled="busy" @click="action('query')">
+    <button class="button subtle" :disabled="busy" @click="action('query')">
       查询原任务状态
     </button>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
@@ -209,9 +220,9 @@ function chooseRow(index: number, event: Event) {
       冻结本机修订 {{ operation.package.packageRevision }} ·
       {{ admissionStatusLabel(operation.status) }}
     </p>
-    <button class="secondary" :disabled="busy" @click="action('query')">
+    <button class="button subtle" :disabled="busy" @click="action('query')">
       查询保留的原任务</button
-    ><button class="secondary" :disabled="busy" @click="restart">
+    ><button class="button subtle" :disabled="busy" @click="restart">
       明确重新预览当前本机修订
     </button>
   </section>

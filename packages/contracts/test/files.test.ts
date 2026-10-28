@@ -454,3 +454,65 @@ describe('category restoration and idempotent provenance', () => {
     ).toBe(true);
   });
 });
+
+it('imports missing-color CSV directly, reuses owned names without recoloring and preserves explicit new colors', () => {
+  const data = createGuestPackage(randomUUID, now);
+  const first = data.categories[0];
+  if (!first) throw new Error('category');
+  first.color = '#102030';
+  const text =
+    'title,start_date,category_name,category_color\n已有,2026-10-01,游戏,\n新增1,2026-10-01,旅行,\n新增2,2026-10-01,摄影,\n有配色,2026-10-01,烘焙,#ABCDEF';
+  const p = plan(text, 'csv', data);
+  expect(p.canCommit).toBe(true);
+  expect(p.categoryMappings.find((c) => c.name === '游戏')).toMatchObject({
+    targetId: first.id,
+    color: '#102030',
+  });
+  expect(p.categoryMappings.find((c) => c.name === '烘焙')?.color).toBe(
+    '#ABCDEF',
+  );
+  const generated = p.categoryMappings.filter((c) =>
+    ['旅行', '摄影'].includes(c.name),
+  );
+  expect(new Set(generated.map((c) => c.color)).size).toBe(2);
+  expect(
+    generated.every((c) => !data.categories.some((e) => e.color === c.color)),
+  ).toBe(true);
+  const next = guestFileCommit(data, p, now);
+  expect(next.categories.find((c) => c.id === first.id)?.color).toBe('#102030');
+  expect(next.entries).toHaveLength(4);
+  const again = plan(text, 'csv', {
+    ...data,
+    categories: [...next.categories],
+  });
+  expect(again.rows.map((r) => [r.sourceKey, r.sourceDigest])).toEqual(
+    p.rows.map((r) => [r.sourceKey, r.sourceDigest]),
+  );
+  expect(
+    again.categoryMappings.map((c) => [c.sourceKey, c.sourceDigest]),
+  ).toEqual(p.categoryMappings.map((c) => [c.sourceKey, c.sourceDigest]));
+});
+
+it('keeps deliberate gray and missing-color identity compatible, rejects invalid explicit colors and conflicting ID/name', () => {
+  const data = createGuestPackage(randomUUID, now);
+  const p = plan(
+    'title,start_date,category_name,category_color\n第一条,2026-10-01,灰色,#A0A4B3\n第二条,2026-10-01,灰色,',
+    'csv',
+    data,
+  );
+  expect(p.canCommit).toBe(true);
+  expect(p.categoryMappings[0]?.color).toBe('#A0A4B3');
+  const bad = plan(
+    'title,start_date,category_name,category_color\n坏颜色,2026-10-01,旅行,not-a-color',
+    'csv',
+    data,
+  );
+  expect(bad.canCommit).toBe(false);
+  const conflict = plan(
+    `title,start_date,category_id,category_name\n冲突,2026-10-01,${data.categories[0]?.id},不同名称`,
+    'csv',
+    data,
+  );
+  expect(conflict.canCommit).toBe(false);
+  expect(conflict.categoryMappings[0]?.needsReview).toBe(true);
+});

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import IconButton from './components/IconButton.vue';
 import { formatBeijingTime } from '@dayline/core';
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import ReauthForm from './ReauthForm.vue';
@@ -219,7 +220,7 @@ onMounted(load);
 onBeforeUnmount(unsubscribe);
 </script>
 <template>
-  <section class="records-page">
+  <section class="records-page settings-subpage themed-form">
     <h1>未提交修改</h1>
     <p>这些内容只暂存在此设备。继续编辑并保存后，才会上传到账号。</p>
     <p v-if="error" class="error">{{ error }}</p>
@@ -234,9 +235,14 @@ onBeforeUnmount(unsubscribe);
         :to="{ path: '/entries/new', query: { draftId: draft.draftId } }"
         @click="resume(draft)"
         >继续编辑</RouterLink
-      ><button class="secondary" @click="copy(draft)">复制输入</button
-      ><button class="secondary" @click="download(draft)">下载副本</button
-      ><button class="secondary" @click="discard(draft)">放弃修改</button>
+      ><IconButton icon="copy" label="复制输入" @click="copy(draft)" />
+      <IconButton icon="download" label="下载副本" @click="download(draft)" />
+      <IconButton
+        icon="trash"
+        label="放弃修改"
+        danger
+        @click="discard(draft)"
+      />
     </article>
     <section
       v-if="
@@ -249,8 +255,8 @@ onBeforeUnmount(unsubscribe);
       <p>
         只有重新验证统一账号并取得后端映射后，才读取本机来源草稿。普通切换账号不会迁移草稿。
       </p>
-      <button class="secondary" @click="listMerges">查询已完成合并</button
-      ><label
+      <IconButton icon="refresh" label="查询已完成合并" @click="listMerges" />
+      <label
         >选择合并<select v-model="selectedMerge" @change="resetRecovery">
           <option value="">请选择</option>
           <option v-for="j in mergeJobs" :key="j.id" :value="j.id">
@@ -287,7 +293,9 @@ onBeforeUnmount(unsubscribe);
             draft.baseEntryVersion ?? '缺失'
           }}
         </p>
-        <button @click="recover(draft)">保留原稿，复制为待核对草稿</button>
+        <button class="button primary" @click="recover(draft)">
+          保留原稿，复制为待核对草稿
+        </button>
       </article>
     </section>
     <p v-if="!error && !drafts.length">没有未提交的修改。</p>

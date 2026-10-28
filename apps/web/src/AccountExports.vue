@@ -108,11 +108,18 @@ async function download(format: 'csv' | 'json', confirmed = false) {
     </p>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <p v-if="notice" role="status" class="notice">{{ notice }}</p>
-    <button :disabled="busy" @click="download('csv')">导出 CSV</button
-    ><button :disabled="busy" @click="download('json')">导出完整 JSON</button>
+    <button class="button primary" :disabled="busy" @click="download('csv')">
+      导出 CSV</button
+    ><button class="button primary" :disabled="busy" @click="download('json')">
+      导出完整 JSON
+    </button>
     <div v-if="warning" role="status">
       <p>{{ warningText }}</p>
-      <button :disabled="busy" @click="download(selected, true)">
+      <button
+        class="button primary"
+        :disabled="busy"
+        @click="download(selected, true)"
+      >
         继续只导出云端记录</button
       ><RouterLink to="/drafts">复制或下载草稿</RouterLink>
     </div>

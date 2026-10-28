@@ -50,7 +50,9 @@ afterEach(() => {
   api.invalidate();
 });
 const button = (w: ReturnType<typeof mount>, name: string) => {
-  const b = w.findAll('button').find((b) => b.text() === name);
+  const b = w
+    .findAll('button')
+    .find((b) => b.text() === name || b.attributes('aria-label') === name);
   if (!b) throw new Error('missing ' + name);
   return b;
 };
@@ -96,15 +98,18 @@ describe('Web file preview and explicit confirmation', () => {
     );
     const w = page();
     await flushPromises();
+    expect(w.findAll('.file-row')).toHaveLength(0);
+    await button(w, '查看详情').trigger('click');
     expect(w.findAll('.file-row')).toHaveLength(50);
-    expect(w.text()).toContain('共 10000 条');
+    expect(w.text()).toContain('候选0');
     expect((await guestRepository.read())?.entries).toHaveLength(0);
     await button(w, '跳过此项').trigger('click');
     await button(w, '下一页').trigger('click');
     expect(w.text()).toContain('候选50');
     await button(w, '上一页').trigger('click');
     expect(w.findAll('.file-row')[0]?.text()).toContain('已选择');
-    expect(button(w, '确认整体导入').attributes('disabled')).toBeDefined();
+    await button(w, '返回摘要').trigger('click');
+    expect(button(w, '导入 10000 条').attributes('disabled')).toBeDefined();
   }, 20000);
   it('shows actual current/desired field and focus values, requires explicit current version review, and keeps local source intact on CAS failure', async () => {
     let data = space.guest.value;
@@ -146,16 +151,17 @@ describe('Web file preview and explicit confirmation', () => {
     );
     const w = page();
     await flushPromises();
+    await button(w, '处理待确认内容').trigger('click');
     expect(w.get('.file-diff').text()).toContain('当前名称');
     expect(w.get('.file-diff').text()).toContain('文件名称');
     expect(w.get('.file-diff').text()).toContain('游戏');
-    expect(w.get('details').text()).toContain('2026-10-20');
+    expect(w.get('.file-row details').text()).toContain('2026-10-20');
     await button(w, '已核对当前内容，更新此项').trigger('click');
-    await button(w, '保存核对并更新预览').trigger('click');
+    await button(w, '保存处理结果').trigger('click');
     await flushPromises();
     await vi.waitFor(() =>
       expect(
-        button(w, '确认整体导入').attributes('disabled'),
+        button(w, '导入 1 条').attributes('disabled'),
         w.text(),
       ).toBeUndefined(),
     );
@@ -163,7 +169,7 @@ describe('Web file preview and explicit confirmation', () => {
       { ...data, packageRevision: data.packageRevision + 1 },
       data.packageRevision,
     );
-    await button(w, '确认整体导入').trigger('click');
+    await button(w, '导入 1 条').trigger('click');
     await flushPromises();
     await vi.waitFor(() =>
       expect(w.get('[role="alert"]').text()).toContain('重新预览'),
@@ -356,36 +362,42 @@ it('requires category edits to be reviewed, keeps failed review input and locks 
   );
   const w = page();
   await flushPromises();
-  const commit = button(w, '确认整体导入'),
-    name = w.get('.file-category input');
-  expect(commit.attributes('disabled')).toBeUndefined();
+  expect(button(w, '导入 1 条').attributes('disabled')).toBeUndefined();
+  await button(w, '查看详情').trigger('click');
+  const name = w.get('.file-category input');
   await name.setValue('已核对新分类');
-  expect(commit.attributes('disabled')).toBeDefined();
+  await button(w, '返回摘要').trigger('click');
+  expect(button(w, '导入 1 条').attributes('disabled')).toBeDefined();
   const originalCommit = guestRepository.commitFile.bind(guestRepository),
     write = vi.spyOn(guestRepository, 'commitFile');
-  await commit.trigger('click');
+  await button(w, '导入 1 条').trigger('click');
   expect(write).not.toHaveBeenCalled();
+  await button(w, '查看详情').trigger('click');
   vi.spyOn(guestRepository, 'read').mockRejectedValueOnce(
     new Error('controlled read failure'),
   );
-  await button(w, '保存核对并更新预览').trigger('click');
+  await button(w, '保存处理结果').trigger('click');
   await flushPromises();
-  expect((name.element as HTMLInputElement).value).toBe('已核对新分类');
-  expect(commit.attributes('disabled')).toBeDefined();
-  await button(w, '保存核对并更新预览').trigger('click');
+  expect(
+    (w.get('.file-category input').element as HTMLInputElement).value,
+  ).toBe('已核对新分类');
+  await button(w, '保存处理结果').trigger('click');
   await flushPromises();
   await vi.waitFor(() =>
-    expect(commit.attributes('disabled'), w.text()).toBeUndefined(),
+    expect(
+      button(w, '导入 1 条').attributes('disabled'),
+      w.text(),
+    ).toBeUndefined(),
   );
   let finish: (() => void) | undefined;
   write.mockImplementationOnce(async (...args) => {
     await new Promise<void>((resolve) => (finish = resolve));
     return originalCommit(...args);
   });
-  await commit.trigger('click');
+  await button(w, '导入 1 条').trigger('click');
   await flushPromises();
-  expect(name.attributes('disabled')).toBeDefined();
-  expect(w.get('.file-category select').attributes('disabled')).toBeDefined();
+  expect(w.get('input[type=file]').attributes('disabled')).toBeDefined();
+  expect(button(w, '查看详情').attributes('disabled')).toBeDefined();
   expect(finish).toBeTypeOf('function');
   finish?.();
   await flushPromises();
@@ -395,4 +407,25 @@ it('requires category edits to be reviewed, keeps failed review input and locks 
     ),
   ).toBe(true);
   expect(write).toHaveBeenCalledTimes(1);
+});
+
+it('imports a clean missing-color file in one click without opening details or submitting a review', async () => {
+  await pending(
+    'title,start_date,category_name\n旅行记录,2026-10-01,旅行\n第二条,2026-10-02,摄影',
+  );
+  const w = page();
+  await flushPromises();
+  expect(w.find('.file-category').exists()).toBe(false);
+  expect(w.find('.file-row').exists()).toBe(false);
+  expect(w.text()).toContain('共 2 条记录');
+  await button(w, '导入 2 条').trigger('click');
+  await vi.waitFor(async () =>
+    expect((await guestRepository.read())?.entries).toHaveLength(2),
+  );
+  const data = await guestRepository.read();
+  const created =
+    data?.categories.filter((c) => ['旅行', '摄影'].includes(c.name)) ?? [];
+  expect(created).toHaveLength(2);
+  expect(new Set(created.map((c) => c.color)).size).toBe(2);
+  expect(w.text()).toContain('导入完成');
 });

@@ -8,6 +8,44 @@ export const DEFAULT_CATEGORIES = [
   { seedKey: 'life', name: '生活', color: '#B88EAA' },
   { seedKey: 'other', name: '其他', color: '#A0A4B3' },
 ] as const;
+/** Ordered category colors, shared by manual creation and file import. */
+export const CATEGORY_PALETTE = [
+  '#6CA58A',
+  '#6C9BCE',
+  '#D6A063',
+  '#B88EAA',
+  '#8B80D8',
+  '#5CA6A6',
+  '#D78278',
+  '#97A65A',
+  '#BD86BC',
+  '#7894AE',
+  '#BD936D',
+  '#708FC2',
+  '#A58BB0',
+  '#699B78',
+  '#C89B51',
+  '#688F94',
+  '#BC798E',
+  '#A09568',
+  '#888FC2',
+  '#A0A4B3',
+] as const;
+
+/** First unused color; once exhausted, least used with palette-order tie breaking. */
+export function nextCategoryColor(used: readonly string[]): string {
+  const counts = new Map<string, number>();
+  for (const color of used) {
+    const key = color.toUpperCase();
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return CATEGORY_PALETTE.reduce<string>(
+    (best, color) =>
+      (counts.get(color) ?? 0) < (counts.get(best) ?? 0) ? color : best,
+    CATEGORY_PALETTE[0],
+  );
+}
+
 export function isCalendarDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const year = Number(value.slice(0, 4));

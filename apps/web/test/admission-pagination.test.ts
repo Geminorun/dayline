@@ -62,11 +62,15 @@ describe('bounded complete import preview', () => {
     expect(w.findAll('details')).toHaveLength(50);
     expect(w.text()).toContain('共 10000 条');
     await w.findAll('details')[0]?.get('select').setValue('skip');
-    const next = w.findAll('button').find((b) => b.text() === '下一页记录');
+    const next = w
+      .findAll('button')
+      .find((b) => b.attributes('aria-label') === '下一页记录');
     await next?.trigger('click');
     expect(w.findAll('details')).toHaveLength(50);
     expect(w.text()).toContain('预览行50');
-    const previous = w.findAll('button').find((b) => b.text() === '上一页记录');
+    const previous = w
+      .findAll('button')
+      .find((b) => b.attributes('aria-label') === '上一页记录');
     await previous?.trigger('click');
     expect(w.findAll('details')[0]?.get('select').element.value).toBe('skip');
     w.unmount();

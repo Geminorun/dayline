@@ -755,3 +755,44 @@ describe('CSV/JSON raw file round trips through durable imports', () => {
     expect((await snapshot(fresh)).data.entries).toHaveLength(1);
   });
 });
+
+it('auto-matches owned categories and freezes distinct default colors for CSV without color, including durable reimport after rename', async () => {
+  const user = await login();
+  const old = await snapshot(user);
+  const text =
+    'title,start_date,category_name\n现有分类,2026-10-01,游戏\n新分类一,2026-10-01,旅行\n新分类二,2026-10-02,摄影';
+  const p = await preview(user, text);
+  expect(p.canCommit).toBe(true);
+  const newlyMapped = p.categoryMappings.filter((c) =>
+    ['旅行', '摄影'].includes(c.name),
+  );
+  expect(new Set(newlyMapped.map((c) => c.color)).size).toBe(2);
+  expect(
+    newlyMapped.every(
+      (c) => !old.data.categories.some((owned) => owned.color === c.color),
+    ),
+  ).toBe(true);
+  const committed = await commitFile(user, p);
+  expect(committed.result?.created).toBe(3);
+  const after = await snapshot(user);
+  const travel = after.data.categories.find((c) => c.name === '旅行');
+  if (!travel) throw new Error('category');
+  await call(user, 'patch', `/categories/${travel.id}`)
+    .send({
+      expectedVersion: travel.version,
+      name: '新旅行名称',
+      color: '#123456',
+    })
+    .expect(200);
+  const again = await preview(user, text);
+  expect(again.canCommit).toBe(true);
+  expect(again.rows.every((r) => r.action === 'skip')).toBe(true);
+  await commitFile(user, again);
+  const final = await snapshot(user);
+  expect(final.data.entries).toHaveLength(3);
+  expect(final.data.categories).toHaveLength(after.data.categories.length);
+  expect(final.data.categories.find((c) => c.id === travel.id)).toMatchObject({
+    name: '新旅行名称',
+    color: '#123456',
+  });
+});

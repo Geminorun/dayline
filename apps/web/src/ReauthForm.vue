@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PasswordInput from './components/PasswordInput.vue';
+import IconButton from './components/IconButton.vue';
 import { formatBeijingTime } from '@dayline/core';
 import { onBeforeUnmount, ref, watch } from 'vue';
 import {
@@ -152,7 +154,7 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <section class="record-panel">
+  <section class="record-panel reauth-panel">
     <h2>为本次操作重新验证</h2>
     <p>验证只授权当前操作，五分钟内有效。</p>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
@@ -161,14 +163,13 @@ onBeforeUnmount(() => {
       @submit.prevent="verify"
     >
       <label
-        >当前账号密码<input
+        >当前账号密码<PasswordInput
           v-model="password"
-          type="password"
           autocomplete="current-password" /></label
-      ><button :disabled="busy">验证密码</button>
+      ><button class="button primary" :disabled="busy">验证密码</button>
     </form>
     <template v-if="account.current.value?.wechatBound"
-      ><button class="secondary" :disabled="busy" @click="start">
+      ><button class="button subtle" :disabled="busy" @click="start">
         用已绑定微信扫码重新验证
       </button>
       <div v-if="qr">
@@ -179,12 +180,19 @@ onBeforeUnmount(() => {
           }}，有效至
           {{ formatBeijingTime(qr.expiresAt) }}
         </p>
-        <button v-if="status === 'confirmed'" :disabled="busy" @click="consume">
+        <button
+          class="button primary"
+          v-if="status === 'confirmed'"
+          :disabled="busy"
+          @click="consume"
+        >
           领取本次验证证明</button
-        ><button class="secondary" :disabled="busy" @click="cancel()">
-          取消重新验证
-        </button>
-      </div></template
-    >
+        ><IconButton
+          icon="close"
+          label="取消重新验证"
+          :disabled="busy"
+          @click="cancel()"
+        /></div
+    ></template>
   </section>
 </template>

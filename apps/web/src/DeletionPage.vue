@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PlannerIcon from './components/PlannerIcon.vue';
+import IconButton from './components/IconButton.vue';
 import AccountExports from './AccountExports.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { deletionResultSchema } from '@dayline/contracts';
@@ -133,9 +135,17 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <section class="records-page">
-    <p class="eyebrow">DAYLINE · 账号注销</p>
-    <h1>{{ pending ? '注销状态与撤销' : '注销统一账号' }}</h1>
+  <section class="records-page settings-subpage themed-form">
+    <div class="subpage-heading">
+      <RouterLink
+        class="icon-btn tool-button"
+        to="/settings"
+        aria-label="返回设置"
+        title="返回设置"
+        ><PlannerIcon name="back"
+      /></RouterLink>
+      <h1>{{ pending ? '注销状态与撤销' : '注销统一账号' }}</h1>
+    </div>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <p v-if="notice" role="status" class="notice">{{ notice }}</p>
     <p
@@ -184,7 +194,7 @@ onBeforeUnmount(() => {
         @verified="proof = $event"
       />
       <button
-        class="danger"
+        class="button danger"
         :disabled="busy || !confirmed || !proof"
         @click="submit"
       >
@@ -196,9 +206,12 @@ onBeforeUnmount(() => {
               : '确认申请七天后注销'
         }}
       </button>
-      <button class="secondary" :disabled="busy" @click="load">
-        读取服务器注销状态
-      </button>
+      <IconButton
+        icon="refresh"
+        label="读取服务器注销状态"
+        :disabled="busy"
+        @click="load"
+      />
     </template>
     <template
       v-else-if="!account.current.value || workspace.mode.value !== 'account'"
@@ -207,7 +220,7 @@ onBeforeUnmount(() => {
         >重新登录并查询</RouterLink
       ><button
         v-if="account.current.value"
-        class="secondary"
+        class="button subtle"
         @click="workspace.switchMode('account')"
       >
         进入已验证账号查看注销状态

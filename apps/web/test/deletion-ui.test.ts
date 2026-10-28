@@ -153,13 +153,13 @@ it('accepts twelve emoji category codepoints through the actual form and rejects
       props: { categories: [], entries: [], busy: false, mutate },
     });
   wrappers.push(w);
-  await w.get('button.add-inline').trigger('click');
+  await w.get('button.category-add').trigger('click');
   const name = w.get('input:not([type=color])');
   await name.setValue('😀'.repeat(12));
   await w.get('form').trigger('submit');
   expect(mutate).toHaveBeenCalledOnce();
   mutate.mockClear();
-  await w.get('button.add-inline').trigger('click');
+  await w.get('button.category-add').trigger('click');
   await w.get('input:not([type=color])').setValue('😀'.repeat(13));
   await w.get('form').trigger('submit');
   expect(mutate).not.toHaveBeenCalled();

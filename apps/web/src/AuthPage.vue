@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PasswordInput from './components/PasswordInput.vue';
 import { formatBeijingTime } from '@dayline/core';
 import {
   qrCreatedDtoSchema,
@@ -581,18 +582,16 @@ onBeforeUnmount(() => {
             required
         /></label>
         <label v-if="mode === 'change-password'"
-          >当前密码<input
+          >当前密码<PasswordInput
             v-model="currentPassword"
-            type="password"
             autocomplete="current-password"
             required
         /></label>
         <label v-if="isPassword"
           >{{ mode === 'login' ? '密码' : '新密码（8–128 字符）'
-          }}<input
+          }}<PasswordInput
             v-model="password"
             name="password"
-            type="password"
             :autocomplete="
               mode === 'login' ? 'current-password' : 'new-password'
             "
@@ -604,15 +603,18 @@ onBeforeUnmount(() => {
           v-if="
             ['register', 'reset-password', 'change-password'].includes(mode)
           "
-          >再次输入新密码<input
+          >再次输入新密码<PasswordInput
             v-model="confirmPassword"
-            type="password"
             autocomplete="new-password"
             minlength="8"
             maxlength="128"
             required
         /></label>
-        <button type="submit" :disabled="busy || retryApplies">
+        <button
+          class="button primary"
+          type="submit"
+          :disabled="busy || retryApplies"
+        >
           {{ submitLabel }}
         </button>
       </fieldset>
@@ -637,7 +639,7 @@ onBeforeUnmount(() => {
       <p>扫描后请在小程序中明确确认。已有账号将切换为扫码的微信账号。</p>
       <button
         type="button"
-        class="secondary"
+        class="button subtle"
         :disabled="qrBusy"
         @click="createQr"
       >
@@ -653,6 +655,7 @@ onBeforeUnmount(() => {
         <p role="status">{{ qrMessage }}</p>
         <p>有效至 {{ formatBeijingTime(qr.expiresAt) }}</p>
         <button
+          class="button primary"
           v-if="qr.status === 'confirmed'"
           :disabled="qrBusy"
           @click="consume"
@@ -660,13 +663,13 @@ onBeforeUnmount(() => {
           完成本次网页登录</button
         ><button
           v-else-if="['pending', 'scanned'].includes(qr.status)"
-          class="secondary"
+          class="button subtle"
           @click="poll"
         >
           刷新状态</button
         ><button
           v-if="['pending', 'scanned', 'confirmed'].includes(qr.status)"
-          class="secondary"
+          class="button subtle"
           @click="cancelSafely"
         >
           取消本次扫码

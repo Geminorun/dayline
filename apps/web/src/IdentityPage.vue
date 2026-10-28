@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import ColorPicker from './components/ColorPicker.vue';
+import PasswordInput from './components/PasswordInput.vue';
+import PlannerIcon from './components/PlannerIcon.vue';
+import IconButton from './components/IconButton.vue';
 import { formatBeijingTime } from '@dayline/core';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
@@ -495,8 +499,20 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
-  <section class="records-page">
-    <h1>登录方式与账号合并</h1>
+  <section class="records-page settings-subpage themed-form">
+    <div class="subpage-heading">
+      <RouterLink
+        class="icon-btn tool-button"
+        to="/settings"
+        aria-label="返回设置"
+        title="返回设置"
+        ><PlannerIcon name="back"
+      /></RouterLink>
+      <div>
+        <h1>登录方式与账号合并</h1>
+        <p class="muted">管理邮箱、微信与账号合并</p>
+      </div>
+    </div>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <p v-if="notice" role="status" class="notice">{{ notice }}</p>
     <RouterLink
@@ -509,7 +525,7 @@ onBeforeUnmount(() => {
     </p>
     <button
       v-if="!isEmailCallback && !ready && account.current.value"
-      class="secondary"
+      class="button subtle"
       :disabled="busy"
       @click="initialize"
     >
@@ -527,11 +543,22 @@ onBeforeUnmount(() => {
         }}）。绑定与普通登录分别处理。
       </p>
       <button
+        class="button"
+        :class="mode === 'bind_email' ? 'primary' : 'subtle'"
+        :aria-pressed="mode === 'bind_email'"
         :disabled="busy || !!account.current.value.email"
         @click="begin('bind_email')"
       >
         添加邮箱</button
-      ><button :disabled="busy" @click="begin('bind_wechat')">绑定微信</button>
+      ><button
+        class="button"
+        :class="mode === 'bind_wechat' ? 'primary' : 'subtle'"
+        :aria-pressed="mode === 'bind_wechat'"
+        :disabled="busy"
+        @click="begin('bind_wechat')"
+      >
+        绑定微信
+      </button>
       <p>
         首版支持一个邮箱与一个微信；超出组合时双方保持独立。原本机草稿不会自动提交。
       </p>
@@ -552,7 +579,7 @@ onBeforeUnmount(() => {
           "
         /><template v-if="proof"
           ><template v-if="mode === 'bind_email'"
-            ><button :disabled="busy" @click="sendEmail">
+            ><button class="button primary" :disabled="busy" @click="sendEmail">
               发送或重发绑定邮件
             </button>
             <section v-if="requestId" class="record-panel">
@@ -560,21 +587,27 @@ onBeforeUnmount(() => {
                 打开邮件验证后回来继续。未知邮箱设置新密码；如邮箱已有账号，须验证该账号当前密码后才能预览合并。
               </p>
               <label
-                >新邮箱设置密码<input
+                >新邮箱设置密码<PasswordInput
                   v-model="password"
-                  type="password"
                   autocomplete="new-password" /></label
               ><label
-                >已有邮箱账号的当前密码<input
+                >已有邮箱账号的当前密码<PasswordInput
                   v-model="otherPassword"
-                  type="password"
                   autocomplete="current-password" /></label
-              ><button :disabled="busy" @click="completeEmail">
+              ><button
+                class="button primary"
+                :disabled="busy"
+                @click="completeEmail"
+              >
                 邮件验证后继续
               </button>
             </section></template
           ><template v-else
-            ><button :disabled="busy" @click="bindWechat">
+            ><button
+              class="button primary"
+              :disabled="busy"
+              @click="bindWechat"
+            >
               生成绑定微信小程序码
             </button>
             <div v-if="qr">
@@ -585,6 +618,7 @@ onBeforeUnmount(() => {
                 }}。扫码者明确确认后，原网页领取绑定结果。
               </p>
               <button
+                class="button primary"
                 v-if="qrStatus === 'confirmed'"
                 :disabled="busy"
                 @click="consume"
@@ -594,17 +628,24 @@ onBeforeUnmount(() => {
             </div></template
           ></template
         ></template
-      ><button class="secondary" :disabled="busy" @click="cancel">
-        暂不绑定 / 取消
-      </button>
+      ><IconButton
+        icon="close"
+        label="暂不绑定 / 取消"
+        :disabled="busy"
+        @click="cancel"
+      />
       <section class="record-panel">
         <h2>恢复原操作</h2>
-        <button class="secondary" :disabled="busy" @click="run(refreshJobs)">
-          查询我的绑定与合并任务</button
-        ><button
+        <IconButton
+          icon="refresh"
+          label="查询我的绑定与合并任务"
+          :disabled="busy"
+          @click="run(refreshJobs)"
+        />
+        <button
           v-for="j in emailJobs"
           :key="j.id"
-          class="secondary"
+          class="button subtle"
           :disabled="busy"
           @click="restoreEmail(j)"
         >
@@ -612,16 +653,20 @@ onBeforeUnmount(() => {
         ><button
           v-for="j in jobs"
           :key="j.id"
-          class="secondary"
+          class="button subtle"
           :disabled="busy"
           @click="query(j.id)"
         >
           查询原合并 ·
           {{ formatBeijingTime(j.completedAt ?? j.createdAt) }} ·
           {{ identityStatusLabel(j.status) }}</button
-        ><button v-if="recoveryId" :disabled="busy" @click="query()">
-          查询本次提交结果
-        </button>
+        ><IconButton
+          icon="refresh"
+          label="查询本次提交结果"
+          v-if="recoveryId"
+          :disabled="busy"
+          @click="query()"
+        />
         <RouterLink
           v-if="jobs.some((job) => job.status === 'committed')"
           class="settings-link"
@@ -666,7 +711,7 @@ onBeforeUnmount(() => {
         {{ conflict }}
       </p>
       <template v-if="plan.status === 'preview'"
-        ><button class="secondary" :disabled="busy" @click="renew">
+        ><button class="button subtle" :disabled="busy" @click="renew">
           重新验证双方并继续原计划
         </button>
         <h3>分类映射</h3>
@@ -689,11 +734,10 @@ onBeforeUnmount(() => {
             v-model="c.name"
             :disabled="busy || !!c.targetId"
             aria-label="合并分类名称"
-          /><input
+          /><ColorPicker
             v-model="c.color"
-            type="color"
             :disabled="busy || !!c.targetId"
-            aria-label="合并分类颜色"
+            :label="`更改${c.name}分类颜色`"
           />
         </div>
         <label
@@ -708,7 +752,7 @@ onBeforeUnmount(() => {
               来源：{{ plan.sourceSummary.displayName }}
             </option>
           </select></label
-        ><button :disabled="busy" @click="review">
+        ><button class="button primary" :disabled="busy" @click="review">
           保存核对并更新预览
         </button></template
       >
@@ -731,17 +775,23 @@ onBeforeUnmount(() => {
               ?.sourceName
           }}
         </p>
-        <button class="secondary" @click="openFocus(e.id)">
+        <button class="button subtle" @click="openFocus(e.id)">
           核对 {{ groupedFocus.get(e.id)?.length ?? 0 }} 个重点状态
         </button>
       </article>
-      <button :disabled="page === 0" @click="page--">上一页来源</button
-      ><button
+      <IconButton
+        icon="chevron"
+        label="上一页来源"
+        class="chevron-back"
+        :disabled="page === 0"
+        @click="page--"
+      />
+      <IconButton
+        icon="chevron"
+        label="下一页来源"
         :disabled="(page + 1) * 50 >= plan.entries.length"
         @click="page++"
-      >
-        下一页来源
-      </button>
+      />
       <h3>目标事项（全部保留）</h3>
       <p
         v-for="e in plan.targetEntries.slice(
@@ -754,18 +804,25 @@ onBeforeUnmount(() => {
         {{
           e.deletedAt ? `回收站至 ${formatBeijingTime(e.purgeAfter)}` : '活动'
         }}
-        <button class="secondary" @click="openFocus(e.id)">
+        <button class="button subtle" @click="openFocus(e.id)">
           核对 {{ groupedFocus.get(e.id)?.length ?? 0 }} 个重点状态
         </button>
       </p>
-      <button :disabled="targetPage === 0" @click="targetPage--">
-        上一页目标</button
-      ><button
+      <IconButton
+        icon="chevron"
+        label="上一页目标"
+        class="chevron-back"
+        :disabled="targetPage === 0"
+        @click="targetPage--"
+      />
+      <IconButton
+        icon="chevron"
+        label="下一页目标"
         :disabled="(targetPage + 1) * 50 >= plan.targetEntries.length"
         @click="targetPage++"
-      >
-        下一页目标</button
-      ><button
+      />
+      <button
+        class="button primary"
         v-if="plan.status === 'preview'"
         :disabled="busy || !plan.canCommit || selectionNeedsReview"
         @click="commit"
@@ -780,14 +837,19 @@ onBeforeUnmount(() => {
         >
           {{ f.date }} · {{ f.focused ? '重点' : '已取消' }} · 保留原状态
         </p>
-        <button :disabled="focusPage === 0" @click="focusPage--">
-          上一页日期</button
-        ><button
+        <IconButton
+          icon="chevron"
+          label="上一页日期"
+          class="chevron-back"
+          :disabled="focusPage === 0"
+          @click="focusPage--"
+        />
+        <IconButton
+          icon="chevron"
+          label="下一页日期"
           :disabled="(focusPage + 1) * 50 >= focusDetail.length"
           @click="focusPage++"
-        >
-          下一页日期
-        </button>
+        />
       </section>
       <p v-if="plan.result">
         合并完成，请重新登录并完整刷新，再手动核对本机草稿。

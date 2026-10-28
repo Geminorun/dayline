@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import IconButton from '../components/IconButton.vue';
 import { formatBeijingTime } from '@dayline/core';
 import {
   computed,
@@ -971,6 +972,7 @@ const recent = computed(
       >
       <template v-if="view === 'trash'"
         ><button
+          class="button danger"
           v-if="snapshot.trashEntries.length && !readonly"
           :disabled="busy"
           @click="
@@ -1009,25 +1011,25 @@ const recent = computed(
                   .join('、') || '无'
               }}
             </p>
-            <button
+            <IconButton
+              icon="restore"
+              label="恢复事项"
               v-if="!readonly"
               :disabled="
                 busy || (!!entry.purgeAfter && entry.purgeAfter <= serverTime)
               "
               @click="restoreEntry(entry)"
-            >
-              恢复事项</button
-            ><button
+            />
+            <IconButton
+              icon="trash"
+              label="永久删除此项"
+              danger
               v-if="!readonly"
-              class="secondary"
               :disabled="busy"
               @click="confirm = { kind: 'purge', entry: { ...entry } }"
-            >
-              永久删除此项
-            </button>
-          </li>
-        </ul></template
-      >
+            />
+          </li></ul
+      ></template>
       <PlannerDialog
         v-if="view === 'categories' && !readonly"
         label="分类管理"
@@ -1092,11 +1094,15 @@ const recent = computed(
                   : `永久清空当前 ${snapshot.trashEntries.length} 条回收站事项？无法恢复；期间有修改会重新确认。`
             }}
           </p>
-          <button :disabled="busy" @click="confirmed">
+          <button class="button danger" :disabled="busy" @click="confirmed">
             确认{{
               confirm.kind === 'delete' ? '移入回收站' : '永久删除'
             }}</button
-          ><button class="secondary" :disabled="busy" @click="confirm = null">
+          ><button
+            class="button subtle"
+            :disabled="busy"
+            @click="confirm = null"
+          >
             取消
           </button>
         </section></PlannerDialog

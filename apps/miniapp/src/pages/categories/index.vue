@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
+import { nextCategoryColor } from '@dayline/core';
 import { createCategorySchema } from '@dayline/contracts';
 import type { CategoryDto } from '@dayline/contracts';
 import { useWorkspace, records, message } from '../../workspace';
@@ -8,7 +9,7 @@ import { newId } from '../../adapters/uuid';
 const { snapshot, loading, busy, error, notice, readonly, ensure, mutate } =
   useWorkspace();
 const name = ref(''),
-  color = ref('#8B80D8'),
+  color = ref(nextCategoryColor([])),
   edit = ref<CategoryDto | null>(null),
   id = ref(''),
   deleting = ref<CategoryDto | null>(null),
@@ -22,7 +23,13 @@ const entries = computed(() => [
       snapshot.value?.categories.filter((c) => c.id !== deleting.value?.id) ??
       [],
   );
-onShow(ensure);
+onShow(async () => {
+  await ensure();
+  if (!edit.value && !name.value)
+    color.value = nextCategoryColor(
+      snapshot.value?.categories.map((c) => c.color) ?? [],
+    );
+});
 function start(c: CategoryDto) {
   edit.value = { ...c };
   name.value = c.name;
@@ -32,7 +39,9 @@ function reset() {
   edit.value = null;
   id.value = '';
   name.value = '';
-  color.value = '#8B80D8';
+  color.value = nextCategoryColor(
+    snapshot.value?.categories.map((c) => c.color) ?? [],
+  );
 }
 async function save() {
   error.value = '';

@@ -3,7 +3,11 @@ import Papa from 'papaparse';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import { z } from 'zod';
-import { businessToday, DEFAULT_CATEGORIES } from '@dayline/core';
+import {
+  businessToday,
+  DEFAULT_CATEGORIES,
+  nextCategoryColor,
+} from '@dayline/core';
 import {
   categoryDtoSchema,
   entryDtoSchema,
@@ -1220,6 +1224,48 @@ export function initializeFilePlan(
         mapping.needsReview = true;
     }
   }
+  if (plan.kind === 'csv') {
+    // Allocate only in the plan: parsed IDs/digests remain stable across palette usage
+    // changes, renames, retries and reimports. Explicit file colors reserve their slot.
+    const missingColor = new Set(
+      source.categories
+        .filter(
+          (category) =>
+            source.entries.filter((entry) => entry.categoryId === category.id)
+              .length > 0 &&
+            source.entries.every(
+              (entry, i) =>
+                entry.categoryId !== category.id ||
+                source.file?.rows[i]?.categoryAmbiguous,
+            ),
+        )
+        .map((category) => category.id),
+    );
+    const used = cloud.categories.map((c) => c.color);
+    for (const mapping of plan.categoryMappings) {
+      if (mapping.action === 'skip') continue;
+      const row = source.entries.findIndex(
+        (e) => e.categoryId === mapping.sourceId,
+      );
+      const reference = source.file?.rows[row]?.categoryReference;
+      const sameName =
+        cloud.categories.find((c) => c.id === reference) ??
+        cloud.categories.find((c) => c.name === mapping.name);
+      if (sameName) {
+        mapping.targetId = sameName.id;
+        mapping.color = sameName.color;
+        mapping.needsReview = false;
+      } else if (!missingColor.has(mapping.sourceId)) used.push(mapping.color);
+    }
+    for (const mapping of plan.categoryMappings) {
+      if (mapping.action === 'skip') continue;
+      if (!mapping.targetId && missingColor.has(mapping.sourceId)) {
+        mapping.color = nextCategoryColor(used);
+        used.push(mapping.color);
+        mapping.needsReview = false;
+      }
+    }
+  }
   if (plan.kind === 'json' && empty) {
     const reserved = new Set(
       plan.categoryMappings.filter((c) => c.seedKey).map((c) => c.targetId),
@@ -1255,7 +1301,8 @@ export function initializeFilePlan(
         mapping.color = byId.color;
         mapping.needsReview =
           !!row.file.categoryName && row.file.categoryName !== byId.name;
-      } else if (row.file.categoryAmbiguous) mapping.needsReview = true;
+      } else if (!row.file.categoryName && !mapping.targetId)
+        mapping.needsReview = true;
       if (!row.file.categoryPresent && row.file.requestedId) {
         const target = cloud.entries.find(
           (e) => e.id === row.file?.requestedId,

@@ -69,7 +69,10 @@ function editor(
 const button = (wrapper: ReturnType<typeof mount>, text: string) => {
   const result = wrapper
     .findAll('button')
-    .find((button) => button.text() === text);
+    .find(
+      (button) =>
+        button.text() === text || button.attributes('aria-label') === text,
+    );
   if (!result) throw new Error(`Missing button ${text}`);
   return result;
 };
