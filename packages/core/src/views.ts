@@ -96,7 +96,9 @@ export function selectEntries<T extends ViewEntry>(
             Math.max(
               dateOrdinal(e.startDate),
               dateOrdinal(e.endDate ?? today),
-            ) >= range.start)),
+            ) +
+              1 >
+              range.start)),
     )
     .sort(
       (a, b) =>

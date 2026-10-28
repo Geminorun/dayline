@@ -259,3 +259,27 @@ it('anchors rolling month, quarter and year windows at today and keeps full hist
     expect(w.ticks.every((t) => Number.isFinite(t.x))).toBe(true);
   }
 });
+
+it('keeps inclusive end dates visible when a panned window starts partway through their last day', () => {
+  const entry = {
+    id: 'last-day',
+    title: '当天结束',
+    categoryId: 'c',
+    startDate: '2026-09-01',
+    endDate: '2026-10-01',
+  };
+  const lastDay = dateOrdinal('2026-10-01');
+  const filter = { ...emptyFilter(), status: 'all' as const };
+  expect(
+    selectEntries([entry], '2026-10-28', filter, {
+      start: lastDay + 0.75,
+      endExclusive: lastDay + 31,
+    }),
+  ).toEqual([entry]);
+  expect(
+    selectEntries([entry], '2026-10-28', filter, {
+      start: lastDay + 1,
+      endExclusive: lastDay + 32,
+    }),
+  ).toEqual([]);
+});
