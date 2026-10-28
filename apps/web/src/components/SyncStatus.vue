@@ -72,6 +72,7 @@ const label = computed(
           : '点击更新云端记录'),
 );
 function refresh() {
+  if (workspace.retrySeconds.value > 0) return;
   manual.value = true;
   void workspace.load();
 }
@@ -88,7 +89,7 @@ onBeforeUnmount(() => {
       aria-label="刷新记录"
       :title="label"
       :aria-busy="working"
-      :disabled="working"
+      :disabled="working || workspace.retrySeconds.value > 0"
       @click="refresh"
     >
       <PlannerIcon v-if="phase === 'error'" name="alert" />
@@ -115,10 +116,14 @@ onBeforeUnmount(() => {
         <button
           v-if="toast.error"
           class="toast-retry"
-          :disabled="working"
+          :disabled="working || workspace.retrySeconds.value > 0"
           @click="refresh"
         >
-          重试</button
+          {{
+            workspace.retrySeconds.value
+              ? `${workspace.retrySeconds.value} 秒后重试`
+              : '重试'
+          }}</button
         ><button class="icon-btn" aria-label="关闭提示" @click="toast = null">
           ×
         </button>

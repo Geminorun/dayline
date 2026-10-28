@@ -12,6 +12,9 @@ export const recordView = reactive({
   scrollTop: 0,
   timelineTop: 0,
   timelineLeft: 0,
+  timelineCameraDay: null as number | null,
+  timelineCameraDays: null as number | null,
+  focusOnly: false,
 });
 export function resetRecordView() {
   Object.assign(recordView, {
@@ -25,5 +28,8 @@ export function resetRecordView() {
     scrollTop: 0,
     timelineTop: 0,
     timelineLeft: 0,
+    timelineCameraDay: null,
+    timelineCameraDays: null,
+    focusOnly: false,
   });
 }

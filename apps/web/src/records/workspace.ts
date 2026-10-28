@@ -32,6 +32,51 @@ const mode = ref<'guest' | 'account'>('guest'),
   cacheError = ref(''),
   identityState = ref<'unknown' | 'guest' | 'verified' | 'expired'>('unknown');
 const { current, refresh } = useAccount();
+const retrySeconds = ref(0);
+let retryUntil = 0,
+  lastReadAt = 0,
+  lastProbeAt = 0;
+let retryTimer: ReturnType<typeof setInterval> | undefined;
+let probeWork: Promise<void> | null = null;
+let writeReadTimer: ReturnType<typeof setTimeout> | undefined;
+let writeReadPending = false;
+function resetReadBudget() {
+  clearTimeout(writeReadTimer);
+  writeReadTimer = undefined;
+  writeReadPending = false;
+  clearInterval(retryTimer);
+  retryTimer = undefined;
+  retryUntil = 0;
+  retrySeconds.value = 0;
+  lastReadAt = 0;
+  lastProbeAt = 0;
+  probeWork = null;
+}
+function refreshError(cause: unknown) {
+  if (
+    cause instanceof ClientError &&
+    cause.status === 429 &&
+    cause.retryAfterSeconds !== undefined
+  ) {
+    retryUntil = Date.now() + Math.max(1, cause.retryAfterSeconds) * 1000;
+    clearInterval(retryTimer);
+    const tick = () => {
+      retrySeconds.value = Math.max(
+        0,
+        Math.ceil((retryUntil - Date.now()) / 1000),
+      );
+      if (retrySeconds.value)
+        error.value = `操作过于频繁，请等待 ${retrySeconds.value} 秒后再试。`;
+      else {
+        clearInterval(retryTimer);
+        retryTimer = undefined;
+        error.value = '';
+      }
+    };
+    tick();
+    retryTimer = setInterval(tick, 500);
+  } else error.value = errorMessage(cause);
+}
 let switchIntent = 0;
 let bootWork: Promise<void> | null = null;
 let initialized = false,
@@ -86,12 +131,16 @@ function schedule() {
     mode.value === 'account' &&
     current.value?.status === 'active'
   )
-    timer = setTimeout(() => {
-      coordinator.tick();
-      void useWorkspace().load().finally(schedule);
-    }, 30_000);
+    timer = setTimeout(
+      () => {
+        coordinator.tick();
+        void useWorkspace().load('background').finally(schedule);
+      },
+      Math.max(30_000, retryUntil - Date.now()),
+    );
 }
 api.onIdentityChange(() => {
+  resetReadBudget();
   scopeGeneration++;
   stop();
   initialized = false;
@@ -115,6 +164,14 @@ api.onWrite((data, version, time) => {
 export function useWorkspace() {
   async function reload() {
     if (identityWritePending) return;
+    if (Date.now() < retryUntil)
+      throw new ClientError(
+        'RATE_LIMITED',
+        error.value,
+        429,
+        undefined,
+        retrySeconds.value,
+      );
     const generation = scopeGeneration;
     if (mode.value === 'guest') {
       const data = await loadGuest(
@@ -126,10 +183,22 @@ export function useWorkspace() {
       guest.value = data;
       snapshot.value = guestSnapshot(data, businessToday());
       serverTime.value = new Date().toISOString();
-    } else if (current.value?.status === 'active') await coordinator.refresh();
-    else snapshot.value = null;
+    } else if (current.value?.status === 'active') {
+      await coordinator.refresh();
+      if (generation === scopeGeneration) {
+        lastReadAt = Date.now();
+        writeReadPending = false;
+      }
+    } else snapshot.value = null;
   }
-  function load(): Promise<void> {
+  function load(reason: 'manual' | 'background' = 'manual'): Promise<void> {
+    if (
+      Date.now() < retryUntil ||
+      (reason === 'background' &&
+        !writeReadPending &&
+        Date.now() - lastReadAt < 5000)
+    )
+      return Promise.resolve();
     if (identityWritePending) return Promise.resolve();
     if (loadWork) return loadWork;
     const generation = scopeGeneration;
@@ -140,7 +209,7 @@ export function useWorkspace() {
         await reload();
         if (generation === scopeGeneration) initialized = true;
       } catch (cause) {
-        if (generation === scopeGeneration) error.value = errorMessage(cause);
+        if (generation === scopeGeneration) refreshError(cause);
       } finally {
         if (generation === scopeGeneration) loading.value = false;
       }
@@ -153,6 +222,7 @@ export function useWorkspace() {
   }
   async function switchMode(next: 'guest' | 'account', admit = true) {
     const intent = ++switchIntent;
+    resetReadBudget();
     try {
       if (admit) sessionStorage.setItem('dayline:storage-mode', next);
     } catch {
@@ -236,10 +306,19 @@ export function useWorkspace() {
           throw new ClientError('STALE_RESPONSE', '账号已变化，原输入仍保留。');
         notice.value = '已保存到云端。';
         try {
-          await reload();
+          if (coordinator.requiresFullRefresh()) await reload();
+          else {
+            // Paint confirmed writes immediately, then reconcile one complete snapshot for a burst.
+            writeReadPending = true;
+            if (!writeReadTimer)
+              writeReadTimer = setTimeout(() => {
+                writeReadTimer = undefined;
+                if (generation === scopeGeneration && foreground)
+                  void load('background');
+              }, 750);
+          }
         } catch (cause) {
-          if (generation === scopeGeneration)
-            error.value = `已保存到云端，刷新失败：${errorMessage(cause)}`;
+          if (generation === scopeGeneration) refreshError(cause);
         }
         return result;
       }
@@ -253,16 +332,32 @@ export function useWorkspace() {
     if (!active) return;
     coordinator.tick();
     if (identityState.value === 'verified' || identityState.value === 'guest')
-      void load().finally(schedule);
+      void load('background').finally(schedule);
   }
-  async function reprobe() {
-    if (identityWritePending || mode.value !== 'account') return;
-    try {
-      await refresh();
-    } catch {
-      return;
-    }
-    if (mode.value === 'account') await load();
+  function reprobe(): Promise<void> {
+    if (probeWork) return probeWork;
+    if (
+      identityWritePending ||
+      mode.value !== 'account' ||
+      Date.now() - lastProbeAt < 5000
+    )
+      return Promise.resolve();
+    const generation = scopeGeneration;
+    lastProbeAt = Date.now();
+    const work = (async () => {
+      try {
+        await refresh();
+      } catch {
+        return;
+      }
+      if (generation === scopeGeneration && mode.value === 'account')
+        await load('background');
+    })();
+    const result = work.finally(() => {
+      if (probeWork === result) probeWork = null;
+    });
+    probeWork = result;
+    return result;
   }
   return {
     mode,
@@ -270,6 +365,7 @@ export function useWorkspace() {
     snapshot,
     guest,
     loading,
+    retrySeconds,
     busy,
     error,
     notice,
@@ -301,7 +397,7 @@ export function useWorkspace() {
     networkRestored: () => {
       if (foreground) {
         coordinator.tick();
-        void load().finally(schedule);
+        void load('background').finally(schedule);
       }
     },
     identityWrite,

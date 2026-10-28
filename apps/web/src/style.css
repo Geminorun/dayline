@@ -1842,3 +1842,168 @@ dd {
     margin-top: 16px;
   }
 }
+
+/* Keep the weekly strip informative without adding a second dashboard. */
+.week-activity {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 15px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.week-colors {
+  display: flex;
+  gap: 2px;
+}
+.week-colors i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+.week-focus {
+  color: var(--warning);
+}
+.calendar-focus-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  margin: 0 24px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.calendar-focus-line svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+.calendar-focus-line span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.focus-help .icon-btn.is-active {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+.focus-help .icon-btn.is-active svg {
+  fill: currentColor;
+}
+.gantt-scroll {
+  overflow-x: hidden;
+  touch-action: pan-y;
+  cursor: grab;
+}
+.gantt-scroll.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+.gantt-scroll .timeline-content {
+  max-width: none;
+}
+.gantt-scroll button {
+  cursor: pointer;
+}
+.gantt-scroll .today-line {
+  pointer-events: none;
+}
+.entry-details {
+  padding: 4px 0;
+}
+.entry-details h2 {
+  font-size: 23px;
+  line-height: 1.5;
+  margin: 16px 0 8px;
+  overflow-wrap: anywhere;
+}
+.entry-details .modal-header {
+  margin-bottom: 0;
+}
+.entry-details .actions {
+  margin: 0;
+  gap: 4px;
+}
+.detail-status {
+  color: var(--accent-ink);
+  font-size: 12px;
+}
+.entry-detail-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px 20px;
+  margin: 28px 0 12px;
+}
+.entry-detail-fields dt {
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+.entry-detail-fields dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+}
+.detail-focus-dates {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+.detail-focus-dates summary {
+  cursor: pointer;
+}
+.detail-focus-dates p {
+  line-height: 2;
+  max-height: 180px;
+  overflow: auto;
+}
+@media (max-width: 600px) {
+  .week-activity {
+    gap: 3px;
+    font-size: 9px;
+    flex-wrap: wrap;
+  }
+  .week-colors {
+    display: none;
+  }
+  .calendar-focus-line {
+    display: none;
+  }
+  .timeline-heading p {
+    max-width: 210px;
+    line-height: 1.7;
+  }
+}
+
+/* Very short spans use a precise mark inside a larger, transparent hit target. */
+.gantt-bar.is-short {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.gantt-bar.is-short > span {
+  display: none;
+}
+.gantt-bar.is-short::before {
+  content: '';
+  position: absolute;
+  left: var(--bar-offset);
+  width: var(--bar-width);
+  min-width: 4px;
+  height: 16px;
+  top: 8px;
+  border-radius: 3px;
+  background: var(--category-color);
+}
+.gantt-bar.is-short:hover::before {
+  outline: 2px solid var(--accent-soft);
+}
+
+.date-panel .week-strip {
+  padding-bottom: 8px;
+}

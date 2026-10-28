@@ -170,3 +170,92 @@ describe('complete shared view rules', () => {
     });
   });
 });
+
+it('anchors rolling month, quarter and year windows at today and keeps full history bounded', async () => {
+  const { timelineCanvasWindow, timelineBar, dateOrdinal } =
+    await import('../src/index.js');
+  const today = '2026-10-28';
+  const entries = [
+    {
+      id: 'recent',
+      title: '最近的事',
+      categoryId: 'c',
+      startDate: '2026-10-26',
+      endDate: null,
+    },
+  ];
+  for (const scale of ['month', 'quarter', 'year'] as const) {
+    const w = timelineCanvasWindow(entries, today, scale, undefined, 1000);
+    expect(w.todayX).toBeCloseTo(850, 5);
+    expect(
+      timelineBar(
+        {
+          id: 'recent',
+          title: '',
+          categoryId: 'c',
+          startDate: '2026-10-26',
+          endDate: null,
+        },
+        today,
+        w,
+      )?.left,
+    ).toBeLessThan(850);
+    expect(
+      timelineBar(
+        {
+          id: 'recent',
+          title: '',
+          categoryId: 'c',
+          startDate: '2026-10-26',
+          endDate: null,
+        },
+        today,
+        w,
+      )?.width,
+    ).toBeGreaterThan(0);
+  }
+  const all = timelineCanvasWindow(
+    [
+      {
+        id: 'full',
+        title: '',
+        categoryId: 'c',
+        startDate: '0001-01-01',
+        endDate: '9999-12-31',
+      },
+    ],
+    today,
+    'all',
+  );
+  expect(all.start).toBe(1);
+  expect(all.endExclusive).toBe(3652060);
+  expect(all.ticks.length).toBeLessThan(45);
+  const shifted = timelineCanvasWindow(
+    entries,
+    today,
+    'month',
+    dateOrdinal('2026-05-01'),
+    1000,
+    60,
+  );
+  expect(shifted.endExclusive - shifted.start).toBe(60);
+  expect(
+    timelineBar(
+      {
+        id: 'recent',
+        title: '',
+        categoryId: 'c',
+        startDate: '2026-10-26',
+        endDate: null,
+      },
+      today,
+      shifted,
+    ),
+  ).toBeNull();
+  for (const boundary of ['0001-01-01', '9999-12-31']) {
+    const w = timelineCanvasWindow([], boundary, 'year');
+    expect(w.start).toBeGreaterThanOrEqual(1);
+    expect(w.endExclusive).toBeLessThanOrEqual(3652060);
+    expect(w.ticks.every((t) => Number.isFinite(t.x))).toBe(true);
+  }
+});

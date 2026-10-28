@@ -218,7 +218,7 @@ describe('independent miniapp business controls', () => {
       .findAll('picker')
       .find((p) => p.attributes('range')?.includes('已结束'));
     statusPicker?.element.dispatchEvent(
-      new CustomEvent('change', { detail: { value: 1 } }),
+      new CustomEvent('change', { detail: { value: 2 } }),
     );
     await nextTick();
     await flushPromises();

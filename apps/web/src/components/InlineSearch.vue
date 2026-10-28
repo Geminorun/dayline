@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue';
+import { nextTick, ref, watch, onBeforeUnmount } from 'vue';
 import PlannerIcon from './PlannerIcon.vue';
 const props = defineProps<{ modelValue: string }>();
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
@@ -11,12 +11,43 @@ async function open() {
   await nextTick();
   input.value?.focus();
 }
+const query = ref(props.modelValue),
+  composing = ref(false);
+let timer: ReturnType<typeof setTimeout> | undefined;
+watch(
+  () => props.modelValue,
+  (value) => {
+    if (!composing.value) query.value = value;
+  },
+);
 function update(event: Event) {
-  if (event.target instanceof HTMLInputElement)
-    emit('update:modelValue', event.target.value);
+  if (!(event.target instanceof HTMLInputElement)) return;
+  query.value = event.target.value;
+  clearTimeout(timer);
+  if (composing.value || (event instanceof InputEvent && event.isComposing))
+    return;
+  timer = setTimeout(() => emit('update:modelValue', query.value), 150);
 }
+function compositionStart() {
+  composing.value = true;
+  clearTimeout(timer);
+}
+function compositionEnd(event: CompositionEvent) {
+  composing.value = false;
+  update(event);
+  clearTimeout(timer);
+  emit('update:modelValue', query.value);
+}
+function keydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || event.isComposing || composing.value) return;
+  event.preventDefault();
+  clearTimeout(timer);
+  query.value = '';
+  void escape();
+}
+onBeforeUnmount(() => clearTimeout(timer));
 function close() {
-  if (!props.modelValue) opened.value = false;
+  if (!query.value) opened.value = false;
 }
 async function escape() {
   emit('update:modelValue', '');
@@ -41,13 +72,15 @@ async function escape() {
     <input
       v-if="opened || modelValue"
       ref="input"
-      :value="modelValue"
+      :value="query"
       type="search"
       aria-label="搜索事项名称"
       placeholder="搜索事项…"
       @input="update"
       @blur="close"
-      @keydown.esc.prevent="escape"
+      @compositionstart="compositionStart"
+      @compositionend="compositionEnd"
+      @keydown="keydown"
     />
   </div>
 </template>

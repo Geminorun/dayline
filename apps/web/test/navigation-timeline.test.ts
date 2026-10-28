@@ -132,7 +132,7 @@ describe('routed auth and complete timeline accessibility', () => {
     await first?.trigger('click');
     expect(wrapper.emitted('day')?.[0]?.[0]).toBe(focusDays[0]?.date);
     await wrapper.findAll('.timeline-name')[1]?.get('button').trigger('click');
-    expect(wrapper.emitted('edit')?.[0]?.[0]).toMatchObject({ id: '0' });
+    expect(wrapper.emitted('view')?.[0]?.[0]).toMatchObject({ id: '0' });
     const viewport = wrapper.get('.timeline-viewport');
     viewport.element.scrollTop = 28000;
     await viewport.trigger('scroll');
@@ -178,7 +178,7 @@ describe('routed auth and complete timeline accessibility', () => {
         },
       ],
     });
-    await router.push('/entries/' + id);
+    await router.push('/entries/' + id + '?edit=1');
     await router.isReady();
     const wrapper = mount(App, { global: { plugins: [router] } });
     wrappers.push(wrapper);
@@ -190,7 +190,7 @@ describe('routed auth and complete timeline accessibility', () => {
       .get<HTMLInputElement>('dialog form input')
       .setValue('尚未提交的深链输入');
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    await button(wrapper, '关闭编辑').trigger('click');
+    await button(wrapper, '取消').trigger('click');
     await flushPromises();
     expect(router.currentRoute.value.path).toBe('/entries/' + id);
     expect(

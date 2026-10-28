@@ -166,7 +166,7 @@ describe('durable manual drafts and identity transitions', () => {
       title: '清理期间新输入',
     });
   });
-  it('keeps two editor branches independent and exposes a persistent storage error with copy/download recovery', async () => {
+  it('keeps two editor branches independent and exposes a persistent storage error without redundant file actions', async () => {
     const first = editor(async () => {}),
       second = editor(async () => {});
     await first.get('input').setValue('标签甲');
@@ -181,7 +181,8 @@ describe('durable manual drafts and identity transitions', () => {
     await first.get('form').trigger('focusout');
     await flushPromises();
     expect(first.text()).toContain('本机草稿暂存失败');
-    expect(first.find('button[aria-label="下载草稿"]').exists()).toBe(true);
+    expect(first.find('button[aria-label="下载草稿"]').exists()).toBe(false);
+    expect(first.text()).toContain('手动保留输入');
     expect(first.get('input').element.value).toBe('尚未写入');
   });
   it('ignores an account-switch intent when the user selected guest while /me was pending', async () => {

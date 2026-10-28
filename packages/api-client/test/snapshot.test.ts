@@ -242,3 +242,32 @@ describe('complete snapshots, acknowledged writes and authenticated spaces', () 
     expect(observe(visible)?.entries).toHaveLength(1);
   });
 });
+
+it('keeps bulk-write reconciliation pending through later individual updates until a complete GET', async () => {
+  const c = new SnapshotCoordinator(
+    'test',
+    { read: async () => null, write: async () => {} },
+    vi
+      .fn()
+      .mockResolvedValueOnce(response(snapshot('12')))
+      .mockResolvedValueOnce(response(snapshot('12')))
+      .mockResolvedValue(response(snapshot('14'))),
+    () => {},
+    () => {},
+    () => 0,
+  );
+  c.reset(userId);
+  await c.refresh();
+  expect(c.requiresFullRefresh()).toBe(false);
+  c.written({ categories: [category] }, '13', time);
+  expect(c.requiresFullRefresh()).toBe(true);
+  c.written({ entry: { ...entry, version: 2 }, focusDays: [] }, '14', time);
+  expect(c.requiresFullRefresh()).toBe(true);
+  // An older read cannot satisfy the acknowledged bulk write.
+  await c.refresh();
+  expect(c.requiresFullRefresh()).toBe(true);
+  await c.refresh();
+  expect(c.requiresFullRefresh()).toBe(false);
+  c.reset(userId);
+  expect(c.requiresFullRefresh()).toBe(false);
+});

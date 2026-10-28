@@ -118,6 +118,116 @@ export interface TimelineWindow {
   focusUnit: 'day' | 'week' | 'month';
   todayX: number | null;
 }
+export interface TimelineCanvasWindow extends TimelineWindow {
+  maxDays: number;
+}
+export const TIMELINE_RECENT_POSITION = 0.85;
+/** Rolling windows share one date coordinate system for zooming, panning and clipping. */
+export function timelineCanvasWindow(
+  entries: readonly ViewEntry[],
+  today: string,
+  scale: TimelineScale,
+  focusDay?: number,
+  availableWidth = 900,
+  visibleDays?: number,
+): TimelineCanvasWindow {
+  const current = dateOrdinal(today) + 0.5;
+  let first = current,
+    last = current;
+  for (const entry of entries) {
+    if (entry.deletedAt) continue;
+    first = Math.min(first, dateOrdinal(entry.startDate));
+    last = Math.max(
+      last,
+      dateOrdinal(entry.endDate ?? today),
+      dateOrdinal(entry.startDate),
+    );
+  }
+  // At least a year keeps month → quarter → year → all zooming monotonic for new accounts.
+  const maxDays = Math.min(MAX_DAY, Math.max(366, (last - first + 1) / 0.8));
+  const days = Math.max(
+    31,
+    Math.min(
+      maxDays,
+      visibleDays ?? { month: 31, quarter: 92, year: 366, all: maxDays }[scale],
+    ),
+  );
+  const fullStart = Math.min(
+    first - days * 0.04,
+    last - days * TIMELINE_RECENT_POSITION,
+  );
+  const start = Math.max(
+    MIN_DAY,
+    Math.min(
+      MAX_DAY + 1 - days,
+      focusDay === undefined && scale === 'all'
+        ? fullStart
+        : (focusDay ?? current) - days * TIMELINE_RECENT_POSITION,
+    ),
+  );
+  const endExclusive = start + days;
+  const width = Math.max(240, availableWidth),
+    pixelsPerDay = width / days;
+  const ticks: TimelineWindow['ticks'] = [];
+  const focusUnit = days <= 45 ? 'day' : days <= 140 ? 'week' : 'month';
+  if (focusUnit === 'day' || focusUnit === 'week') {
+    const step = focusUnit === 'day' ? 1 : 7;
+    let day = Math.ceil(start);
+    if (step === 7) day += (7 - ((day - 1) % 7)) % 7;
+    for (; day < endExclusive; day += step)
+      ticks.push({
+        day,
+        x: (day - start) * pixelsPerDay,
+        label: ordinalDate(day).slice(step === 1 ? 8 : 5),
+      });
+  } else {
+    const monthStep = Math.max(1, Math.ceil(days / 31 / 36));
+    let date = ordinalDate(Math.floor(start)).slice(0, 7) + '-01';
+    if (dateOrdinal(date) < start) date = shiftMonth(date, 1);
+    for (let i = 0; i < 40; i++) {
+      const day = dateOrdinal(date);
+      if (day >= endExclusive) break;
+      ticks.push({
+        day,
+        x: (day - start) * pixelsPerDay,
+        label: days > 730 ? date.slice(0, 7) : date.slice(5, 7) + '月',
+      });
+      const next = shiftMonth(date, monthStep);
+      if (next === date) break;
+      date = next;
+    }
+  }
+  // Include the partial first interval, so its header starts at the viewport edge.
+  if (!ticks.length || (ticks[0]?.x ?? 0) > 0.5) {
+    const day = Math.floor(start),
+      date = ordinalDate(day);
+    ticks.unshift({
+      day,
+      x: 0,
+      label:
+        focusUnit === 'day'
+          ? date.slice(8)
+          : focusUnit === 'week'
+            ? date.slice(5)
+            : days > 730
+              ? date.slice(0, 7)
+              : date.slice(5, 7) + '月',
+    });
+  }
+  return {
+    start,
+    endExclusive,
+    width,
+    pixelsPerDay,
+    ticks,
+    focusUnit,
+    maxDays,
+    todayX:
+      current >= start && current < endExclusive
+        ? (current - start) * pixelsPerDay
+        : null,
+  };
+}
 export function timelineWindow(
   entries: readonly ViewEntry[],
   today: string,

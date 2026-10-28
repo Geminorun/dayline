@@ -79,3 +79,49 @@ it('records a fixed mail failure event without recipient, link or provider error
   expect(JSON.stringify(logged.mock.calls)).not.toContain('person@example.com');
   expect(JSON.stringify(logged.mock.calls)).not.toContain('private');
 });
+
+it('allows sixty snapshot reads per session and reports the remaining fixed window', () => {
+  const service = new SecurityService({ ...config, rateLimitEnabled: true });
+  const now = vi.spyOn(Date, 'now').mockReturnValue(1000000);
+  const request = {
+    path: '/api/v1/snapshot',
+    method: 'GET',
+    ip: 'test-ip',
+    actor: { sessionId: 'one', userId: 'owner' },
+  };
+  const setHeader = vi.fn();
+  for (let i = 0; i < 60; i++)
+    service.business(
+      request as Parameters<SecurityService['business']>[0],
+      { setHeader } as unknown as Parameters<SecurityService['business']>[1],
+    );
+  now.mockReturnValue(1053000);
+  expect(() =>
+    service.business(
+      request as Parameters<SecurityService['business']>[0],
+      { setHeader } as unknown as Parameters<SecurityService['business']>[1],
+    ),
+  ).toThrow(
+    expect.objectContaining({
+      code: 'RATE_LIMITED',
+      details: { retryAfterSeconds: 7 },
+    }),
+  );
+  expect(setHeader).toHaveBeenLastCalledWith('Retry-After', '7');
+  expect(() =>
+    service.business(
+      {
+        ...request,
+        actor: { ...request.actor, sessionId: 'two' },
+      } as Parameters<SecurityService['business']>[0],
+      { setHeader } as unknown as Parameters<SecurityService['business']>[1],
+    ),
+  ).not.toThrow();
+  now.mockReturnValue(1060000);
+  expect(() =>
+    service.business(
+      request as Parameters<SecurityService['business']>[0],
+      { setHeader } as unknown as Parameters<SecurityService['business']>[1],
+    ),
+  ).not.toThrow();
+});

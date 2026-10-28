@@ -31,6 +31,7 @@ export class SnapshotCoordinator {
   private workGeneration = -1;
   private rerun = false;
   private sequence = 0;
+  private pendingFullRead = false;
   private persistedWork: Promise<void> = Promise.resolve();
   private calibratedAt = 0;
   private serverAt = 0;
@@ -56,6 +57,7 @@ export class SnapshotCoordinator {
     this.serverAt = 0;
     this.calibratedAt = 0;
     this.sequence++;
+    this.pendingFullRead = false;
     this.changed(null);
   }
   private active(g: number, id: string) {
@@ -175,6 +177,7 @@ export class SnapshotCoordinator {
         this.sequence++;
         this.value = next;
         this.onlineBaseline = true;
+        this.pendingFullRead = false;
         this.etag = response.headers.etag ?? null;
         this.calibrate(time);
         this.changed(next, time);
@@ -185,6 +188,9 @@ export class SnapshotCoordinator {
       if (this.workGeneration === g) this.work = null;
     });
     return this.work;
+  }
+  requiresFullRefresh() {
+    return this.pendingFullRead;
   }
   written(data: unknown, version: string, time?: string) {
     if (!this.userId) return;
@@ -200,7 +206,10 @@ export class SnapshotCoordinator {
       this.lowerBound = version;
     this.etag = null;
     if (time) this.calibrate(time);
-    if (!this.value) return;
+    if (!this.value) {
+      this.pendingFullRead = true;
+      return;
+    }
     const next = { ...this.value };
     const entry = entryResultSchema.safeParse(data),
       category = categoryResultSchema.safeParse(data),
@@ -215,10 +224,10 @@ export class SnapshotCoordinator {
         ...entry.data.focusDays,
       ];
     } else if (category.success) {
-      next.categories = [
-        ...next.categories.filter((c) => c.id !== category.data.category.id),
-        category.data.category,
-      ];
+      const changed = category.data.category;
+      next.categories = next.categories.some((c) => c.id === changed.id)
+        ? next.categories.map((c) => (c.id === changed.id ? changed : c))
+        : [...next.categories, changed];
     } else if (focus.success) {
       const f = focus.data.focusDay;
       next.focusDays = [
@@ -232,7 +241,10 @@ export class SnapshotCoordinator {
           ? { ...e, focusVersion: focus.data.focusVersion }
           : e,
       );
-    } else return; // Transfers and bulk writes require a full GET; lower bound is already installed.
+    } else {
+      this.pendingFullRead = true;
+      return;
+    } // Bulk writes still require a full GET; the lower bound is already installed.
     this.value = next;
     this.changed(next, time); // Visible confirmed overlay; only a full GET may persist a complete newer snapshot.
   }

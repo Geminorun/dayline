@@ -130,7 +130,11 @@ it('connects the reference calendar, modal editor, daily focus, categories and t
     .get('input[aria-label="搜索事项名称"]')
     .setValue('不存在的筛选词');
   await flushPromises();
-  expect(wrapper.get('.timeline-empty').text()).toContain('还没有匹配的记录');
+  await vi.waitFor(() =>
+    expect(wrapper?.get('.timeline-empty').text()).toContain(
+      '还没有匹配的记录',
+    ),
+  );
   vi.useFakeTimers();
   const accountMenu = wrapper.get('details.account-menu');
   await accountMenu.trigger('pointerenter', { pointerType: 'mouse' });

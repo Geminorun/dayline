@@ -17,10 +17,10 @@ import {
   isCalendarDate,
   selectEntries,
   shiftDate,
-  shiftMonth,
   spanLabel,
   summarizeEntries,
-  timelineWindow,
+  timelineCanvasWindow,
+  TIMELINE_RECENT_POSITION,
   weekDates,
   dateOrdinal,
   ordinalDate,
@@ -36,6 +36,7 @@ import type {
 import { useWorkspace } from './workspace';
 import { records, errorMessage } from './record-service';
 import EntryEditor from './EntryEditor.vue';
+import EntryDetails from './EntryDetails.vue';
 import EntryRow from './EntryRow.vue';
 import CategoryManager from './CategoryManager.vue';
 import TimelineView from './TimelineView.vue';
@@ -103,11 +104,13 @@ const filtered = computed(() =>
     : [],
 );
 const range = computed(() =>
-  timelineWindow(
-    filtered.value,
+  timelineCanvasWindow(
+    snapshot.value?.entries ?? [],
     today.value,
     scale.value,
-    anchor.value || today.value,
+    recordView.timelineCameraDay ?? undefined,
+    900,
+    recordView.timelineCameraDays ?? undefined,
   ),
 );
 const visible = computed(() => {
@@ -122,7 +125,8 @@ const visible = computed(() => {
       .filter(
         (entry) =>
           isCalendarDate(selectedDate.value) &&
-          coversDate(entry, selectedDate.value, today.value),
+          coversDate(entry, selectedDate.value, today.value) &&
+          (!recordView.focusOnly || focused.has(entry.id)),
       )
       .sort((a, b) => Number(focused.has(b.id)) - Number(focused.has(a.id)));
   }
@@ -162,6 +166,43 @@ const dailyFocusCount = computed(() => {
 const week = computed(() =>
   isCalendarDate(selectedDate.value) ? weekDates(selectedDate.value) : [],
 );
+const weekSummary = computed(() =>
+  week.value.map((date) => {
+    const entries =
+      snapshot.value?.entries.filter((entry) =>
+        coversDate(entry, date, today.value),
+      ) ?? [];
+    const ids = new Set(entries.map((entry) => entry.id));
+    const count =
+      snapshot.value?.focusDays.filter(
+        (f) => f.date === date && f.focused && ids.has(f.entryId),
+      ).length ?? 0;
+    const categoryIds = new Set(entries.map((entry) => entry.categoryId));
+    return {
+      date,
+      count: entries.length,
+      focused: count,
+      categories:
+        snapshot.value?.categories
+          .filter((c) => categoryIds.has(c.id))
+          .slice(0, 3) ?? [],
+    };
+  }),
+);
+const selectedFocusTitles = computed(() => {
+  const ids = new Set(
+    snapshot.value?.focusDays
+      .filter((f) => f.focused && f.date === selectedDate.value)
+      .map((f) => f.entryId),
+  );
+  return (
+    snapshot.value?.entries
+      .filter(
+        (e) => ids.has(e.id) && coversDate(e, selectedDate.value, today.value),
+      )
+      .map((e) => e.title) ?? []
+  );
+});
 const allEntries = computed(() => [
   ...(snapshot.value?.entries ?? []),
   ...(snapshot.value?.trashEntries ?? []),
@@ -170,13 +211,28 @@ const hasFilter = computed(
   () =>
     !!filter.value.search.trim() ||
     !!filter.value.categoryId ||
-    filter.value.status !== 'ongoing',
+    filter.value.status !== 'ongoing' ||
+    (contentView.value === 'day' && recordView.focusOnly),
 );
 const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-function open(entry: EntryDto | null) {
+const editing = computed(
+  () =>
+    route.path === '/entries/new' ||
+    route.query.edit === '1' ||
+    typeof route.query.draftId === 'string',
+);
+function resetFilters() {
+  filter.value = emptyFilter();
+  recordView.focusOnly = false;
+}
+function open(entry: EntryDto | null, edit = true) {
   recordView.returnPath = route.fullPath;
   recordView.scrollTop = window.scrollY;
-  void router.push(entry ? `/entries/${entry.id}` : '/entries/new');
+  void router.push(
+    entry
+      ? { path: `/entries/${entry.id}`, query: edit ? { edit: '1' } : {} }
+      : '/entries/new',
+  );
 }
 async function closeEditor() {
   await router.push(
@@ -203,6 +259,11 @@ async function syncEditor() {
     }
   }
 
+  if (!editing.value) {
+    const found = snapshot.value.entries.find((e) => e.id === id);
+    editor.value = found ? { entry: found, key: found.id } : null;
+    return;
+  }
   if (!draftId && user && mode.value === 'account') {
     try {
       draftId =
@@ -235,8 +296,9 @@ async function syncEditor() {
   }
 }
 watch(
-  () => route.path,
-  (path) => {
+  () => route.fullPath,
+  () => {
+    const path = route.path;
     if (path === '/categories')
       categoryReturnPath.value =
         recordView.activeView === 'timeline' ? '/timeline' : '/day';
@@ -363,18 +425,42 @@ function changeDate(date: string) {
     void router.replace({ query: { date } });
   }
 }
-function move(amount: number) {
-  anchor.value = shiftMonth(
-    anchor.value,
-    (scale.value === 'year' ? 12 : scale.value === 'quarter' ? 3 : 1) * amount,
-  );
+function updateCamera(camera: { day: number; days: number }) {
+  recordView.timelineCameraDay = camera.day;
+  recordView.timelineCameraDays = camera.days;
+  scale.value =
+    camera.days >= range.value.maxDays - 0.01
+      ? 'all'
+      : camera.days <= 31.01
+        ? 'month'
+        : camera.days <= 140
+          ? 'quarter'
+          : 'year';
 }
-async function locate() {
-  anchor.value = today.value;
-  if (scale.value === 'all' && range.value.todayX === null)
-    scale.value = 'month';
-  await nextTick();
-  timeline.value?.locateToday();
+function changeScale(event: Event) {
+  if (!(event.target instanceof HTMLSelectElement)) return;
+  const value = event.target.value;
+  if (
+    value !== 'month' &&
+    value !== 'quarter' &&
+    value !== 'year' &&
+    value !== 'all'
+  )
+    return;
+  scale.value = value;
+  recordView.timelineCameraDay = null;
+  recordView.timelineCameraDays = null;
+}
+function move(amount: number) {
+  const days = range.value.endExclusive - range.value.start;
+  updateCamera({
+    day: range.value.start + days * (TIMELINE_RECENT_POSITION + amount * 0.8),
+    days,
+  });
+}
+function locate() {
+  const days = range.value.endExclusive - range.value.start;
+  updateCamera({ day: dateOrdinal(today.value) + 0.5, days });
 }
 onMounted(async () => {
   await ensure();
@@ -388,8 +474,8 @@ onMounted(async () => {
   }
 });
 const dateInput = ref<HTMLInputElement | null>(null);
-const listMode = ref(false);
 const statuses = [
+  { value: 'all', label: '全部' },
   { value: 'ongoing', label: '进行中' },
   { value: 'ended', label: '已结束' },
 ] as const;
@@ -507,6 +593,18 @@ const recent = computed(
               />
               <span class="weekday">{{ selectedWeekday }}</span>
             </div>
+            <div
+              class="calendar-focus-line"
+              :title="selectedFocusTitles.join('、')"
+            >
+              <PlannerIcon name="star" /><span>{{
+                selectedFocusTitles.length
+                  ? selectedFocusTitles.join('、')
+                  : selectedDate > today
+                    ? '这一天还没有重点'
+                    : '为这一天选一件值得记住的事'
+              }}</span>
+            </div>
             <div class="date-controls">
               <button
                 class="icon-btn"
@@ -532,7 +630,9 @@ const recent = computed(
           </div>
           <div class="week-strip">
             <button
-              v-for="(date, index) in week"
+              v-for="(
+                { date, count, focused, categories }, index
+              ) in weekSummary"
               :key="date"
               class="week-day"
               :class="{
@@ -549,7 +649,20 @@ const recent = computed(
               ><span class="day-num-wrap"
                 ><span class="day-number">{{ Number(date.slice(8)) }}</span
                 ><span v-if="date === today" class="today-tag">今</span></span
-              ><span class="week-dot"></span>
+              ><span
+                class="week-activity"
+                :aria-label="`${count}项，${focused}项重点`"
+              >
+                <span v-if="count" class="week-colors" aria-hidden="true"
+                  ><i
+                    v-for="category in categories"
+                    :key="category.id"
+                    :style="{ background: category.color }"
+                  ></i
+                ></span>
+                <span>{{ count ? `${count} 项` : '—' }}</span
+                ><span v-if="focused" class="week-focus">★{{ focused }}</span>
+              </span>
             </button>
           </div>
         </section>
@@ -561,14 +674,18 @@ const recent = computed(
           <div class="timeline-toolbar">
             <div class="timeline-heading">
               <h2>每一段经历，都有自己的跨度</h2>
-              <p>按开始日期排列 · 点击横条编辑记录</p>
+              <p>滚轮缩放 · 拖动空白区域平移 · 点击事项查看</p>
             </div>
             <div class="timeline-controls">
               <select v-model="filter.sort" aria-label="排序方式">
                 <option value="asc">开始日期 ↑</option>
                 <option value="desc">开始日期 ↓</option>
               </select>
-              <select v-model="scale" aria-label="时间轴范围">
+              <select
+                :value="scale"
+                aria-label="时间轴范围"
+                @change="changeScale"
+              >
                 <option value="month">月视图</option>
                 <option value="quarter">季度视图</option>
                 <option value="year">年视图</option>
@@ -609,17 +726,19 @@ const recent = computed(
               <button
                 class="icon-btn"
                 aria-label="上一个时间范围"
-                :disabled="scale === 'all' || anchor === '0001-01-01'"
+                :disabled="range.start <= 1"
                 @click="move(-1)"
               >
                 <PlannerIcon class="flip" name="chevron" /></button
               ><strong
-                >{{ dateLabel(ordinalDate(range.start)) }} —
-                {{ dateLabel(ordinalDate(range.endExclusive - 1)) }}</strong
+                >{{ dateLabel(ordinalDate(Math.floor(range.start))) }} —
+                {{
+                  dateLabel(ordinalDate(Math.ceil(range.endExclusive) - 1))
+                }}</strong
               ><button
                 class="icon-btn"
                 aria-label="下一个时间范围"
-                :disabled="scale === 'all' || anchor.slice(0, 4) === '9999'"
+                :disabled="range.endExclusive >= 3652060"
                 @click="move(1)"
               >
                 <PlannerIcon name="chevron" /></button
@@ -630,6 +749,7 @@ const recent = computed(
             v-if="isCalendarDate(anchor)"
             ref="timeline"
             :entries="visible"
+            :range="range"
             :focus-days="snapshot.focusDays"
             :categories="snapshot.categories"
             :today="today"
@@ -638,14 +758,15 @@ const recent = computed(
             :sort="filter.sort"
             :readonly="readonly"
             :busy="busy"
-            @edit="open"
+            @view="(entry) => open(entry, false)"
+            @camera="updateCamera"
             @finish="finishEntry"
             @day="(date) => router.push({ path: '/day', query: { date } })"
           />
           <div v-if="!visible.length" class="timeline-empty">
             {{
               hasFilter
-                ? '这里还没有匹配的记录，试试其他分类或关键词。'
+                ? '这里还没有匹配的记录，试试其他分类、状态或关键词。'
                 : '时间轴还空着，记录第一段经历吧。'
             }}
           </div>
@@ -664,27 +785,12 @@ const recent = computed(
                   {{
                     filter.status === 'ended'
                       ? '这一天，已结束的事'
-                      : '这一天，正在做的事'
+                      : filter.status === 'all'
+                        ? '这一天，记录的事'
+                        : '这一天，正在做的事'
                   }}
                 </h2>
                 <span>{{ visible.length }}</span>
-              </div>
-              <div class="view-toggle" role="group" aria-label="显示方式">
-                <button
-                  :class="{ active: !listMode }"
-                  :aria-pressed="!listMode"
-                  aria-label="日期卡片"
-                  @click="listMode = false"
-                >
-                  <PlannerIcon name="clock" /></button
-                ><button
-                  :class="{ active: listMode }"
-                  :aria-pressed="listMode"
-                  aria-label="列表"
-                  @click="listMode = true"
-                >
-                  <PlannerIcon name="list" />
-                </button>
               </div>
             </div>
             <div class="schedule-tools">
@@ -700,6 +806,8 @@ const recent = computed(
                 :date="selectedDate"
                 :count="dailyFocusCount"
                 :future="selectedDate > today"
+                :selected="recordView.focusOnly"
+                @toggle="recordView.focusOnly = !recordView.focusOnly"
               /><FileTools />
             </div>
             <div class="state-filters" role="group" aria-label="筛选记录状态">
@@ -712,15 +820,11 @@ const recent = computed(
                 @click="filter.status = status.value"
               >
                 {{ status.label }}</button
-              ><button
-                v-if="hasFilter"
-                class="state-tab"
-                @click="filter = emptyFilter()"
-              >
+              ><button v-if="hasFilter" class="state-tab" @click="resetFilters">
                 清除筛选
               </button>
             </div>
-            <div class="event-area" :class="{ 'list-mode': listMode }">
+            <div class="event-area">
               <div v-if="!visible.length" class="empty-state">
                 <div class="empty-art" aria-hidden="true">
                   <div class="empty-paper"><i></i><i></i><i></i></div>
@@ -745,7 +849,7 @@ const recent = computed(
                 <button
                   v-if="hasFilter"
                   class="demo-link"
-                  @click="filter = emptyFilter()"
+                  @click="resetFilters"
                 >
                   清除筛选 →</button
                 ><button
@@ -811,7 +915,7 @@ const recent = computed(
             <section class="distribution-panel">
               <div class="panel-header">
                 <h2>分类分布</h2>
-                <span class="muted-label">当天记录</span>
+                <span class="muted-label">当天全部记录</span>
               </div>
               <div class="donut-wrap">
                 <div
@@ -876,11 +980,11 @@ const recent = computed(
       </template>
       <PlannerDialog
         v-if="view === 'editor'"
-        label="事项编辑"
+        :label="editing ? '事项编辑' : '事项详情'"
         @close="closeEditor"
       >
         <EntryEditor
-          v-if="editor && !readonly"
+          v-if="editor && editing && !readonly"
           :key="editor.key"
           :entry="editor.entry"
           :draft="editor.draft"
@@ -897,8 +1001,21 @@ const recent = computed(
           @saved="closeEditor"
           @close="closeEditor"
         />
+        <EntryDetails
+          v-else-if="editor?.entry && !editing"
+          :entry="
+            snapshot.entries.find((e) => e.id === editor?.entry?.id) ??
+            editor.entry
+          "
+          :categories="snapshot.categories"
+          :focus-days="snapshot.focusDays"
+          :today="today"
+          :readonly="readonly"
+          @edit="router.replace({ path: route.path, query: { edit: '1' } })"
+          @close="closeEditor"
+        />
         <p v-else>事项不存在或当前不可编辑。</p>
-        <section v-if="editor?.entry" class="record-panel">
+        <section v-if="editor?.entry && editing" class="record-panel">
           <h2>累计重点日期</h2>
           <p class="date-list">
             {{

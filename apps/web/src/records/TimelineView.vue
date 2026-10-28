@@ -10,7 +10,8 @@ import {
 import {
   timelineBar,
   timelineFocusGroups,
-  timelineWindow,
+  timelineCanvasWindow,
+  TIMELINE_RECENT_POSITION,
   visibleRows,
   durationDays,
   entryStatus,
@@ -19,7 +20,7 @@ import {
 } from '@dayline/core';
 import { recordView } from './view-state';
 import PlannerIcon from '../components/PlannerIcon.vue';
-import type { TimelineScale } from '@dayline/core';
+import type { TimelineCanvasWindow, TimelineScale } from '@dayline/core';
 import type { CategoryDto, EntryDto, FocusDayDto } from '@dayline/contracts';
 const props = defineProps<{
   categories?: CategoryDto[];
@@ -31,9 +32,11 @@ const props = defineProps<{
   sort?: 'asc' | 'desc';
   readonly?: boolean;
   busy?: boolean;
+  range?: TimelineCanvasWindow;
 }>();
 const emit = defineEmits<{
-  edit: [entry: EntryDto];
+  view: [entry: EntryDto];
+  camera: [value: { day: number; days: number }];
   finish: [entry: EntryDto];
   day: [date: string];
 }>();
@@ -41,11 +44,151 @@ const detailOffset = ref(0);
 const viewport = ref<HTMLElement | null>(null),
   scrollTop = ref(0),
   details = ref<{ entryId: string; dates: string[] } | null>(null);
-const window = computed(() =>
-  timelineWindow(props.entries, props.today, props.scale, props.anchor, 900),
+const plotWidth = ref(900);
+const sourceWindow = computed(
+  () =>
+    props.range ??
+    timelineCanvasWindow(props.entries, props.today, props.scale),
 );
+const window = computed(() => {
+  const source = sourceWindow.value,
+    width = plotWidth.value;
+  const ratio = width / source.width;
+  return {
+    ...source,
+    width,
+    pixelsPerDay: source.pixelsPerDay * ratio,
+    todayX: source.todayX === null ? null : source.todayX * ratio,
+    ticks: source.ticks.map((t) => ({ ...t, x: t.x * ratio })),
+  };
+});
+let observer: ResizeObserver | undefined;
+let drag: {
+  pointer: number;
+  x: number;
+  start: number;
+  days: number;
+  moved: boolean;
+} | null = null;
+let suppressClick = false,
+  wheelDelta = 0;
+let wheelTimer: ReturnType<typeof setTimeout> | undefined;
+function measure() {
+  const el = viewport.value;
+  if (!el) return;
+  const label =
+    el.querySelector('.timeline-name')?.getBoundingClientRect().width ?? 240;
+  plotWidth.value = Math.max(80, el.clientWidth - label);
+}
+function camera(start: number, days: number) {
+  emit('camera', { day: start + days * TIMELINE_RECENT_POSITION, days });
+}
+function wheel(event: WheelEvent) {
+  // Leave browser page zoom and horizontal trackpad scrolling alone.
+  if (
+    event.ctrlKey ||
+    event.metaKey ||
+    Math.abs(event.deltaX) > Math.abs(event.deltaY)
+  )
+    return;
+  event.preventDefault();
+  const current = window.value;
+  const delta =
+    event.deltaY *
+    (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 500 : 1);
+  wheelDelta += delta;
+  if (Math.abs(wheelDelta) < 4) return;
+  const el = viewport.value;
+  if (!el) return;
+  const label =
+    el.querySelector('.timeline-name')?.getBoundingClientRect().width ?? 240;
+  const ratio = Math.max(
+    0,
+    Math.min(
+      1,
+      (event.clientX - el.getBoundingClientRect().left - label) / current.width,
+    ),
+  );
+  const days = current.endExclusive - current.start;
+  const nextDays = Math.max(
+    31,
+    Math.min(
+      current.maxDays,
+      days * Math.exp(Math.max(-200, Math.min(200, wheelDelta)) * 0.003),
+    ),
+  );
+  wheelDelta = 0;
+  if (Math.abs(days - nextDays) < 0.001) return;
+  camera(current.start + ratio * (days - nextDays), nextDays);
+  clearTimeout(wheelTimer);
+  wheelTimer = setTimeout(() => {
+    wheelDelta = 0;
+  }, 150);
+}
+function pointerDown(event: PointerEvent) {
+  suppressClick = false;
+  if (
+    event.button !== 0 ||
+    !(event.target instanceof Element) ||
+    event.target.closest('button,a,input,select,.timeline-name')
+  )
+    return;
+  const current = window.value;
+  drag = {
+    pointer: event.pointerId,
+    x: event.clientX,
+    start: current.start,
+    days: current.endExclusive - current.start,
+    moved: false,
+  };
+  viewport.value?.setPointerCapture(event.pointerId);
+}
+function pointerMove(event: PointerEvent) {
+  if (!drag || event.pointerId !== drag.pointer) return;
+  const delta = event.clientX - drag.x;
+  if (!drag.moved && Math.abs(delta) < 4) return;
+  drag.moved = true;
+  dragging.value = true;
+  camera(drag.start - (delta / plotWidth.value) * drag.days, drag.days);
+}
+const dragging = ref(false);
+function pointerEnd(event: PointerEvent) {
+  if (!drag || event.pointerId !== drag.pointer) return;
+  suppressClick = drag.moved && event.type !== 'pointercancel';
+  if (viewport.value?.hasPointerCapture(event.pointerId))
+    viewport.value.releasePointerCapture(event.pointerId);
+  drag = null;
+  dragging.value = false;
+}
+function click(event: MouseEvent) {
+  if (suppressClick) {
+    event.preventDefault();
+    event.stopPropagation();
+    suppressClick = false;
+  }
+}
+function keydown(event: KeyboardEvent) {
+  if (
+    event.target !== viewport.value ||
+    !['ArrowLeft', 'ArrowRight'].includes(event.key)
+  )
+    return;
+  event.preventDefault();
+  const current = window.value,
+    days = current.endExclusive - current.start;
+  camera(current.start + days * (event.key === 'ArrowLeft' ? -0.2 : 0.2), days);
+}
+const displayTicks = computed(() => {
+  const ticks = window.value.ticks;
+  const budget = Math.max(
+    2,
+    Math.floor(plotWidth.value / (window.value.focusUnit === 'day' ? 24 : 58)),
+  );
+  const step = Math.max(1, Math.ceil(ticks.length / budget));
+  return ticks.filter((_, index) => index % step === 0);
+});
 const axisGroups = computed(() => {
-  const yearOnly = window.value.endExclusive - window.value.start > 730;
+  const yearOnly = window.value.focusUnit === 'month';
   const groups: { key: string; label: string; left: number; width: number }[] =
     [];
   for (const tick of window.value.ticks) {
@@ -87,26 +230,41 @@ function color(entry: EntryDto) {
 function bar(entry: EntryDto) {
   return timelineBar(entry, props.today, window.value);
 }
+function barStyle(entry: EntryDto) {
+  const value = bar(entry);
+  if (!value) return {};
+  const width = Math.max(24, value.width);
+  const left = Math.max(
+    0,
+    Math.min(
+      window.value.width - width,
+      value.left - (width - value.width) / 2,
+    ),
+  );
+  return {
+    left: left + 'px',
+    width: width + 'px',
+    '--bar-width': value.width + 'px',
+    '--bar-offset': value.left - left + 'px',
+    '--category-color': color(entry),
+    borderColor: color(entry),
+  };
+}
 function scroll(event: Event) {
   if (event.target instanceof HTMLElement)
     scrollTop.value = event.target.scrollTop;
 }
 function locateToday() {
   const el = viewport.value;
-  if (el && window.value.todayX !== null)
-    el.scrollLeft = Math.max(0, window.value.todayX - 250);
+  if (el)
+    camera(
+      dateOrdinal(props.today) +
+        0.5 -
+        (window.value.endExclusive - window.value.start) *
+          TIMELINE_RECENT_POSITION,
+      window.value.endExclusive - window.value.start,
+    );
 }
-watch(
-  () => [props.scale, props.anchor],
-  async () => {
-    scrollTop.value = 0;
-    await nextTick();
-    if (viewport.value) {
-      viewport.value.scrollTop = 0;
-      viewport.value.scrollLeft = 0;
-    }
-  },
-);
 watch(
   () => props.entries.length,
   async (count) => {
@@ -117,6 +275,12 @@ watch(
   },
 );
 onMounted(() => {
+  measure();
+  if (typeof ResizeObserver !== 'undefined' && viewport.value) {
+    observer = new ResizeObserver(measure);
+    observer.observe(viewport.value);
+  }
+  viewport.value?.addEventListener('wheel', wheel, { passive: false });
   if (viewport.value) {
     viewport.value.scrollTop = recordView.timelineTop;
     viewport.value.scrollLeft = recordView.timelineLeft;
@@ -124,6 +288,9 @@ onMounted(() => {
   }
 });
 onBeforeUnmount(() => {
+  observer?.disconnect();
+  clearTimeout(wheelTimer);
+  viewport.value?.removeEventListener('wheel', wheel);
   recordView.timelineTop = viewport.value?.scrollTop ?? 0;
   recordView.timelineLeft = viewport.value?.scrollLeft ?? 0;
 });
@@ -133,8 +300,15 @@ defineExpose({ locateToday });
   <div
     ref="viewport"
     class="timeline-viewport gantt-scroll"
+    :class="{ 'is-dragging': dragging }"
     tabindex="0"
-    aria-label="横向时间轴，可使用滚动条浏览日期"
+    aria-label="时间轴，滚轮缩放，拖动空白区域或方向键左右浏览"
+    @pointerdown="pointerDown"
+    @pointermove="pointerMove"
+    @pointerup="pointerEnd"
+    @pointercancel="pointerEnd"
+    @click.capture="click"
+    @keydown="keydown"
     @scroll="scroll"
   >
     <div
@@ -153,7 +327,7 @@ defineExpose({ locateToday });
         >
         <div class="timeline-axis" :style="{ width: window.width + 'px' }">
           <span
-            v-for="group in axisGroups"
+            v-for="group in axisGroups.filter((group) => group.width >= 40)"
             :key="group.key"
             class="gantt-month"
             :style="{ left: group.left + 'px', width: group.width + 'px' }"
@@ -161,7 +335,7 @@ defineExpose({ locateToday });
           >
           <div class="gantt-ticks">
             <span
-              v-for="(tick, index) in window.ticks"
+              v-for="(tick, index) in displayTicks"
               :key="tick.day"
               class="timeline-tick gantt-tick"
               :class="{
@@ -171,7 +345,7 @@ defineExpose({ locateToday });
               :style="{
                 left: tick.x + 'px',
                 width:
-                  (window.ticks[index + 1]?.x ?? window.width) - tick.x + 'px',
+                  (displayTicks[index + 1]?.x ?? window.width) - tick.x + 'px',
               }"
               ><b>{{
                 window.focusUnit === 'day'
@@ -193,7 +367,7 @@ defineExpose({ locateToday });
         >
           <div class="gantt-row-title">
             <i class="category-dot"></i
-            ><button :title="entry.title" @click="emit('edit', entry)">
+            ><button :title="entry.title" @click="emit('view', entry)">
               {{ entry.title }}</button
             ><button
               v-if="
@@ -249,15 +423,12 @@ defineExpose({ locateToday });
             :class="{
               future: entry.startDate > today,
               ongoing: !entry.endDate,
+              'is-short': (bar(entry)?.width ?? 0) < 24,
             }"
-            :style="{
-              left: bar(entry)?.left + 'px',
-              width: bar(entry)?.width + 'px',
-              '--category-color': color(entry),
-              borderColor: color(entry),
-            }"
+            :style="barStyle(entry)"
+            :title="`${entry.title} · ${entry.startDate} — ${entry.endDate ?? (entry.startDate > today ? '结束未定' : '至今')}`"
             :aria-label="`${entry.title}，${entry.startDate} 至 ${entry.endDate ?? (entry.startDate > today ? '结束未定' : '今天')}，${entry.startDate > today ? '未开始' : ''}`"
-            @click="emit('edit', entry)"
+            @click="emit('view', entry)"
           >
             <span class="gantt-bar-title"
               >{{ bar(entry)?.continuesBefore ? '‹ ' : ''

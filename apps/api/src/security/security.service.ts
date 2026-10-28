@@ -157,7 +157,7 @@ export class SecurityService {
         this.consume(
           'snapshot-session',
           request.actor.sessionId,
-          12,
+          60,
           60000,
           response,
         );

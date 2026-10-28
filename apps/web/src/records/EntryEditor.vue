@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import IconButton from '../components/IconButton.vue';
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
 import type {
   CategoryDto,
@@ -188,7 +187,8 @@ async function flush() {
       }
     } catch {
       if (active())
-        localError.value = '本机草稿暂存失败，输入仍在。请复制或下载后再离开。';
+        localError.value =
+          '本机草稿暂存失败，输入仍在。请重试，或手动保留输入后再离开。';
     }
   })();
   storageWork = work;
@@ -492,25 +492,6 @@ async function copyEntry() {
   await flush();
   await submit();
 }
-function download() {
-  const blob = new Blob([JSON.stringify(draftValue(), null, 2)], {
-      type: 'application/json',
-    }),
-    url = URL.createObjectURL(blob),
-    a = document.createElement('a');
-  a.href = url;
-  a.download = 'dayline-draft.json';
-  a.click();
-  URL.revokeObjectURL(url);
-}
-async function copy() {
-  try {
-    await navigator.clipboard.writeText(JSON.stringify(fields(), null, 2));
-    status.value = '输入已复制。';
-  } catch {
-    localError.value = '复制不可用，请下载草稿或直接复制输入。';
-  }
-}
 </script>
 <template>
   <section class="record-panel" aria-labelledby="editor-title">
@@ -528,22 +509,11 @@ async function copy() {
         <PlannerIcon name="close" />
       </button>
     </div>
-    <p>
-      {{
-        local
-          ? '游客记录保存在当前浏览器。'
-          : '未提交的修改会暂存在此设备，点击保存后上传。'
-      }}
-    </p>
     <p v-if="draft" class="editor-recovery-note" role="status">
       已恢复上次未提交的修改，保存后才会上传。
     </p>
     <p v-if="status" role="status" class="notice">{{ status }}</p>
     <p v-if="localError" role="alert" class="error">{{ localError }}</p>
-    <div v-if="durable" class="actions">
-      <IconButton icon="copy" label="复制输入" @click="copy" />
-      <IconButton icon="download" label="下载草稿" @click="download" />
-    </div>
     <section v-if="conflict || missing" class="notice" aria-label="冲突核对">
       <h3>服务器与草稿核对</h3>
       <p v-if="conflict?.deletedAt">
@@ -688,9 +658,9 @@ async function copy() {
         </button>
       </div>
       <button class="button primary" type="submit" :disabled="busy">
-        {{ busy ? '正在保存…' : local ? '保存到本机' : '保存到服务器' }}</button
+        {{ busy ? '正在保存…' : '保存' }}</button
       ><button type="button" class="button subtle" @click="emit('close')">
-        关闭编辑
+        取消
       </button>
     </form>
   </section>
