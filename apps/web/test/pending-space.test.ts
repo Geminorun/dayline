@@ -31,6 +31,11 @@ it('cold pending login skips ordinary snapshots and private cache, routes to del
     'fetch',
     vi.fn(async (path: string) => {
       paths.push(path);
+      if (path === '/api/v1/auth/session')
+        return Response.json({
+          data: { authenticated: true },
+          meta: { requestId: 'session', serverTime: now },
+        });
       if (path === '/api/v1/me')
         return Response.json({
           data: {
@@ -73,7 +78,11 @@ it('cold pending login skips ordinary snapshots and private cache, routes to del
   expect(router.currentRoute.value.path).toBe('/account-deletion');
   expect(useWorkspace().snapshot.value).toBeNull();
   expect(cache).not.toHaveBeenCalled();
-  expect(paths.every((path) => path === '/api/v1/me')).toBe(true);
+  expect(
+    paths.every((path) =>
+      ['/api/v1/me', '/api/v1/auth/session'].includes(path),
+    ),
+  ).toBe(true);
   await router.push('/data');
   await flushPromises();
   expect(wrapper.text()).toContain('导出已保存记录');

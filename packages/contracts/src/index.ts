@@ -146,6 +146,20 @@ export const wechatLoginDtoSchema: z.ZodType<WechatLoginDto> = z.object({
 export const successDtoSchema = z.object({ success: z.literal(true) });
 export const nativeStatusSchema = z.object({ status: z.literal(true) });
 export const nativeUserSchema = z.object({ user: z.object({ id: z.uuid() }) });
+export const sessionStatusSchema = z.object({ authenticated: z.boolean() });
+export const emailFlowSchema = z.object({
+  nextStep: z.enum(['verify_email', 'login']),
+  accountStatus: z.enum([
+    'created',
+    'pending_verification',
+    'registered',
+    'unknown',
+  ]),
+  mailStatus: z.enum(['accepted', 'failed', 'unconfirmed', 'not_sent']),
+  retryAfterSeconds: z.number().int().min(0).max(86400),
+});
+export type EmailFlow = z.infer<typeof emailFlowSchema>;
+export const nativeEmailFlowSchema = z.object({ emailFlow: emailFlowSchema });
 export * from './records.js';
 
 export const apiMetaSchema = z

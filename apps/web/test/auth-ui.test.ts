@@ -29,6 +29,7 @@ afterEach(() => {
   vi.useRealTimers();
   useAccount().clear();
   window.history.replaceState(null, '', '/');
+  sessionStorage.clear();
 });
 describe('email and QR interfaces', () => {
   it('keeps registration validation and success states explicit and clears passwords', async () => {
@@ -37,6 +38,12 @@ describe('email and QR interfaces', () => {
         expect(path).toBe('/api/auth/sign-up/email');
         expect(options?.credentials).toBe('include');
         return Response.json({
+          emailFlow: {
+            nextStep: 'verify_email',
+            accountStatus: 'created',
+            mailStatus: 'accepted',
+            retryAfterSeconds: 0,
+          },
           user: { id: '63a561bd-2302-485d-8d89-cea248ffbdf1' },
           token: null,
         });
@@ -55,10 +62,12 @@ describe('email and QR interfaces', () => {
     await passwords[1]?.setValue('Register-password!');
     await wrapper.get('form').trigger('submit');
     await flushPromises();
-    expect(wrapper.get('[role="status"]').text()).toContain('验证后再登录');
-    expect(
-      (wrapper.get('input[name="password"]').element as HTMLInputElement).value,
-    ).toBe('');
+    expect(wrapper.get('[role="status"]').text()).toContain('邮件已提交发送');
+    expect(wrapper.find('input[name="password"]').exists()).toBe(false);
+    expect(wrapper.get('input[name="email"]').element).toHaveProperty(
+      'value',
+      'user@example.com',
+    );
     expect(fetch.mock.calls[0]?.[1]).toMatchObject({
       credentials: 'include',
       method: 'POST',
@@ -206,6 +215,7 @@ it('uses server Retry-After for email resend, disables repeated requests, then p
   await flushPromises();
   expect(fetch).toHaveBeenCalledTimes(2);
   wrapper.unmount();
+  await vi.advanceTimersByTimeAsync(0);
   expect(vi.getTimerCount()).toBe(0);
 });
 
@@ -243,3 +253,170 @@ it.each([
     expect(wrapper.get('form button').attributes('disabled')).toBeUndefined();
   },
 );
+
+it.each([
+  {
+    accountStatus: 'created',
+    mailStatus: 'failed',
+    nextStep: 'verify_email',
+    heading: '验证邮箱',
+    feedback: '验证邮件发送失败',
+  },
+  {
+    accountStatus: 'pending_verification',
+    mailStatus: 'accepted',
+    nextStep: 'verify_email',
+    heading: '验证邮箱',
+    feedback: '本次未修改原密码',
+  },
+  {
+    accountStatus: 'registered',
+    mailStatus: 'not_sent',
+    nextStep: 'login',
+    heading: '欢迎回来',
+    feedback: '该邮箱已注册',
+  },
+])(
+  'continues registration for $accountStatus with explicit mail state and no stored password',
+  async ({ accountStatus, mailStatus, nextStep, heading, feedback }) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        Response.json({
+          emailFlow: {
+            accountStatus,
+            mailStatus,
+            nextStep,
+            retryAfterSeconds: 3,
+          },
+        }),
+      ),
+    );
+    const wrapper = await page('login');
+    expect(wrapper.get('.auth-tabs button[aria-pressed="true"]').text()).toBe(
+      '登录',
+    );
+    await wrapper.get('.auth-tabs button:nth-child(2)').trigger('click');
+    await flushPromises();
+    await wrapper.get('input[name="name"]').setValue('测试');
+    await wrapper.get('input[name="email"]').setValue('recovery@example.com');
+    for (const input of wrapper.findAll('input[type="password"]'))
+      await input.setValue('Never-store-this-password!');
+    await wrapper.get('form').trigger('submit');
+    await flushPromises();
+    expect(wrapper.get('h1').text()).toBe(heading);
+    expect(wrapper.text()).toContain(feedback);
+    expect(wrapper.get('input[name="email"]').element).toHaveProperty(
+      'value',
+      'recovery@example.com',
+    );
+    expect(sessionStorage.getItem('dayline:auth-email')).not.toContain(
+      'Never-store-this-password',
+    );
+    if (nextStep === 'verify_email') {
+      expect(wrapper.get('form button').text()).toBe('3 秒后可重试');
+      expect(wrapper.get('form button').attributes('disabled')).toBeDefined();
+      await wrapper.get('a[href="/login"]').trigger('click');
+      await flushPromises();
+      expect(wrapper.get('form button').text()).toBe('邮箱登录');
+      expect(wrapper.get('form button').attributes('disabled')).toBeUndefined();
+    }
+  },
+);
+
+it('routes unverified login to the verification page with the email preserved and resends only on request', async () => {
+  const fetch = vi.fn(async (path: string) =>
+    path.endsWith('sign-in/email')
+      ? Response.json({ code: 'EMAIL_NOT_VERIFIED' }, { status: 403 })
+      : Response.json({
+          emailFlow: {
+            accountStatus: 'pending_verification',
+            nextStep: 'verify_email',
+            mailStatus: 'accepted',
+            retryAfterSeconds: 0,
+          },
+        }),
+  );
+  vi.stubGlobal('fetch', fetch);
+  const wrapper = await page('login');
+  await wrapper.get('input[name="email"]').setValue('pending@example.com');
+  await wrapper.get('input[name="password"]').setValue('Pending-password!');
+  await wrapper.get('form').trigger('submit');
+  await flushPromises();
+  expect(wrapper.get('h1').text()).toBe('验证邮箱');
+  expect(wrapper.get('input[name="email"]').element).toHaveProperty(
+    'value',
+    'pending@example.com',
+  );
+  expect(fetch).toHaveBeenCalledOnce();
+  await wrapper.get('form').trigger('submit');
+  await flushPromises();
+  expect(fetch.mock.calls[1]?.[0]).toBe('/api/auth/send-verification-email');
+  expect(wrapper.text()).toContain('邮件已提交发送');
+});
+
+it('restores the remaining cooldown after navigation without restarting it or blocking login', async () => {
+  vi.useFakeTimers();
+  sessionStorage.setItem(
+    'dayline:auth-email',
+    JSON.stringify({
+      email: 'pending@example.com',
+      flow: {
+        accountStatus: 'pending_verification',
+        nextStep: 'verify_email',
+        mailStatus: 'accepted',
+        retryAfterSeconds: 60,
+      },
+      retryUntil: Date.now() + 4000,
+      limited: false,
+      retryScope: 'mail',
+    }),
+  );
+  const wrapper = await page('verify');
+  expect(wrapper.get('form button').text()).toBe('4 秒后可重试');
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(wrapper.get('form button').text()).toBe('重发验证邮件');
+});
+
+it('prefills a new-tab verification callback email as a hint without claiming authenticated or verified status', async () => {
+  window.history.replaceState(null, '', '/login?email=verified%40example.com');
+  const wrapper = await page('login');
+  expect(wrapper.get('input[name="email"]').element).toHaveProperty(
+    'value',
+    'verified@example.com',
+  );
+  expect(window.location.search).toBe('');
+  expect(wrapper.text()).not.toContain('验证成功');
+  expect(
+    takeAuthCallback(
+      { href: 'https://example.com/login?email=bad' },
+      { replaceState: vi.fn() },
+    ).email,
+  ).toBeNull();
+});
+
+it('keeps an expired-link error visible instead of restoring an old successful mail hint', async () => {
+  window.history.replaceState(
+    null,
+    '',
+    '/verify?email=expired%40example.com&error=INVALID_TOKEN',
+  );
+  sessionStorage.setItem(
+    'dayline:auth-email',
+    JSON.stringify({
+      email: 'expired@example.com',
+      retryUntil: 0,
+      limited: false,
+      flow: {
+        accountStatus: 'pending_verification',
+        nextStep: 'verify_email',
+        mailStatus: 'accepted',
+        retryAfterSeconds: 60,
+      },
+    }),
+  );
+  const wrapper = await page('verify');
+  expect(wrapper.get('[role="alert"]').text()).toContain('链接已失效');
+  expect(wrapper.text()).not.toContain('邮件已提交发送');
+  expect(wrapper.get('form button').text()).toBe('重发验证邮件');
+});

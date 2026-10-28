@@ -303,7 +303,7 @@ function hasEvent(date: string) {
               <span class="avatar">{{
                 current?.displayName?.slice(0, 1) ?? '客'
               }}</span
-              ><span>{{ current?.displayName ?? '游客 · 登录' }}</span>
+              ><span>{{ current?.displayName ?? '游客 · 登录·注册' }}</span>
             </summary>
             <section class="profile-popover" aria-label="账号与更多功能">
               <div class="profile-heading">
@@ -313,10 +313,8 @@ function hasEvent(date: string) {
                 current?.displayName ?? '每一段经历，都值得记录'
               }}</strong>
               <div class="account-actions">
-                <RouterLink v-if="!current" class="button" to="/auth/login"
-                  >登录</RouterLink
-                ><RouterLink v-if="!current" class="button" to="/auth/register"
-                  >注册</RouterLink
+                <RouterLink v-if="!current" class="button" to="/login"
+                  >登录·注册</RouterLink
                 >
                 <button
                   v-if="mode === 'account'"

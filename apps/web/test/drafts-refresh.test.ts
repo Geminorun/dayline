@@ -71,7 +71,7 @@ beforeEach(async () => {
       }),
     ),
   );
-  await useAccount().refresh();
+  await useAccount().refresh(true);
 });
 afterEach(async () => {
   wrappers.splice(0).forEach((w) => w.unmount());

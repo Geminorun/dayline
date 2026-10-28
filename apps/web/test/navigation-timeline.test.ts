@@ -29,6 +29,14 @@ describe('routed auth and complete timeline accessibility', () => {
       'fetch',
       vi.fn(async (path: string) => {
         requests.push(path);
+        if (path === '/api/v1/auth/session')
+          return Response.json({
+            data: { authenticated: false },
+            meta: {
+              requestId: 'session',
+              serverTime: '2026-10-26T04:00:00.000Z',
+            },
+          });
         if (path === '/api/v1/me')
           return Response.json(
             { error: { code: 'UNAUTHENTICATED' } },

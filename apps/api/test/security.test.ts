@@ -22,6 +22,35 @@ it('recovers an exhausted bounded failure store after its windows expire', () =>
   now.mockReturnValue(1600001);
   expect(() => service.checkFailures('test', 'new', 'new')).not.toThrow();
 });
+it('shares email cooldown across signup and resend and returns its actual remaining seconds', () => {
+  const service = new SecurityService({ ...config, rateLimitEnabled: true });
+  const now = vi.spyOn(Date, 'now').mockReturnValue(1000000);
+  expect(
+    service.nativeIdentity('/sign-up/email', 'USER@example.com', 'test-ip'),
+  ).toBe(60);
+  now.mockReturnValue(1015000);
+  try {
+    service.nativeIdentity(
+      '/send-verification-email',
+      'user@example.com',
+      'test-ip',
+    );
+    throw new Error('Expected shared mail cooldown');
+  } catch (cause) {
+    expect(cause).toMatchObject({
+      code: 'RATE_LIMITED',
+      details: { retryAfterSeconds: 45 },
+    });
+  }
+  now.mockReturnValue(1060000);
+  expect(
+    service.nativeIdentity(
+      '/send-verification-email',
+      'user@example.com',
+      'test-ip',
+    ),
+  ).toBe(60);
+});
 it('records a fixed mail failure event without recipient, link or provider error and keeps the outward error safe', async () => {
   const logged = vi
     .spyOn(Logger.prototype, 'error')

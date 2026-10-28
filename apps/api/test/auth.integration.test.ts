@@ -4,12 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createApp } from '../src/app.factory.js';
 import { parseEnvironment } from '../src/config/environment.js';
 import { PrismaService } from '../src/database/prisma.service.js';
 import { testDatabaseUrl } from './database-url.js';
+import { MailService } from '../src/mail/mail.service.js';
+import { AppError } from '../src/common/app-error.js';
 
 const runId = randomUUID();
 const origin = 'http://localhost:5173';
@@ -144,11 +146,138 @@ describe('authentication foundation with real PostgreSQL and HTTP', () => {
     expect(live.headers['x-request-id']).toBeDefined();
     expect(live.headers['cache-control']).toBe('no-store');
     await request(app.getHttpServer()).get('/health/ready').expect(200);
+    const session = await request(app.getHttpServer())
+      .get('/api/v1/auth/session')
+      .expect(200);
+    expect(session.body.data).toEqual({ authenticated: false });
     await request(app.getHttpServer()).get('/api/docs-json').expect(200);
     const anonymous = await request(app.getHttpServer())
       .get('/api/v1/me')
       .expect(401);
     expect(anonymous.body.error.code).toBe('UNAUTHENTICATED');
+  });
+
+  it('recovers an existing unverified signup after mail failure without duplicate users or password changes', async () => {
+    const email = `recovery-${runId}@example.com`;
+    const body = {
+      email,
+      password,
+      name: 'Recover signup',
+      callbackURL: `${origin}/login`,
+    };
+    const mail = vi
+      .spyOn(app.get(MailService), 'sendVerification')
+      .mockRejectedValueOnce(
+        new AppError(503, 'MAIL_UNAVAILABLE', 'Mail unavailable'),
+      );
+    try {
+      const first = await post('/api/auth/sign-up/email')
+        .send(body)
+        .expect(200);
+      expect(first.body.emailFlow).toMatchObject({
+        accountStatus: 'created',
+        nextStep: 'verify_email',
+        mailStatus: 'failed',
+      });
+      const original = await database.user.findUniqueOrThrow({
+        where: { email },
+      });
+      const credential = await database.account.findFirstOrThrow({
+        where: { userId: original.id, providerId: 'credential' },
+      });
+      const retry = await post('/api/auth/sign-up/email')
+        .send({ ...body, password: newPassword })
+        .expect(200);
+      expect(retry.body.emailFlow).toMatchObject({
+        accountStatus: 'pending_verification',
+        nextStep: 'verify_email',
+        mailStatus: 'accepted',
+      });
+      expect(retry.body.user).toBeUndefined();
+      expect(await database.user.count({ where: { email } })).toBe(1);
+      expect(
+        (
+          await database.account.findUniqueOrThrow({
+            where: { id: credential.id },
+          })
+        ).password,
+      ).toBe(credential.password);
+      const url = await mailUrl(email, '验证日序邮箱');
+      const verified = await request(app.getHttpServer())
+        .get(url.pathname + url.search)
+        .expect(302);
+      expect(verified.headers.location).toBe(`${origin}/login`);
+      const session = await login(email);
+      const probe = await request(app.getHttpServer())
+        .get('/api/v1/auth/session')
+        .set('Cookie', session.cookie)
+        .expect(200);
+      expect(probe.body.data).toEqual({ authenticated: true });
+      const registered = await post('/api/auth/sign-up/email')
+        .send(body)
+        .expect(200);
+      expect(registered.body.emailFlow).toMatchObject({
+        nextStep: 'login',
+        accountStatus: 'registered',
+        mailStatus: 'not_sent',
+      });
+      expect(registered.body.user).toBeUndefined();
+      expect(mail).toHaveBeenCalledTimes(2);
+    } finally {
+      mail.mockRestore();
+    }
+  });
+
+  it('reports verification resend failures explicitly instead of reporting accepted mail', async () => {
+    const user = await register('resend-failure', false);
+    const mail = vi
+      .spyOn(app.get(MailService), 'sendVerification')
+      .mockRejectedValueOnce(
+        new AppError(503, 'MAIL_UNAVAILABLE', 'Mail unavailable'),
+      );
+    try {
+      const response = await post('/api/auth/send-verification-email')
+        .send({ email: user.email, callbackURL: `${origin}/login` })
+        .expect(200);
+      expect(response.body.emailFlow).toMatchObject({
+        nextStep: 'verify_email',
+        accountStatus: 'pending_verification',
+        mailStatus: 'failed',
+      });
+      expect(
+        (await database.user.findUniqueOrThrow({ where: { id: user.id } }))
+          .emailVerified,
+      ).toBe(false);
+    } finally {
+      mail.mockRestore();
+    }
+  });
+
+  it('returns expired verification links to a trusted resend page without accepting an external callback', async () => {
+    const user = await register('expired-email-link', false);
+    const url = await mailUrl(user.email, '验证日序邮箱');
+    await database.verification.updateMany({
+      where: {
+        value: user.id,
+        identifier: { startsWith: 'dayline-email-verification:' },
+      },
+      data: { expiresAt: new Date(0) },
+    });
+    const response = await request(app.getHttpServer())
+      .get(url.pathname + url.search)
+      .expect(302);
+    const destination = new URL(String(response.headers.location));
+    expect(destination.origin).toBe(origin);
+    expect(destination.pathname).toBe('/verify');
+    expect(destination.searchParams.get('error')).toBe('INVALID_TOKEN');
+    expect(
+      (await database.user.findUniqueOrThrow({ where: { id: user.id } }))
+        .emailVerified,
+    ).toBe(false);
+    url.searchParams.set('callbackURL', 'https://untrusted.invalid/login');
+    await request(app.getHttpServer())
+      .get(url.pathname + url.search)
+      .expect(400);
   });
 
   it('keeps exactly one initialized default set during concurrent first email logins', async () => {

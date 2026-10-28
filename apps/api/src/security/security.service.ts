@@ -36,17 +36,20 @@ export class SecurityService {
       this.buckets.set(key, bucket);
     }
     if (bucket.count >= max) {
-      response?.setHeader(
-        'Retry-After',
-        String(Math.max(1, Math.ceil((bucket.until - now) / 1000))),
+      const retryAfterSeconds = Math.max(
+        1,
+        Math.ceil((bucket.until - now) / 1000),
       );
+      response?.setHeader('Retry-After', String(retryAfterSeconds));
       throw new AppError(
         429,
         'RATE_LIMITED',
         '操作过于频繁，请按提示稍后重试。',
+        { retryAfterSeconds },
       );
     }
     bucket.count++;
+    return Math.max(0, Math.ceil((bucket.until - now) / 1000));
   }
   native(request: Request, response: Response) {
     if (!this.config.rateLimitEnabled) return;
@@ -120,7 +123,7 @@ export class SecurityService {
     }
   }
   nativeIdentity(path: string, email: string, ip: string) {
-    if (!this.config.rateLimitEnabled) return;
+    if (!this.config.rateLimitEnabled) return 0;
     const normalized = email.trim().toLowerCase();
     if (
       normalized &&
@@ -128,9 +131,10 @@ export class SecurityService {
         path,
       )
     )
-      this.consume('mail-identity', normalized, 1, 60000);
+      return this.consume('mail-identity', normalized, 1, 60000);
     if (normalized && path === '/sign-in/email')
       this.checkFailures('password', ip, normalized);
+    return 0;
   }
 
   business(request: Request, response: Response) {

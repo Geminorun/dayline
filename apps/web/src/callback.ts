@@ -1,3 +1,5 @@
+import { realEmailSchema } from '@dayline/contracts';
+
 interface CallbackHistory {
   readonly state?: unknown;
   replaceState(data: unknown, unused: string, url?: string | URL | null): void;
@@ -10,6 +12,7 @@ export function takeAuthCallback(
   const url = new URL(location.href);
   const token = url.searchParams.get('token');
   const error = url.searchParams.get('error');
+  const emailHint = realEmailSchema.safeParse(url.searchParams.get('email'));
   if (url.search) {
     const state = history.state;
     const navigationState =
@@ -36,5 +39,5 @@ export function takeAuthCallback(
     }
     history.replaceState(navigationState, '', url.pathname + url.hash);
   }
-  return { token, error };
+  return { token, error, email: emailHint.success ? emailHint.data : null };
 }

@@ -126,4 +126,18 @@ it('connects the reference calendar, modal editor, daily focus, categories and t
     .setValue('不存在的筛选词');
   await flushPromises();
   expect(wrapper.get('.timeline-empty').text()).toContain('还没有匹配的记录');
+  expect(
+    wrapper.findAll('.account-actions a').map((link) => link.text()),
+  ).toContain('登录·注册');
+  expect(
+    wrapper
+      .findAll('.account-actions a')
+      .filter((link) => ['登录', '注册'].includes(link.text())),
+  ).toHaveLength(0);
+  await wrapper.get('.account-actions a[href="/login"]').trigger('click');
+  await flushPromises();
+  expect(router.currentRoute.value.path).toBe('/login');
+  expect(wrapper.get('.auth-tabs button[aria-pressed="true"]').text()).toBe(
+    '登录',
+  );
 });

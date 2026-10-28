@@ -1,15 +1,40 @@
-import { Controller, HttpCode, Inject, Post, Req, Res } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  Post,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { Request, Response } from 'express';
-import { AllowPendingDeletion } from './auth.decorators.js';
+import { AllowPendingDeletion, Public } from './auth.decorators.js';
 import { AuthAdapter } from './adapter/auth-adapter.js';
 import { AppError } from '../common/app-error.js';
+import { AuthAccessService } from './auth-access.service.js';
+import { forwardSessionHeaders } from './session-headers.js';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(@Inject(AuthAdapter) private readonly auth: AuthAdapter) {}
+  constructor(
+    @Inject(AuthAdapter) private readonly auth: AuthAdapter,
+    @Inject(AuthAccessService) private readonly access: AuthAccessService,
+  ) {}
+
+  @Get('session')
+  @Public()
+  @ApiOperation({ summary: '探测会话，未登录正常返回 authenticated=false' })
+  async session(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const session = await this.access.resolve(fromNodeHeaders(request.headers));
+    if (session) forwardSessionHeaders(response, session.responseHeaders);
+    return { authenticated: session !== null };
+  }
 
   @Post('logout')
   @HttpCode(200)

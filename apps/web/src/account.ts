@@ -1,4 +1,4 @@
-import { userDtoSchema } from '@dayline/contracts';
+import { sessionStatusSchema, userDtoSchema } from '@dayline/contracts';
 import { readonly, ref } from 'vue';
 import type { UserDto } from '@dayline/contracts';
 import { ClientError } from '@dayline/api-client';
@@ -42,6 +42,13 @@ export function useAccount() {
     loading.value = true;
     const work = (async () => {
       try {
+        if (!relogin && !api.getAccount()) {
+          const session = await api.request('/api/v1/auth/session', {
+            decode: sessionStatusSchema.parse,
+          });
+          if (!session.data?.authenticated)
+            throw new ClientError('UNAUTHENTICATED', '请先登录。', 401);
+        }
         const response = await api.request('/api/v1/me', {
           decode: userDtoSchema.parse,
         });
@@ -58,7 +65,7 @@ export function useAccount() {
           error.status === 401
         ) {
           current.value = null;
-          api.invalidate();
+          if (api.getAccount()) api.invalidate();
         }
         throw error;
       } finally {

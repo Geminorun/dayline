@@ -15,7 +15,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   history.replaceState(null, '', '/');
 });
-it('keeps an anonymous binding-link result while the real App startup rejects an unrelated missing /me session', async () => {
+it('keeps an anonymous binding-link result while startup resolves an anonymous session without /me', async () => {
   const id = randomUUID(),
     token = 'x'.repeat(43),
     path = `/auth/email-binding?id=${id}&token=${token}`;
@@ -31,6 +31,14 @@ it('keeps an anonymous binding-link result while the real App startup rejects an
     'fetch',
     vi.fn(async (url: RequestInfo | URL) => {
       calls.push(String(url));
+      if (url === '/api/v1/auth/session')
+        return Response.json({
+          data: { authenticated: false },
+          meta: {
+            requestId: 'session',
+            serverTime: '2026-10-26T20:00:00.000Z',
+          },
+        });
       if (url === '/api/v1/me')
         return Response.json(
           { error: { code: 'UNAUTHENTICATED' } },
@@ -54,9 +62,10 @@ it('keeps an anonymous binding-link result while the real App startup rejects an
     wrapper = mount(App, { global: { plugins: [router] } });
   try {
     await flushPromises();
-    expect(calls).toContain('/api/v1/me');
+    expect(calls).toContain('/api/v1/auth/session');
+    expect(calls).not.toContain('/api/v1/me');
     expect(calls).toContain('/api/v1/me/email-binding-requests/verify');
-    expect(api.getGeneration()).toBeGreaterThan(generation);
+    expect(api.getGeneration()).toBe(generation);
     expect(release).toBeTypeOf('function');
     expect(JSON.stringify(history.state)).not.toContain(token);
     release?.(

@@ -155,7 +155,7 @@ it('a completed private plan is cleared synchronously on identity loss or switch
       }),
     ),
   );
-  await useAccount().refresh();
+  await useAccount().refresh(true);
   const wrapper = await mountPage();
   await wrapper
     .findAll('button')
@@ -263,7 +263,7 @@ it.each(['success', 'failure'])(
         }),
       ),
     );
-    await useAccount().refresh();
+    await useAccount().refresh(true);
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [{ path: '/drafts', component: DraftsPage }],
@@ -382,7 +382,7 @@ it('requires saving edited merge categories before commit and preserves the sele
       });
     }),
   );
-  await useAccount().refresh();
+  await useAccount().refresh(true);
   const wrapper = await mountPage();
   await wrapper
     .findAll('button')

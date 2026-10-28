@@ -1,11 +1,15 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { AppError } from './app-error.js';
+import type { EmailFlow } from '@dayline/contracts';
 export const requestBudget = new AsyncLocalStorage<{
   deadline: number;
   requestId?: string;
   verificationUserId?: string;
   authEmail?: string;
   authPath?: string;
+  emailFlow?: EmailFlow;
+  mailRetrySeconds?: number;
+  mailRetryUntil?: number;
 }>();
 export function remainingBudget(fallback: number): number {
   const remaining = requestBudget.getStore()?.deadline;

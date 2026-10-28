@@ -93,7 +93,7 @@ describe('reauth and authorized merge drafts', () => {
       },
     );
     vi.stubGlobal('fetch', fetch);
-    await useAccount().refresh();
+    await useAccount().refresh(true);
     const generation = api.getGeneration();
     const wrapper = mount(ReauthForm, {
       props: {

@@ -443,6 +443,14 @@ Gate-A 的本地技术验证已覆盖无邮箱微信、Cookie / 签名 Bearer、
 | POST | `/api/auth/sign-out` | 退出当前会话 |
 | GET | `/api/auth/get-session` | 认证 SDK 使用的会话读取 |
 
+`GET /api/v1/auth/session` 为匿名可用的日序会话探测，返回标准 ApiResult `{data:{authenticated:boolean},meta}`，无会话正常返回 200 / false；有会话时兼容邮箱和微信，转发必要的刷新 Cookie。失效、撤销等真实认证错误仍保留。网页确认有会话后才请求受保护的 `/me`，不能将 `/me` 改成匿名读取。
+
+注册和验证邮件重发响应增加 contracts 中的 `emailFlow`：`nextStep=verify_email|login`、`accountStatus=created|pending_verification|registered|unknown`、`mailStatus=accepted|failed|unconfirmed|not_sent`、`retryAfterSeconds`。HTTP 200 表示流程已处理，邮件是否受理由 mailStatus 判断，不等于已送达。首次创建保留原生真实 user 以兼容既有调用；重复注册不返回组件合成的 user，前端始终以 emailFlow 导航，不将其当登录会话。
+
+邮箱已存在但未验证时，使用 Better Auth 的已有用户注册 hook 签发新的验证链接，继续同一个用户；不覆盖原密码、资料或默认分类。之前邮件发送失败留下的账号可直接继续验证。已验证账号再次注册引导登录，不再创建账号或重发验证邮件。注册 / 重发采用明确状态引导，不提供额外邮箱存在性查询接口；找回密码仍保留原生通用响应。
+
+注册与重发通过应用层记录邮件结果，防止认证库捕获发送异常后被前端当成发送成功。提供商接受记录 accepted；拒绝或发送前失败记录 failed；网络超时等不确定结果记录 unconfirmed。失败仍保留待验证账号。邮箱额度在一个请求内只扣一次，继续注册、重发、找回密码共用额度；成功请求也返回剩余冷却秒数，429 / Retry-After 返回真实剩余时间。
+
 通过配置、插件或路由策略限制未使用的认证功能。不得启用认证库的自动同邮箱账号关联、任意社交 provider 绑定、即时用户删除或不受业务状态约束的资料修改来绕过本文流程。
 
 邮箱密码工程默认：8–128 字符，使用库默认的受支持哈希机制；邮箱登录要求 `emailVerified=true` 且 `emailKind=real`。微信验证产生的会话不以真实邮箱验证为前提，两种登录方法必须在适配器中明确区分。

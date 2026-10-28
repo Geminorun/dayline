@@ -72,6 +72,33 @@ button:disabled {
   margin: 12px 0 28px;
   font-weight: 600;
 }
+.auth-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 24px;
+  padding: 4px;
+  background: #f3f1fb;
+  border-radius: 8px;
+}
+.auth-tabs button {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: #76649a;
+  padding: 10px;
+  border-radius: 6px;
+}
+.auth-tabs button[aria-pressed='true'] {
+  background: white;
+  color: #5745a1;
+  box-shadow: 0 1px 4px #65539318;
+}
+.auth-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
 .card h2,
 .record-panel h2 {
   font-size: 17px;

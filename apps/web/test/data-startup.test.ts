@@ -80,6 +80,11 @@ describe('routed data management startup readiness', () => {
       vi.fn(async (path: RequestInfo | URL) => {
         const route = String(path);
         requests.push(route);
+        if (route === '/api/v1/auth/session')
+          return Response.json({
+            data: { authenticated: true },
+            meta: { requestId: 'session', serverTime: now },
+          });
         if (route === '/api/v1/me') {
           await identity.promise;
           return Response.json({

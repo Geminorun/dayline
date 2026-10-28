@@ -89,6 +89,8 @@ export class MailService {
         503,
         'MAIL_UNAVAILABLE',
         '邮件暂时无法发送，请稍后重新申请。',
+        undefined,
+        cause,
       );
     }
   }

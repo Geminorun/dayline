@@ -176,6 +176,11 @@ describe('minimal record interface', () => {
       'fetch',
       vi.fn(async (path: string, options?: RequestInit) => {
         requests.push(path);
+        if (path === '/api/v1/auth/session')
+          return Response.json({
+            data: { authenticated: true },
+            meta: { requestId: 'session', serverTime: time },
+          });
         if (path === '/api/v1/me')
           return Response.json({
             data: {

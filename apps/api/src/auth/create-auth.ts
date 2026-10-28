@@ -16,6 +16,7 @@ import type { PrismaService } from '../database/prisma.service.js';
 import type { MailService } from '../mail/mail.service.js';
 import { identityPlugin } from './adapter/identity-plugin.js';
 import { authModelOptions } from './auth-model-options.js';
+import { EmailVerificationFlow } from './email-verification-flow.js';
 
 export const AUTH_INSTANCE = Symbol('AUTH_INSTANCE');
 export type DaylineAuth = ReturnType<typeof createAuth>;
@@ -32,6 +33,7 @@ export function createAuth(
     transaction: true,
   });
   const logger = new Logger('Authentication');
+  const emailFlow = new EmailVerificationFlow(config, database, mail, clock);
   return betterAuth({
     ...authModelOptions,
     appName: '日序 Dayline',
@@ -94,6 +96,8 @@ export function createAuth(
       sendResetPassword: async ({ user, url }) => {
         await mail.sendPasswordReset(user.email, url);
       },
+      onExistingUserSignUp: async ({ user }, request) =>
+        emailFlow.resume(user, request),
       onPasswordReset: async ({ user }) => {
         await database.user.update({
           where: { id: user.id },
@@ -107,19 +111,7 @@ export function createAuth(
       autoSignInAfterVerification: false,
       expiresIn: 60 * 60 * 24,
       sendVerificationEmail: async ({ user, url }) => {
-        const token = new URL(url).searchParams.get('token');
-        if (!token) throw new Error('Missing email verification token.');
-        const identifier =
-          'dayline-email-verification:' +
-          createHash('sha256').update(token).digest('hex');
-        await database.verification.create({
-          data: {
-            identifier,
-            value: user.id,
-            expiresAt: new Date(clock.now().getTime() + 86400000),
-          },
-        });
-        await mail.sendVerification(user.email, url);
+        await emailFlow.send(user, url);
       },
     },
     advanced: {
@@ -166,10 +158,24 @@ export function createAuth(
             typeof token !== 'string' ||
             decodeJwt(token).email !== owner.email ||
             owner.status !== 'active'
-          )
+          ) {
+            const target = context.query?.callbackURL;
+            if (
+              typeof target === 'string' &&
+              URL.canParse(target, config.webBaseUrl)
+            ) {
+              const callback = new URL(target, config.webBaseUrl);
+              if (config.trustedOrigins.includes(callback.origin)) {
+                callback.pathname = '/verify';
+                callback.hash = '';
+                callback.searchParams.set('error', 'INVALID_TOKEN');
+                throw context.redirect(callback.href);
+              }
+            }
             throw new APIError('BAD_REQUEST', {
               message: '验证链接已失效，请重新申请。',
             });
+          }
           scope.verificationUserId = owner.id;
         }
         const email = context.body?.email;
@@ -181,23 +187,34 @@ export function createAuth(
         }
         if (security) {
           try {
-            security.nativeIdentity(
+            const retry = security.nativeIdentity(
               context.path,
               typeof email === 'string' ? email : '',
               context.headers?.get('X-Dayline-Internal-IP') ?? 'unknown',
             );
+            if (scope) {
+              scope.mailRetrySeconds = retry;
+              if (retry > 0) scope.mailRetryUntil = Date.now() + retry * 1000;
+            }
+            if (retry > 0) context.setHeader('Retry-After', String(retry));
           } catch (e) {
             if (e instanceof AppError) {
-              context.setHeader(
-                'Retry-After',
-                context.path === '/sign-in/email' ? '600' : '60',
-              );
+              const details = e.details;
+              const retry =
+                details &&
+                typeof details === 'object' &&
+                'retryAfterSeconds' in details &&
+                typeof details.retryAfterSeconds === 'number'
+                  ? String(details.retryAfterSeconds)
+                  : context.path === '/sign-in/email'
+                    ? '600'
+                    : '60';
+              context.setHeader('Retry-After', retry);
               throw new APIError(
                 'TOO_MANY_REQUESTS',
                 { message: e.message, code: 'RATE_LIMITED' },
                 {
-                  'Retry-After':
-                    context.path === '/sign-in/email' ? '600' : '60',
+                  'Retry-After': retry,
                 },
               );
             }
@@ -220,6 +237,44 @@ export function createAuth(
             });
           context.body.name = name.data;
         }
+        if (
+          typeof email === 'string' &&
+          ['/sign-up/email', '/send-verification-email'].includes(context.path)
+        )
+          await emailFlow.prepare(email.trim().toLowerCase());
+      }),
+      after: createAuthMiddleware(async (context) => {
+        const scope = requestBudget.getStore();
+        const remaining =
+          scope?.mailRetryUntil === undefined
+            ? undefined
+            : Math.max(
+                0,
+                Math.ceil((scope.mailRetryUntil - Date.now()) / 1000),
+              );
+        if (remaining !== undefined)
+          context.setHeader('Retry-After', String(remaining));
+        const flow = scope?.emailFlow;
+        if (flow && remaining !== undefined) flow.retryAfterSeconds = remaining;
+        if (
+          !flow ||
+          !['/sign-up/email', '/send-verification-email'].includes(context.path)
+        )
+          return;
+        const returned: unknown = context.context.returned;
+        if (
+          returned instanceof APIError &&
+          !['failed', 'unconfirmed'].includes(flow.mailStatus)
+        )
+          return;
+        const legacy =
+          flow.accountStatus === 'created' &&
+          returned &&
+          typeof returned === 'object' &&
+          !(returned instanceof APIError)
+            ? returned
+            : { status: true };
+        return context.json({ ...legacy, emailFlow: flow });
       }),
     },
     databaseHooks: {
