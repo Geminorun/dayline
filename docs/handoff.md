@@ -1,6 +1,51 @@
 # Dayline 会话交接
 
-更新日期：2026-10-26。
+更新日期：2026-10-28。
+
+## 当前交接（2026-10-28，优先于下方历史记录）
+
+### 保存与实现状态
+
+- 仓库：<https://github.com/Geminorun/dayline>，当前开发与部署分支均为 `main`。已实现 Web、小程序与后端，进入部署、体验修正及生产联调阶段；不要按下方恢复历史重新初始化项目或切回旧框架分支。
+- 最近功能提交 `35a561aadbf5bf6a0d8083face1e8c849cfc0203` 已推送；该提交的 [CI](https://github.com/Geminorun/dayline/actions/runs/40629360150) 与[自动部署](https://github.com/Geminorun/dayline/actions/runs/40629628751)均成功。后续文档提交以远端 `main` 为准。
+- main push 会自动触发 CI，通过后部署。Web 与 API 共用应用镜像，复用服务器已有 PostgreSQL 和本机 Nginx；部署 workflow 不编辑或重载生产 Nginx。
+- 本地路径此前为 `/workspace/dayline`，但重建环境后应先定位 / 拉取仓库。Git 中的代码及文档是持久交接来源；`.local/`、旧工作区文件链接、SSH 私钥、依赖和临时进程不保证保留。
+- 聊天历史由平台管理，不属于 Git 备份范围。先读本节、`AGENTS.md` 和 [诊断说明](diagnostics.md)，再继续工作。
+
+### 当前待解决的问题
+
+用户仍在排查邮箱注册后未收到验证邮件、Resend 没有发送日志的情况，希望由 Agent 主动读取生产日志，不再反复人工复制日志。具体原因尚未确定，不能把配置存在等同于发送成功。
+
+已完成的相关修改：
+
+- 登录 / 注册统一入口；标题及选中状态明确。Web 改为纸白、深灰、青绿配色；头像菜单支持鼠标悬停、移出关闭，并保留触屏与键盘操作。
+- 注册已存在但未验证的邮箱可继续申请验证，沿用原用户，不覆盖密码或创建重复用户。邮件发送的受理、失败、状态不明等结果显式反馈，前端有验证页及冷却提示。不要通过删除生产用户来重试。
+- 统一日志时间、级别、requestId 和安全栈信息，隐藏正常健康检查日志；`AUTH_EMAIL_FLOW`、`MAIL_ACCEPTED`、`MAIL_DELIVERY_FAILED`、`EMAIL_FLOW_FAILED` 用于定位流程。
+- 用户已安装只读 SSH 采集器，手动执行 `sudo /usr/local/sbin/dayline-diagnostics` 成功。此前摘要证明应用 healthy、Resend transport / key 已配置、发件地址格式正确；摘要中没有注册或邮件发送事件，仍需要复现并读取新日志。
+
+### 已选择 HTTPS 诊断，避免重复排查 SSH
+
+- 服务器 SSH 已确认监听全部 IPv4 / IPv6 地址的 22 端口；专用只读账号已安装。
+- 本工作区 HTTP 可用，但 TCP 访问名单为空，配置中的 `proxy:8088` 也拒绝连接；直连 SSH 在认证前被拒绝。尚未验证服务器公网防火墙是否另有限制。不要再让用户重复找公钥或改用 SSH 密码；认证方式解决不了当前连接阻塞。
+- 用户已改选 **HTTPS Basic Auth + 现有脱敏采集器的定时摘要**。实现、安装和撤销步骤见 [diagnostics.md](diagnostics.md)。
+- 默认地址：`https://dayline.mindreview.me/internal/diagnostics`；账号固定为 `dayline-diag`；客户端从工作区 Secret `DAYLINE_DIAGNOSTICS_PASSWORD` 读取密码。域名变更可用 `DAYLINE_DIAGNOSTICS_URL` 覆盖。
+- **交接文档不保存密码。** 用户将自行在云环境配置中添加 Secret 并发布。当前可用云环境工具只有读取配置 / 诊断的能力，没有添加或修改 Secret 的接口；截至本次检查，运行环境尚未绑定该 Secret，不能宣称已配置成功。工作区 `.env` 不等于持久云环境配置。
+- 服务器安装命令已给用户：下载该功能提交中的 `scripts/diagnostics/setup-https.sh`，执行时传完整 40 位 SHA；输入两次独立诊断密码，再在 Dayline HTTPS server 块中加入 `include /etc/nginx/snippets/dayline-diagnostics.conf;`，测试并重载 Nginx。安装 / include 是否完成尚未得到用户确认。
+- 本次匿名检查诊断地址返回 `200 text/html`，未看到预期的 `401` Basic Auth 挑战，也不是 NDJSON 摘要；不能把 HTTP 200 当作接入成功。需确认用户已完成服务器 Nginx 接入，云环境发布不会自动添加该 include。
+- 真实 Nginx / TLS / Basic Auth、只读方法、不可缓存、客户端密码读取及摘要过期拒绝检查已加入 CI 并通过。定时采集每分钟更新一次；只返回最多 15 分钟 / 1000 行日志的白名单摘要，失败时发布失败标记，文件原子替换。
+
+### 新会话继续顺序
+
+1. 拉取远端 `main`，阅读本节、`AGENTS.md` 与 `docs/diagnostics.md`。保留已有用户改动，不恢复旧 ZIP 覆盖新代码。
+2. 读取新环境实际配置 / readiness，确认 `DAYLINE_DIAGNOSTICS_PASSWORD` 已生效；只核验是否就绪，不打印密码或完整环境。不复用旧环境 ID / readiness 判断。
+3. 在仓库根目录执行 `python3 scripts/diagnostics/fetch.py`。它使用正常 HTTP 代理与 TLS 校验，不跟随重定向转发凭据，并拒绝超过三分钟或采集失败的摘要。
+4. 若返回 HTML，先完成服务器的 Nginx include / reload；若 401，核对服务器 Basic Auth 密码与工作区 Secret 是否一致；若 403，先核实 Cloudflare / 代理返回原因，不盲目关闭安全设置。需要用户操作时给出一条具体命令或缺少的配置。
+5. 用户已授权读取此受限诊断摘要，无需再次请求读取日志的许可。取得摘要后结合 `AUTH_EMAIL_FLOW` 和 provider 状态查原因；必要时让用户在网页点击一次注册或重发，再等待最多一分钟采集更新。读取摘要本身不会发送邮件。
+6. 依据实际证据修复、验证，再按既有习惯提交推送；不要猜测根因或要求用户反复粘贴同一份旧日志。
+
+## 以下为 2026-10-26 源码恢复阶段的历史记录
+
+**下方未实现、未提交及旧分支 / 旧测试失败等描述仅为历史，不代表当前状态。**
 
 本文件已在新环境从会话历史恢复。恢复范围、锁文件和 Git 历史差异见 [源码恢复说明](recovery.md)。以下验证结果是旧环境的历史结果，本次只恢复和打包，没有继续开发或重新验证后端。
 
