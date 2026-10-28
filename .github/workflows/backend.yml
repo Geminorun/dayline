@@ -89,12 +89,14 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Install native Nginx for the isolated CI fixture
+      - name: Install native Nginx for the isolated CI fixtures
         run: |
-          if ! command -v nginx >/dev/null; then
+          if ! command -v nginx >/dev/null || ! command -v htpasswd >/dev/null; then
             sudo apt-get update -qq
-            sudo apt-get install -y --no-install-recommends nginx
+            sudo apt-get install -y --no-install-recommends nginx apache2-utils
           fi
+      - name: Verify diagnostic authentication and snapshot publishing
+        run: python3 -m unittest discover -s scripts/diagnostics -p 'test_*.py'
       - name: Verify deployment through an existing host Nginx
         env:
           DAYLINE_TEST_IMAGE: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}

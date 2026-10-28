@@ -1,6 +1,6 @@
 # GitHub Actions 部署
 
-运行后需要远程排查邮件等问题时，使用[只读 SSH 诊断](diagnostics.md)；诊断入口独立于部署权限，不通过 Nginx 公开原始日志文件。
+运行后需要远程排查邮件等问题时，使用[HTTPS / 只读 SSH 诊断](diagnostics.md)；诊断入口独立于部署权限，HTTPS 只提供经过认证的脱敏摘要。
 
 默认复用服务器已有的本机 Nginx：Cloudflare 橙云 → 本机 Nginx / HTTPS → `127.0.0.1:13000` → Web + API 应用容器 → 已有 PostgreSQL 17 / 18。Web 与 API 共用一个镜像，数据库保持独立。
 
