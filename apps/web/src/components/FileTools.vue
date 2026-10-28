@@ -1,10 +1,28 @@
 <script setup lang="ts">
-import { defineAsyncComponent, ref } from 'vue';
+import { defineAsyncComponent, onMounted, ref } from 'vue';
 import PlannerIcon from './PlannerIcon.vue';
+import FileToolLoading from './FileToolLoading.vue';
+import type DataPageComponent from '../DataPage.vue';
 import PlannerDialog from './PlannerDialog.vue';
 import { useWorkspace } from '../records/workspace';
 const workspace = useWorkspace();
-const DataPage = defineAsyncComponent(() => import('../DataPage.vue'));
+let pendingPage: Promise<{ default: typeof DataPageComponent }> | null = null;
+function preload() {
+  pendingPage ??= import('../DataPage.vue').catch((cause: unknown) => {
+    pendingPage = null;
+    throw cause;
+  });
+  return pendingPage;
+}
+function warm() {
+  void preload().catch(() => {});
+}
+const DataPage = defineAsyncComponent({
+  loader: preload,
+  delay: 0,
+  loadingComponent: FileToolLoading,
+});
+onMounted(warm);
 const action = ref<'import' | 'export' | null>(null);
 const detailed = ref(false);
 </script>
@@ -16,6 +34,8 @@ const detailed = ref(false);
       aria-label="导入记录"
       :disabled="workspace.readonly.value"
       title="导入 CSV / JSON"
+      @pointerenter="warm"
+      @focus="warm"
       @click="action = 'import'"
     >
       <PlannerIcon name="upload" />
@@ -25,6 +45,8 @@ const detailed = ref(false);
       type="button"
       aria-label="导出记录"
       title="导出 CSV / JSON"
+      @pointerenter="warm"
+      @focus="warm"
       @click="action = 'export'"
     >
       <PlannerIcon name="download" />
@@ -45,6 +67,8 @@ const detailed = ref(false);
       </button>
       <DataPage
         :action="action"
+        @imported="action = null"
+        @close="action = null"
         @view-change="detailed = $event === 'details'"
       />
     </PlannerDialog>

@@ -21,7 +21,7 @@ const props = defineProps<{
   readonly: boolean;
 }>();
 const emit = defineEmits<{ edit: []; finish: []; remove: []; focus: [] }>();
-const statuses = { not_started: '未开始', ongoing: '进行中', ended: '已结束' };
+const statuses = { ongoing: '进行中', ended: '已结束' };
 const status = computed(() => entryStatus(props.entry, props.today));
 const dayNumber = computed(() =>
   isCalendarDate(props.date)
@@ -60,12 +60,11 @@ const dayNumber = computed(() =>
               (!!entry.endDate && date > entry.endDate)
             "
             :aria-pressed="focused"
+            :title="`${focused ? '取消当天重点' : '设为当天重点'} · 累计 ${focusCount ?? 0} 个重点日`"
             :aria-label="`${date} ${entry.title} ${focused ? '取消' : '设为'}当天重点`"
             @click="emit('focus')"
           >
-            <PlannerIcon name="star" /><span>{{
-              focused ? '当天重点' : '设为重点'
-            }}</span>
+            <PlannerIcon name="star" />
           </button>
           <span class="event-status" :class="{ live: status === 'ongoing' }">{{
             statuses[status]
@@ -73,36 +72,26 @@ const dayNumber = computed(() =>
         </div>
       </div>
       <h3 class="event-title">{{ entry.title }}</h3>
-      <div class="record-range">
-        <PlannerIcon name="calendar" /><span>{{
-          entry.startDate.replaceAll('-', '.')
-        }}</span
-        ><span class="range-dash">—</span
-        ><span :class="{ 'ongoing-date': !entry.endDate }">{{
-          entry.endDate?.replaceAll('-', '.') ??
-          (entry.startDate > today ? '结束未定' : '至今')
-        }}</span
-        ><span class="duration-pill"
-          >{{ entry.endDate ? '共' : '已持续' }}
-          {{ durationDays(entry, today) }} 天</span
-        >
-      </div>
       <div class="record-actions">
-        <div class="record-notes">
-          <span class="focus-total" :class="{ empty: !focusCount }"
-            ><PlannerIcon name="star" />重点{{ focusCount ?? 0 }}天</span
-          ><span class="record-note">{{
-            entry.endDate
-              ? '含开始和结束当天'
-              : entry.startDate > today
-                ? '将在开始日期后持续记录'
-                : '每天自动延续，直到结束'
+        <div class="record-range">
+          <PlannerIcon name="calendar" /><span>{{
+            entry.startDate.replaceAll('-', '.')
           }}</span
-          ><span class="sr-only">{{ spanLabel(entry, today) }}</span>
+          ><span class="range-dash">—</span
+          ><span :class="{ 'ongoing-date': !entry.endDate }">{{
+            entry.endDate?.replaceAll('-', '.') ??
+            (entry.startDate > today ? '结束未定' : '至今')
+          }}</span
+          ><span class="duration-pill"
+            >{{ entry.endDate ? '共' : '已持续' }}
+            {{ durationDays(entry, today) }} 天</span
+          >
         </div>
+
+        <span class="sr-only">{{ spanLabel(entry, today) }}</span>
         <div v-if="!readonly" class="event-actions">
           <button
-            v-if="status === 'ongoing'"
+            v-if="status === 'ongoing' && entry.startDate <= today"
             class="finish-event"
             :disabled="busy"
             @click="emit('finish')"

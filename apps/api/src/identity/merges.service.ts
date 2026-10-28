@@ -1,3 +1,7 @@
+import {
+  categoryOrder,
+  nextCategoryPosition,
+} from '../records/category-order.js';
 import { Clock } from '../records/clock.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
@@ -109,7 +113,7 @@ export class MergesService {
   }
   private async cloud(tx: Tx, userId: string) {
     const [categories, entries, focusDays] = await Promise.all([
-      tx.category.findMany({ where: { userId }, orderBy: { id: 'asc' } }),
+      tx.category.findMany({ where: { userId }, orderBy: categoryOrder }),
       tx.entry.findMany({ where: { userId }, orderBy: { id: 'asc' } }),
       tx.entryFocusDay.findMany({
         where: { entry: { userId } },
@@ -470,6 +474,7 @@ export class MergesService {
               data: {
                 id: targetId,
                 userId: row.targetUserId,
+                sortOrder: await nextCategoryPosition(tx, row.targetUserId),
                 name: mapping.name,
                 color: mapping.color,
                 seedKey: null,

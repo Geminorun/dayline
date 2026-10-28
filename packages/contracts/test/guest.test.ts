@@ -261,3 +261,90 @@ describe('guest immutable business package', () => {
     ).toThrow('尚未开始');
   });
 });
+
+it('persists category order with complete membership/CAS checks and trashes category records without extending existing deadlines', () => {
+  const initial = fixture();
+  const order = initial.data.categories.map((c) => c.id).reverse();
+  const sorted = mutateGuest(
+    initial.data,
+    {
+      kind: 'reorderCategories',
+      input: {
+        expectedDataVersion: String(initial.data.packageRevision),
+        categoryIds: order,
+      },
+    },
+    now,
+  );
+  expect(sorted.categories.map((c) => c.id)).toEqual(order);
+  expect(initial.data.categories.map((c) => c.id)).not.toEqual(order);
+  expect(() =>
+    mutateGuest(
+      sorted,
+      {
+        kind: 'reorderCategories',
+        input: {
+          expectedDataVersion: String(initial.data.packageRevision),
+          categoryIds: order,
+        },
+      },
+      now,
+    ),
+  ).toThrow('分类已有变化');
+  expect(() =>
+    mutateGuest(
+      sorted,
+      {
+        kind: 'reorderCategories',
+        input: {
+          expectedDataVersion: String(sorted.packageRevision),
+          categoryIds: order.slice(1),
+        },
+      },
+      now,
+    ),
+  ).toThrow('全部分类');
+  const second = randomUUID();
+  let data = mutateGuest(
+    sorted,
+    {
+      kind: 'create',
+      input: {
+        id: second,
+        title: '已在回收站',
+        categoryId: initial.categoryId,
+        startDate: '2026-10-01',
+        endDate: null,
+      },
+    },
+    now,
+  );
+  data = mutateGuest(
+    data,
+    { kind: 'remove', id: second, expectedVersion: 1 },
+    now,
+  );
+  const deadline = data.entries.find((e) => e.id === second)?.purgeAfter;
+  const source = data.categories.find((c) => c.id === initial.categoryId);
+  if (!source) throw new Error('category');
+  data = mutateGuest(
+    data,
+    {
+      kind: 'deleteCategory',
+      id: source.id,
+      input: {
+        expectedVersion: source.version,
+        mode: 'trash',
+        expectedDataVersion: String(data.packageRevision),
+        fallbackCategoryId: randomUUID(),
+      },
+    },
+    '2026-10-27T04:00:00.000Z',
+  );
+  expect(data.categories.some((c) => c.id === source.id)).toBe(false);
+  expect(data.entries.every((e) => e.deletedAt !== null)).toBe(true);
+  expect(data.entries.find((e) => e.id === second)?.purgeAfter).toBe(deadline);
+  expect(
+    data.categories.find((c) => c.id === data.entries[0]?.categoryId)?.name,
+  ).toBe('其他');
+});

@@ -1,3 +1,7 @@
+import {
+  categoryOrder,
+  nextCategoryPosition,
+} from '../records/category-order.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { DEFAULT_CATEGORIES, businessToday } from '@dayline/core';
@@ -70,7 +74,7 @@ export class ImportsService {
   }
   private async cloud(tx: Tx, userId: string) {
     const [categories, entries, focus] = await Promise.all([
-      tx.category.findMany({ where: { userId }, orderBy: { id: 'asc' } }),
+      tx.category.findMany({ where: { userId }, orderBy: categoryOrder }),
       tx.entry.findMany({ where: { userId }, orderBy: { id: 'asc' } }),
       tx.entryFocusDay.findMany({
         where: { entry: { userId } },
@@ -566,6 +570,7 @@ export class ImportsService {
           data: {
             id: target,
             userId: actor.userId,
+            sortOrder: await nextCategoryPosition(tx, actor.userId),
             name: c.name,
             color: c.color,
             seedKey: null,
@@ -716,6 +721,7 @@ export class ImportsService {
           data: {
             id: c.id,
             userId: actor.userId,
+            sortOrder: await nextCategoryPosition(tx, actor.userId),
             name: c.name,
             color: c.color,
             seedKey: c.seedKey,

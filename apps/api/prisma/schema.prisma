@@ -136,6 +136,7 @@ model QrRequest {
 }
 
 model Category {
+  sortOrder Int      @default(0) @map("sort_order")
   id        String   @id @db.Uuid
   userId    String   @map("user_id") @db.Uuid
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)

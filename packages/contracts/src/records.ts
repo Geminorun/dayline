@@ -28,13 +28,35 @@ export const patchCategorySchema = z
   })
   .strict()
   .refine((value) => value.name !== undefined || value.color !== undefined);
-export const deleteCategorySchema = z
+const transferCategorySchema = z
   .object({
     expectedVersion: versionSchema,
     transferToCategoryId: z.uuid(),
     expectedTargetVersion: versionSchema,
   })
   .strict();
+export const deleteCategorySchema = z.union([
+  transferCategorySchema,
+  z
+    .object({
+      expectedVersion: versionSchema,
+      mode: z.literal('trash'),
+      expectedDataVersion: dataVersionSchema,
+      fallbackCategoryId: z.uuid(),
+    })
+    .strict(),
+]);
+export const reorderCategoriesSchema = z
+  .object({
+    expectedDataVersion: dataVersionSchema,
+    categoryIds: z
+      .array(z.uuid())
+      .min(1)
+      .max(20)
+      .refine((ids) => new Set(ids).size === ids.length),
+  })
+  .strict();
+export type ReorderCategoriesInput = z.infer<typeof reorderCategoriesSchema>;
 const entryFields = {
   categoryId: z.uuid(),
   title: titleSchema,
@@ -215,5 +237,10 @@ export const purgeResultSchema = z.object({
 export const deleteCategoryResultSchema = z.object({
   success: z.literal(true),
   transferredCount: z.number().int().nonnegative(),
+  trashedCount: z.number().int().nonnegative().optional(),
+});
+export type DeleteCategoryResult = z.infer<typeof deleteCategoryResultSchema>;
+export const categoryOrderResultSchema = z.object({
+  categories: z.array(categoryDtoSchema),
 });
 export const serverTimeSchema = z.iso.datetime();

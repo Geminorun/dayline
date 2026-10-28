@@ -1,5 +1,6 @@
 import {
   categoryResultSchema,
+  categoryOrderResultSchema,
   entryResultSchema,
   focusResultSchema,
   snapshotDtoSchema,
@@ -8,6 +9,7 @@ import {
 } from '@dayline/contracts';
 import type {
   CreateCategoryInput,
+  ReorderCategoriesInput,
   PatchCategoryInput,
   DeleteCategoryInput,
   CreateEntryInput,
@@ -123,6 +125,15 @@ export function createRecordsClient(api: ApiClient) {
         account: true,
         body: input,
         decode: categoryResultSchema.parse,
+      });
+    },
+    reorderCategories(input: ReorderCategoriesInput) {
+      return api.request('/api/v1/categories/order', {
+        method: 'PUT',
+        account: true,
+        requireDataVersion: true,
+        body: input,
+        decode: categoryOrderResultSchema.parse,
       });
     },
     deleteCategory(id: string, input: DeleteCategoryInput) {

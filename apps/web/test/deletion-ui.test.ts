@@ -150,7 +150,13 @@ it('drops an old committed response after another actor enters and retains the n
 it('accepts twelve emoji category codepoints through the actual form and rejects thirteen without mutating', async () => {
   const mutate = vi.fn(async () => {}),
     w = mount(CategoryManager, {
-      props: { categories: [], entries: [], busy: false, mutate },
+      props: {
+        categories: [],
+        dataVersion: '1',
+        entries: [],
+        busy: false,
+        mutate,
+      },
     });
   wrappers.push(w);
   await w.get('button.category-add').trigger('click');

@@ -1031,3 +1031,118 @@ describe('profile versioned writes through the same protected route', () => {
     ).toBe(1);
   });
 });
+
+it('persists complete owner-only category ordering, updates snapshot ETags, appends new categories and rejects stale or foreign lists', async () => {
+  const user = await login(),
+    other = await login();
+  const before = await snapshot(user),
+    foreign = await category(other);
+  const orderedIds = before.data.categories.map((c) => c.id).reverse();
+  await call(user, 'put', '/categories/order')
+    .send({
+      expectedDataVersion: before.data.dataVersion,
+      categoryIds: [foreign.id, ...orderedIds.slice(1)],
+    })
+    .expect(422);
+  const reordered = await call(user, 'put', '/categories/order')
+    .send({
+      expectedDataVersion: before.data.dataVersion,
+      categoryIds: orderedIds,
+    })
+    .expect(200);
+  expect(reordered.body.meta.dataVersion).not.toBe(before.data.dataVersion);
+  const after = await snapshot(user);
+  expect(after.data.categories.map((c) => c.id)).toEqual(orderedIds);
+  expect(after.response.headers.etag).not.toBe(before.response.headers.etag);
+  expect(after.data.categories.map((c) => c.version)).toEqual(
+    before.data.categories.map((c) => c.version),
+  );
+  await call(user, 'put', '/categories/order')
+    .send({
+      expectedDataVersion: before.data.dataVersion,
+      categoryIds: orderedIds,
+    })
+    .expect(409);
+  const createdId = randomUUID();
+  await call(user, 'post', '/categories')
+    .send({ id: createdId, name: '新分类', color: '#123456' })
+    .expect(201);
+  expect((await snapshot(user)).data.categories.at(-1)?.id).toBe(createdId);
+});
+
+it('deletes a category atomically into trash, preserves old trash deadlines and restores records into Other', async () => {
+  vi.mocked(clock.now).mockReturnValue(new Date('2026-10-26T04:00:00.000Z'));
+  const user = await login(),
+    cat = await category(user);
+  const active = await create(user, { categoryId: cat.id }),
+    old = await create(user, { categoryId: cat.id });
+  await call(user, 'delete', `/entries/${old.entry.id}`)
+    .send({ expectedVersion: old.entry.version })
+    .expect(200);
+  const oldTrash = (await snapshot(user)).data.trashEntries.find(
+    (e) => e.id === old.entry.id,
+  );
+  vi.mocked(clock.now).mockReturnValue(new Date('2026-10-27T04:00:00.000Z'));
+  await call(user, 'delete', `/categories/${cat.id}`)
+    .send({
+      expectedVersion: cat.version,
+      expectedDataVersion: '1',
+      mode: 'trash',
+      fallbackCategoryId: randomUUID(),
+    })
+    .expect(409);
+  expect((await snapshot(user)).data.entries).toHaveLength(1);
+  const result = await call(user, 'delete', `/categories/${cat.id}`)
+    .send({
+      expectedVersion: cat.version,
+      mode: 'trash',
+      expectedDataVersion: (await snapshot(user)).data.dataVersion,
+      fallbackCategoryId: randomUUID(),
+    })
+    .expect(200);
+  expect(result.body.data.trashedCount).toBe(1);
+  const next = await snapshot(user);
+  expect(next.data.entries).toHaveLength(0);
+  expect(next.data.categories.some((c) => c.id === cat.id)).toBe(false);
+  expect(
+    next.data.trashEntries.find((e) => e.id === old.entry.id)?.purgeAfter,
+  ).toBe(oldTrash?.purgeAfter);
+  const trashed = next.data.trashEntries.find((e) => e.id === active.entry.id);
+  if (!trashed) throw new Error('trash');
+  expect(
+    next.data.categories.find((c) => c.id === trashed.categoryId)?.name,
+  ).toBe('其他');
+  await call(user, 'post', `/trash/${trashed.id}/restore`)
+    .send({ expectedVersion: trashed.version })
+    .expect(201);
+  expect((await snapshot(user)).data.entries).toHaveLength(1);
+  const currentOther = (await snapshot(user)).data.categories.find(
+    (c) => c.name === '其他',
+  );
+  if (!currentOther) throw new Error('other');
+  const beforeCollision = await snapshot(user);
+  await call(user, 'delete', `/categories/${currentOther.id}`)
+    .send({
+      expectedVersion: currentOther.version,
+      expectedDataVersion: beforeCollision.data.dataVersion,
+      mode: 'trash',
+      fallbackCategoryId: currentOther.id,
+    })
+    .expect(409);
+  expect((await snapshot(user)).data).toEqual(beforeCollision.data);
+  await call(user, 'delete', `/categories/${currentOther.id}`)
+    .send({
+      expectedVersion: currentOther.version,
+      mode: 'trash',
+      expectedDataVersion: (await snapshot(user)).data.dataVersion,
+      fallbackCategoryId: randomUUID(),
+    })
+    .expect(200);
+  const final = await snapshot(user);
+  expect(final.data.categories.find((c) => c.name === '其他')?.id).not.toBe(
+    currentOther.id,
+  );
+  expect(final.data.entries).toHaveLength(0);
+  expect(final.data.trashEntries).toHaveLength(2);
+  vi.mocked(clock.now).mockReturnValue(new Date('2026-10-26T04:00:00.000Z'));
+});

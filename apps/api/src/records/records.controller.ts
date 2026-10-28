@@ -18,6 +18,8 @@ import { z } from 'zod';
 import {
   categoryDtoSchema,
   categoryResultSchema,
+  categoryOrderResultSchema,
+  reorderCategoriesSchema,
   createCategorySchema,
   patchCategorySchema,
   deleteCategorySchema,
@@ -96,6 +98,22 @@ export class RecordsController {
       ),
     );
   }
+  @Put('categories/order')
+  @ApiOperation({ summary: '按数据版本保存完整分类顺序' })
+  @ApiBody({ schema: dtoSchema(reorderCategoriesSchema) })
+  @ApiResponse({
+    status: 200,
+    schema: dataResponseSchema(categoryOrderResultSchema),
+  })
+  reorderCategories(@Req() request: Request, @Body() body: unknown) {
+    return this.written(
+      request,
+      this.records.reorderCategories(
+        actor(request),
+        parse(reorderCategoriesSchema, body),
+      ),
+    );
+  }
   @Patch('categories/:id')
   @ApiOperation({ summary: '按版本更新分类' })
   @ApiBody({ schema: dtoSchema(patchCategorySchema) })
@@ -118,12 +136,15 @@ export class RecordsController {
     );
   }
   @Delete('categories/:id')
-  @ApiOperation({ summary: '原子转移事项并删除分类' })
+  @ApiOperation({ summary: '删除分类并将记录移入回收站；兼容原转移协议' })
   @ApiBody({ schema: dtoSchema(deleteCategorySchema) })
   @ApiResponse({
     status: 200,
     schema: dataResponseSchema(
-      successDtoSchema.extend({ transferredCount: z.number().int() }),
+      successDtoSchema.extend({
+        transferredCount: z.number().int(),
+        trashedCount: z.number().int().optional(),
+      }),
     ),
   })
   deleteCategory(

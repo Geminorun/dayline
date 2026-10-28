@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { businessToday, DEFAULT_CATEGORIES, TIME_ZONE } from '@dayline/core';
+import {
+  businessToday,
+  DEFAULT_CATEGORIES,
+  TIME_ZONE,
+  nextCategoryColor,
+} from '@dayline/core';
 import {
   categoryDtoSchema,
   entryDtoSchema,
@@ -9,6 +14,7 @@ import {
   createCategorySchema,
   patchCategorySchema,
   deleteCategorySchema,
+  reorderCategoriesSchema,
   setFocusSchema,
   purgeTrashSchema,
   dateSchema,
@@ -136,7 +142,7 @@ export type GuestMutation =
       expectedVersion: number;
     }
   | { kind: 'focus'; id: string; date: string; input: unknown }
-  | { kind: 'createCategory'; input: unknown }
+  | { kind: 'createCategory' | 'reorderCategories'; input: unknown }
   | { kind: 'updateCategory' | 'deleteCategory'; id: string; input: unknown }
   | { kind: 'purge'; input: unknown }
   | { kind: 'expire' };
@@ -381,11 +387,77 @@ export function mutateGuest(
       changed = true;
       break;
     }
+    case 'reorderCategories': {
+      const input = valid(reorderCategoriesSchema, mutation.input);
+      if (input.expectedDataVersion !== String(data.packageRevision))
+        fail('DATA_VERSION_CONFLICT', '分类已有变化，请刷新后重新排序。');
+      if (
+        input.categoryIds.length !== data.categories.length ||
+        input.categoryIds.some(
+          (id) => !data.categories.some((c) => c.id === id),
+        )
+      )
+        fail('VALIDATION_ERROR', '请提交当前空间的全部分类。');
+      if (
+        input.categoryIds.some((id, index) => data.categories[index]?.id !== id)
+      ) {
+        const byId = new Map(data.categories.map((c) => [c.id, c]));
+        data.categories = input.categoryIds.map((id) => {
+          const c = byId.get(id);
+          if (!c) fail('RESOURCE_NOT_FOUND', '分类不存在。');
+          return c;
+        });
+        changed = true;
+      }
+      break;
+    }
     case 'deleteCategory': {
       const input = valid(deleteCategorySchema, mutation.input),
         c = category(mutation.id);
       if (data.categories.length <= 1)
         fail('LAST_CATEGORY', '至少保留一个分类。');
+      if ('mode' in input) {
+        if (input.expectedDataVersion !== String(data.packageRevision))
+          fail('DATA_VERSION_CONFLICT', '记录已有变化，请重新确认删除。');
+        version(input.expectedVersion, c.version);
+        const affected = data.entries.filter((e) => e.categoryId === c.id);
+        if (affected.length) {
+          let fallback = data.categories.find(
+            (v) => v.id !== c.id && v.name === '其他',
+          );
+          if (!fallback) {
+            if (data.categories.some((v) => v.id === input.fallbackCategoryId))
+              fail('IDEMPOTENCY_KEY_REUSED', '备用分类标识已被使用。');
+            fallback = {
+              id: input.fallbackCategoryId,
+              name: '其他',
+              color: nextCategoryColor(
+                data.categories
+                  .filter((v) => v.id !== c.id)
+                  .map((v) => v.color),
+              ),
+              seedKey: null,
+              version: 1,
+              createdAt: now,
+              updatedAt: now,
+            };
+            data.categories.push(fallback);
+          }
+          for (const e of affected) {
+            e.categoryId = fallback.id;
+            if (!e.deletedAt) {
+              e.deletedAt = now;
+              e.purgeAfter = new Date(
+                Date.parse(now) + 30 * 86400000,
+              ).toISOString();
+            }
+            bump(e);
+          }
+        }
+        data.categories = data.categories.filter((v) => v.id !== c.id);
+        changed = true;
+        break;
+      }
       const target = category(input.transferToCategoryId);
       version(input.expectedVersion, c.version);
       version(input.expectedTargetVersion, target.version);

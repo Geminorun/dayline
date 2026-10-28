@@ -33,8 +33,12 @@ import { guestRepository } from './adapters/guest-repository';
 import { localRepository, localEnvironment } from './adapters/local-repository';
 import { errorMessage } from './records/record-service';
 const account = useAccount();
-defineProps<{ action?: 'import' | 'export' }>();
-const emit = defineEmits<{ viewChange: [view: 'summary' | 'details'] }>();
+const props = defineProps<{ action?: 'import' | 'export' }>();
+const emit = defineEmits<{
+  viewChange: [view: 'summary' | 'details'];
+  imported: [];
+  close: [];
+}>();
 const space = useWorkspace(),
   client = createImportsClient(api),
   operation = ref<FileOperation | null>(null),
@@ -53,6 +57,7 @@ const space = useWorkspace(),
 const view = ref<'summary' | 'details'>('summary');
 watch(view, (next) => emit('viewChange', next), { immediate: true });
 const fileName = ref('');
+const hasHistory = ref(false);
 const rowFilter = ref<'problems' | 'all'>('problems');
 const problemRows = computed(
   () =>
@@ -124,6 +129,7 @@ function clear() {
   draftWarning.value = false;
   view.value = 'summary';
   fileName.value = '';
+  hasHistory.value = false;
 }
 let mounted = false,
   initializationIntent = 0;
@@ -187,8 +193,11 @@ async function restoreScope(key: string) {
   const c = capture();
   recovering.value = true;
   try {
-    const restored = await recoverFor(c);
-    if (valid(c) && scopeKey.value === key && restored) show(restored);
+    const restored =
+      props.action === 'export' ? null : await recoverFor(c, true);
+    if (valid(c) && scopeKey.value === key && restored?.status === 'preview')
+      show(restored);
+    else if (valid(c)) operation.value = null;
   } catch (cause) {
     if (valid(c)) error.value = errorMessage(cause);
   } finally {
@@ -257,6 +266,7 @@ async function run(work: (c: ReturnType<typeof capture>) => Promise<void>) {
 }
 async function recoverFor(
   c: ReturnType<typeof capture>,
+  activeOnly = false,
 ): Promise<ImportJobDto | null> {
   const id = owner();
   if (!id) return null;
@@ -265,6 +275,8 @@ async function recoverFor(
       ? await guestRepository.fileOperation(id)
       : await localRepository.fileOperation(id);
   if (!valid(c) || !op) return null;
+  hasHistory.value = true;
+  if (activeOnly && op.status !== 'pending') return null;
   operation.value = op;
   if (op.scope === 'guest') {
     if (
@@ -395,7 +407,6 @@ async function loadFile(file: File) {
       throw new FileError('IMPORT_INVALID', '文件必须是有效 UTF-8。');
     }
     if (!valid(c)) return;
-    await parseWebFile(text, format, new Date().toISOString());
     const id = owner();
     if (!id) throw new FileError('IMPORT_INVALID', '请先读取当前数据空间。');
     const op: FileOperation = {
@@ -505,16 +516,34 @@ async function commit() {
       status: 'committed',
       localPlan: op.scope === 'guest' ? next : null,
     };
-    await persist(operation.value);
+    let receiptWarning = false;
+    try {
+      await persist(operation.value);
+    } catch {
+      receiptWarning = true;
+    }
     if (!valid(c)) return;
     if (next.result && op.scope === 'account')
       api.acknowledgeWrite(next, next.result.dataVersion);
-    await space.reload();
-    if (valid(c))
-      notice.value =
-        op.scope === 'account'
-          ? '已保存到云端，原文件保留。'
-          : '已保存到本机，原文件保留。';
+    const result = next.result;
+    const message = `导入成功：新增 ${result?.created ?? 0} 条，更新 ${result?.updated ?? 0} 条${result?.skipped ? `，跳过 ${result.skipped} 条` : ''}。`;
+    notice.value = message;
+    space.notice.value = message;
+    if (receiptWarning)
+      space.error.value =
+        '记录已导入，本机任务状态未能保存；原文件仍在，请刷新后核对。';
+    const generation = space.generation(),
+      accountGeneration = api.getGeneration();
+    emit('imported');
+    try {
+      await space.reload();
+    } catch {
+      if (
+        generation === space.generation() &&
+        accountGeneration === api.getGeneration()
+      )
+        space.error.value = '导入已成功，记录刷新失败，请点击刷新重试。';
+    }
   });
 }
 async function cancel() {
@@ -766,7 +795,10 @@ const fieldLabel: Record<string, string> = {
         <h2 v-if="!action">导入记录</h2>
         <label
           class="file-drop"
-          :class="{ 'file-drop-disabled': blocked || space.readonly.value }"
+          :class="{
+            'file-drop-disabled': blocked || space.readonly.value,
+            'file-selected': !!plan,
+          }"
           @dragover.prevent
           @drop.prevent="drop"
         >
@@ -778,14 +810,16 @@ const fieldLabel: Record<string, string> = {
             :disabled="blocked || space.readonly.value"
             @change="select"
           />
-          <PlannerIcon :name="plan ? 'check' : 'upload'" />
+          <PlannerIcon :name="plan ? 'folder' : 'upload'" />
           <strong>{{
             busy
-              ? '正在分析文件…'
+              ? plan?.status === 'preview'
+                ? '正在导入…'
+                : '正在分析文件…'
               : fileName ||
                 (plan
                   ? `上次选择的 ${plan.kind.toUpperCase()} 文件`
-                  : '选择文件，或拖放到这里')
+                  : '选择 CSV 或 JSON 文件')
           }}</strong>
           <span>{{ plan ? '点击更换文件' : 'CSV 或 JSON，最大 10 MiB' }}</span>
         </label>
@@ -800,22 +834,15 @@ const fieldLabel: Record<string, string> = {
           >
             <h2>
               {{
-                plan.status === 'committed'
-                  ? '导入完成'
-                  : plan.status === 'expired'
-                    ? '预览已过期'
-                    : plan.status === 'cancelled'
-                      ? '导入已取消'
-                      : unreviewedSelections
-                        ? '处理结果待保存'
-                        : plan.canCommit
-                          ? '文件已准备好'
-                          : '有内容需要处理'
+                plan.status === 'preview'
+                  ? `${plan.sourceSummary.entries} 条记录待导入`
+                  : plan.status === 'committed'
+                    ? '导入完成'
+                    : plan.status === 'expired'
+                      ? '预览已过期'
+                      : '导入已取消'
               }}
             </h2>
-            <p class="import-total">
-              共 {{ plan.sourceSummary.entries }} 条记录
-            </p>
             <div class="import-counts">
               <span
                 >新增 <strong>{{ plan.counts?.create ?? 0 }}</strong></span
@@ -852,7 +879,7 @@ const fieldLabel: Record<string, string> = {
           </div>
           <button
             type="button"
-            class="button subtle import-details-link"
+            class="import-details-link"
             :disabled="blocked"
             @click="details"
           >
@@ -894,11 +921,11 @@ const fieldLabel: Record<string, string> = {
         <footer class="import-footer">
           <button
             type="button"
-            class="button subtle"
+            class="import-template-link"
             :disabled="blocked"
             @click="details"
           >
-            <PlannerIcon name="list" />格式说明与模板
+            <PlannerIcon name="list" />模板与说明
           </button>
           <button
             v-if="plan?.status === 'preview'"
@@ -945,7 +972,7 @@ const fieldLabel: Record<string, string> = {
           :disabled="blocked"
           @click="download(operation.text, operation.format)"
         /><IconButton
-          v-if="operation"
+          v-if="operation || hasHistory"
           icon="refresh"
           label="查询或恢复原任务"
           :disabled="blocked"

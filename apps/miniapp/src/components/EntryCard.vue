@@ -12,16 +12,14 @@ defineProps<{
   readonly: boolean;
 }>();
 const emit = defineEmits<{ edit: []; focus: []; finish: []; remove: [] }>();
-const statuses = { not_started: '未开始', ongoing: '进行中', ended: '已结束' };
+const statuses = { ongoing: '进行中', ended: '已结束' };
 </script>
 <template>
   <view class="card entry-card"
     ><text class="heading">{{ entry.title }}</text
     ><text class="text muted"
       ><text :style="{ color: color ?? '#A0A4B3' }">● </text>{{ category
-      }}<text v-if="entryStatus(entry, today) !== 'not_started'">
-        · {{ statuses[entryStatus(entry, today)] }}</text
-      ></text
+      }}<text> · {{ statuses[entryStatus(entry, today)] }}</text></text
     ><text class="text"
       >{{ entry.startDate }} →
       {{ entry.endDate ?? (entry.startDate > today ? '结束未定' : '至今') }} ·
@@ -43,7 +41,9 @@ const statuses = { not_started: '未开始', ongoing: '进行中', ended: '已�
         >
           {{ focused ? '取消' : '标记' }} {{ date }} 重点</button
         ><button
-          v-if="entryStatus(entry, today) === 'ongoing'"
+          v-if="
+            entry.startDate <= today && entryStatus(entry, today) === 'ongoing'
+          "
           class="secondary"
           :disabled="busy"
           @click="emit('finish')"

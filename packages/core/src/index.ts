@@ -98,8 +98,7 @@ export interface DateRange {
 export function entryStatus(
   entry: DateRange,
   today: string,
-): 'not_started' | 'ongoing' | 'ended' {
-  if (entry.startDate > today) return 'not_started';
+): 'ongoing' | 'ended' {
   return entry.endDate !== null && entry.endDate <= today ? 'ended' : 'ongoing';
 }
 export function coversDate(

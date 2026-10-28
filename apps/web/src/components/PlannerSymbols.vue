@@ -2,6 +2,11 @@
 <template>
   <svg class="sprite" aria-hidden="true">
     <defs>
+      <symbol id="i-sliders" viewBox="0 0 24 24">
+        <path d="M4 7h5m4 0h7M4 17h9m4 0h3" />
+        <circle cx="11" cy="7" r="2" />
+        <circle cx="15" cy="17" r="2" />
+      </symbol>
       <symbol id="i-eye-off" viewBox="0 0 24 24">
         <path
           d="m3 3 18 18M10.5 5.2 12 5c6.5 0 10 7 10 7a19 19 0 0 1-3 4M6 6a22 22 0 0 0-4 6s3.5 7 10 7c2 0 3.8-.6 5.3-1.6M10 10a3 3 0 0 0 4 4"

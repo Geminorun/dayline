@@ -50,7 +50,7 @@ describe('pure Gregorian business rules', () => {
     expect(coversDate({ ...entry, endDate: today }, today, today)).toBe(true);
     expect(entryStatus({ ...entry, endDate: today }, today)).toBe('ended');
     expect(entryStatus({ ...entry, startDate: '2026-10-27' }, today)).toBe(
-      'not_started',
+      'ongoing',
     );
     expect(intersectsRange(entry, '2026-10-01', '2026-10-25', today)).toBe(
       true,

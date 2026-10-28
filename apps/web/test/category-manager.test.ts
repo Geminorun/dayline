@@ -8,7 +8,7 @@ import PasswordInput from '../src/components/PasswordInput.vue';
 import ColorPicker from '../src/components/ColorPicker.vue';
 
 describe('category tools and themed controls', () => {
-  it('keeps names inline, uses versioned palette updates and retains transfer confirmation for deletion', async () => {
+  it('keeps names inline, uses versioned palette updates and retains explicit trash confirmation for deletion', async () => {
     const data = createGuestPackage(randomUUID, new Date().toISOString());
     const category = data.categories[0],
       target = data.categories[1];
@@ -17,7 +17,13 @@ describe('category tools and themed controls', () => {
       (mutation: GuestMutation, cloud: () => Promise<unknown>) => Promise<void>
     >(async () => {});
     const w = mount(CategoryManager, {
-      props: { categories: data.categories, entries: [], busy: false, mutate },
+      props: {
+        categories: data.categories,
+        dataVersion: '1',
+        entries: [],
+        busy: false,
+        mutate,
+      },
     });
     try {
       const rename = w.get(`button[aria-label="重命名${category.name}"]`);
@@ -63,16 +69,16 @@ describe('category tools and themed controls', () => {
         .get(`button[aria-label="删除${category.name}分类"]`)
         .trigger('click');
       expect(mutate).toHaveBeenCalledTimes(2);
-      await w.get('select').setValue(target.id);
-      await w.get('.category-transfer .danger').trigger('click');
+      await w.get('.category-delete-confirm .danger').trigger('click');
       expect(mutate).toHaveBeenLastCalledWith(
         {
           kind: 'deleteCategory',
           id: category.id,
           input: {
             expectedVersion: category.version,
-            transferToCategoryId: target.id,
-            expectedTargetVersion: target.version,
+            mode: 'trash',
+            expectedDataVersion: '1',
+            fallbackCategoryId: expect.any(String),
           },
         },
         expect.any(Function),

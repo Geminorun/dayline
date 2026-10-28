@@ -1,9 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { businessToday } from '@dayline/core';
+import { businessToday, nextCategoryColor } from '@dayline/core';
 import type {
   CreateCategoryInput,
+  ReorderCategoriesInput,
   PatchCategoryInput,
   DeleteCategoryInput,
+  DeleteCategoryResult,
   CreateEntryInput,
   PatchEntryInput,
   SetFocusInput,
@@ -17,6 +19,7 @@ import type { Entry } from '../generated/prisma/client.js';
 import type { Actor } from '../common/request-context.js';
 import { AppError } from '../common/app-error.js';
 import { Clock } from './clock.js';
+import { categoryOrder, nextCategoryPosition } from './category-order.js';
 import {
   calendarDate,
   databaseDate,
@@ -126,7 +129,7 @@ export class RecordsService {
         await this.readyUser(tx, userId);
         const values = await tx.category.findMany({
           where: { userId },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          orderBy: categoryOrder,
         });
         return values.map(categoryDto);
       },
@@ -165,7 +168,11 @@ export class RecordsService {
       )
         throw new AppError(409, 'CATEGORY_NAME_EXISTS', '分类名称已存在。');
       const category = await tx.category.create({
-        data: { ...input, userId: actor.userId },
+        data: {
+          ...input,
+          userId: actor.userId,
+          sortOrder: await nextCategoryPosition(tx, actor.userId),
+        },
       });
       return {
         data: { category: categoryDto(category), alreadyExists: false },
@@ -201,11 +208,143 @@ export class RecordsService {
       return { data: { category: categoryDto(updated) }, changed };
     });
   }
-  deleteCategory(actor: Actor, id: string, input: DeleteCategoryInput) {
+  reorderCategories(actor: Actor, input: ReorderCategoriesInput) {
     return this.write(actor, async (tx) => {
+      const user = await this.readyUser(tx, actor.userId);
+      if (user.dataVersion.toString() !== input.expectedDataVersion)
+        throw new AppError(
+          409,
+          'DATA_VERSION_CONFLICT',
+          '分类已有变化，请刷新后重新排序。',
+        );
+      const current = await tx.category.findMany({
+        where: { userId: actor.userId },
+        orderBy: categoryOrder,
+      });
+      const byId = new Map(current.map((c) => [c.id, c]));
+      if (
+        input.categoryIds.length !== current.length ||
+        input.categoryIds.some((id) => !byId.has(id))
+      )
+        throw new AppError(
+          422,
+          'VALIDATION_ERROR',
+          '请提交当前账号的全部分类。',
+        );
+      const changed = input.categoryIds.some(
+        (id, index) => current[index]?.id !== id,
+      );
+      if (changed)
+        for (const [index, id] of input.categoryIds.entries()) {
+          const category = byId.get(id);
+          if (!category) throw notFound();
+          // Position is presentation metadata. Keep independent content versions stable.
+          await tx.category.update({
+            where: { id },
+            data: { sortOrder: index, updatedAt: category.updatedAt },
+          });
+        }
+      return {
+        data: {
+          categories: input.categoryIds.map((id) => {
+            const category = byId.get(id);
+            if (!category) throw notFound();
+            return categoryDto(category);
+          }),
+        },
+        changed,
+      };
+    });
+  }
+  deleteCategory(actor: Actor, id: string, input: DeleteCategoryInput) {
+    return this.write<DeleteCategoryResult>(actor, async (tx) => {
       const source = await this.category(tx, actor.userId, id);
       if ((await tx.category.count({ where: { userId: actor.userId } })) <= 1)
         throw new AppError(409, 'LAST_CATEGORY', '至少保留一个分类。');
+      if ('mode' in input) {
+        const currentUser = await this.readyUser(tx, actor.userId);
+        if (input.expectedDataVersion !== currentUser.dataVersion.toString())
+          throw new AppError(
+            409,
+            'DATA_VERSION_CONFLICT',
+            '记录已有变化，请重新确认删除。',
+          );
+        checkVersion(input.expectedVersion, source.version);
+        const entries = await tx.entry.findMany({
+          where: { userId: actor.userId, categoryId: id },
+          select: { id: true, deletedAt: true },
+        });
+        const now = this.clock.now();
+        let target = await tx.category.findFirst({
+          where: { userId: actor.userId, name: '其他', NOT: { id } },
+        });
+        if (entries.length && !target) {
+          if (
+            await tx.category.findUnique({
+              where: { id: input.fallbackCategoryId },
+            })
+          )
+            throw new AppError(
+              409,
+              'IDEMPOTENCY_KEY_REUSED',
+              '备用分类标识已被使用。',
+            );
+          const categories = await tx.category.findMany({
+            where: { userId: actor.userId },
+          });
+          if (source.name === '其他') {
+            // Free the name within this transaction before redirecting foreign keys.
+            const names = new Set(categories.map((c) => c.name));
+            let suffix = 1;
+            while (names.has(`归档分类${suffix}`)) suffix++;
+            await tx.category.update({
+              where: { id },
+              data: { name: `归档分类${suffix}` },
+            });
+          }
+          target = await tx.category.create({
+            data: {
+              id: input.fallbackCategoryId,
+              userId: actor.userId,
+              name: '其他',
+              seedKey: null,
+              color: nextCategoryColor(
+                categories.filter((c) => c.id !== id).map((c) => c.color),
+              ),
+              sortOrder: await nextCategoryPosition(tx, actor.userId),
+            },
+          });
+        }
+        if (target) {
+          // Existing trash keeps its original continuous deadline.
+          await tx.entry.updateMany({
+            where: {
+              userId: actor.userId,
+              categoryId: id,
+              deletedAt: { not: null },
+            },
+            data: { categoryId: target.id, version: { increment: 1 } },
+          });
+          await tx.entry.updateMany({
+            where: { userId: actor.userId, categoryId: id, deletedAt: null },
+            data: {
+              categoryId: target.id,
+              deletedAt: now,
+              purgeAfter: new Date(now.getTime() + 30 * 86400000),
+              version: { increment: 1 },
+            },
+          });
+        }
+        await tx.category.delete({ where: { id } });
+        return {
+          data: {
+            success: true as const,
+            transferredCount: entries.length,
+            trashedCount: entries.filter((e) => !e.deletedAt).length,
+          },
+          changed: true,
+        };
+      }
       const target = await this.category(
         tx,
         actor.userId,
@@ -575,7 +714,7 @@ export class RecordsService {
           return { etag, data: null };
         const categories = await tx.category.findMany({
           where: { userId: actor.userId },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          orderBy: categoryOrder,
         });
         const entries = await tx.$queryRaw<
           { active: EntryDto[]; trash: EntryDto[] }[]

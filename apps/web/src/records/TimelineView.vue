@@ -196,7 +196,11 @@ defineExpose({ locateToday });
             ><button :title="entry.title" @click="emit('edit', entry)">
               {{ entry.title }}</button
             ><button
-              v-if="!readonly && entryStatus(entry, today) === 'ongoing'"
+              v-if="
+                !readonly &&
+                entry.startDate <= today &&
+                entryStatus(entry, today) === 'ongoing'
+              "
               class="gantt-finish icon-btn"
               :disabled="busy"
               :aria-label="`结束${entry.title}`"
@@ -215,7 +219,7 @@ defineExpose({ locateToday });
               class="event-status"
               :class="{ live: entryStatus(entry, today) === 'ongoing' }"
               >{{
-                { ongoing: '进行中', ended: '已结束', not_started: '未开始' }[
+                { ongoing: '进行中', ended: '已结束' }[
                   entryStatus(entry, today)
                 ]
               }}</span

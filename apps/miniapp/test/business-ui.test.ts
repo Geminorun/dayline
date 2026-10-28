@@ -214,6 +214,14 @@ describe('independent miniapp business controls', () => {
       );
     await nextTick();
     await flushPromises();
+    const statusPicker = wrapper
+      .findAll('picker')
+      .find((p) => p.attributes('range')?.includes('已结束'));
+    statusPicker?.element.dispatchEvent(
+      new CustomEvent('change', { detail: { value: 1 } }),
+    );
+    await nextTick();
+    await flushPromises();
     // Choose the scale picker by its range, independently from filter pickers.
     const scalePicker = wrapper
       .findAll('picker')

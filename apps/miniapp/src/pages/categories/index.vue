@@ -13,16 +13,12 @@ const name = ref(''),
   edit = ref<CategoryDto | null>(null),
   id = ref(''),
   deleting = ref<CategoryDto | null>(null),
-  target = ref('');
+  fallbackId = ref(''),
+  deletionVersion = ref('');
 const entries = computed(() => [
-    ...(snapshot.value?.entries ?? []),
-    ...(snapshot.value?.trashEntries ?? []),
-  ]),
-  targets = computed(
-    () =>
-      snapshot.value?.categories.filter((c) => c.id !== deleting.value?.id) ??
-      [],
-  );
+  ...(snapshot.value?.entries ?? []),
+  ...(snapshot.value?.trashEntries ?? []),
+]);
 onShow(async () => {
   await ensure();
   if (!edit.value && !name.value)
@@ -75,17 +71,23 @@ async function save() {
     error.value = message(cause);
   }
 }
+function confirmDelete(c: CategoryDto) {
+  deleting.value = { ...c };
+  fallbackId.value = '';
+  deletionVersion.value = snapshot.value?.dataVersion ?? '';
+}
 async function remove() {
-  const c = deleting.value,
-    t = targets.value.find((c) => c.id === target.value);
-  if (!c || !t) return;
+  const c = deleting.value;
+  if (!c) return;
   error.value = '';
-  const input = {
-    expectedVersion: c.version,
-    transferToCategoryId: t.id,
-    expectedTargetVersion: t.version,
-  };
   try {
+    if (!fallbackId.value) fallbackId.value = await newId();
+    const input = {
+      expectedVersion: c.version,
+      mode: 'trash' as const,
+      expectedDataVersion: deletionVersion.value,
+      fallbackCategoryId: fallbackId.value,
+    };
     await mutate({ kind: 'deleteCategory', id: c.id, input }, () =>
       records.deleteCategory(c.id, input),
     );
@@ -99,7 +101,7 @@ async function remove() {
   <view class="page"
     ><text class="title">分类管理</text
     ><text class="text muted"
-      >最多 20 个、至少一个。删除会转移活动及回收站事项。</text
+      >最多 20 个、至少一个。删除分类会把记录移入回收站。</text
     ><text v-if="loading" class="text">正在读取…</text
     ><text v-if="error" class="text error">{{ error }}</text
     ><text v-if="notice" class="text notice">{{ notice }}</text
@@ -115,10 +117,7 @@ async function remove() {
           ><button
             class="secondary"
             :disabled="busy || snapshot.categories.length <= 1"
-            @click="
-              deleting = { ...c };
-              target = targets[0]?.id ?? '';
-            "
+            @click="confirmDelete(c)"
           >
             删除分类
           </button></view
@@ -138,25 +137,16 @@ async function remove() {
           取消修改
         </button></view
       ><view v-if="deleting" class="card confirmation"
+        ><text class="heading">删除“{{ deleting.name }}”？</text
         ><text class="text"
-          >删除“{{ deleting.name }}”，将
+          >包含
           {{ entries.filter((e) => e.categoryId === deleting?.id).length }}
-          条事项转入：</text
-        ><picker
-          :range="targets.map((c) => c.name)"
-          @change="target = targets[Number($event.detail.value)]?.id ?? ''"
-          ><view class="picker"
-            >{{
-              targets.find((c) => c.id === target)?.name ?? '选择接收分类'
-            }}
-            ▾</view
-          ></picker
-        ><button :disabled="busy || !target" @click="remove">
-          确认转移并删除分类</button
+          条记录，删除后将进入回收站，30 天内可恢复。</text
+        ><button :disabled="busy" @click="remove">删除分类与记录</button
         ><button class="secondary" :disabled="busy" @click="deleting = null">
-          取消删除
+          取消
         </button></view
-      ></template
-    ></view
-  >
+      >
+    </template>
+  </view>
 </template>

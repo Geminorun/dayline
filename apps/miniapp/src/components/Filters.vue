@@ -12,8 +12,8 @@ const search = computed({
   get: () => props.modelValue.search,
   set: (value: string) => update({ search: value }),
 });
-const statuses = ['全部状态', '未开始', '进行中', '已结束'],
-  statusValues = ['all', 'not_started', 'ongoing', 'ended'] as const;
+const statuses = ['进行中', '已结束'],
+  statusValues = ['ongoing', 'ended'] as const;
 function update(patch: Partial<EntryFilter>) {
   emit('update:modelValue', { ...props.modelValue, ...patch });
 }
@@ -22,7 +22,7 @@ function category(event: { detail: { value: unknown } }) {
   update({ categoryId: index ? (props.categories[index - 1]?.id ?? '') : '' });
 }
 function status(event: { detail: { value: unknown } }) {
-  update({ status: statusValues[Number(event.detail.value)] ?? 'all' });
+  update({ status: statusValues[Number(event.detail.value)] ?? 'ongoing' });
 }
 </script>
 <template>
@@ -42,9 +42,12 @@ function status(event: { detail: { value: unknown } }) {
           }}
           ▾</view
         ></picker
-      ><picker :range="statuses" @change="status"
+      ><picker
+        :range="statuses"
+        :value="modelValue.status === 'ended' ? 1 : 0"
+        @change="status"
         ><view class="picker"
-          >{{ statuses[statusValues.indexOf(modelValue.status)] }} ▾</view
+          >{{ statuses[modelValue.status === 'ended' ? 1 : 0] }} ▾</view
         ></picker
       ><button
         class="secondary"

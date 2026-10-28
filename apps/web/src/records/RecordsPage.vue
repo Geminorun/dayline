@@ -42,6 +42,9 @@ import TimelineView from './TimelineView.vue';
 import PlannerIcon from '../components/PlannerIcon.vue';
 import PlannerDialog from '../components/PlannerDialog.vue';
 import FileTools from '../components/FileTools.vue';
+import CategoryTabs from '../components/CategoryTabs.vue';
+import InlineSearch from '../components/InlineSearch.vue';
+import FocusHelp from '../components/FocusHelp.vue';
 import {
   localEnvironment,
   localRepository,
@@ -127,7 +130,7 @@ const visible = computed(() => {
     return selectEntries(
       filtered.value,
       today.value,
-      emptyFilter(),
+      { ...emptyFilter(), status: 'all' },
       range.value,
     ).sort((a, b) =>
       filter.value.sort === 'asc'
@@ -167,7 +170,7 @@ const hasFilter = computed(
   () =>
     !!filter.value.search.trim() ||
     !!filter.value.categoryId ||
-    filter.value.status !== 'all',
+    filter.value.status !== 'ongoing',
 );
 const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 function open(entry: EntryDto | null) {
@@ -274,6 +277,14 @@ watch(
   },
   { deep: true },
 );
+async function reorderCategories(categoryIds: string[]) {
+  const current = snapshot.value;
+  if (!current) return;
+  const input = { expectedDataVersion: current.dataVersion, categoryIds };
+  await mutate({ kind: 'reorderCategories', input }, () =>
+    records.reorderCategories(input),
+  );
+}
 async function action(mutation: GuestMutation, cloud: () => Promise<unknown>) {
   try {
     await mutate(mutation, cloud);
@@ -377,11 +388,8 @@ onMounted(async () => {
   }
 });
 const dateInput = ref<HTMLInputElement | null>(null);
-const listMode = ref(false),
-  searchOpen = ref(false);
+const listMode = ref(false);
 const statuses = [
-  { value: 'all', label: '全部状态' },
-  { value: 'not_started', label: '未开始' },
   { value: 'ongoing', label: '进行中' },
   { value: 'ended', label: '已结束' },
 ] as const;
@@ -545,33 +553,6 @@ const recent = computed(
             </button>
           </div>
         </section>
-        <section class="stats-row" aria-label="当前范围统计">
-          <div class="stat">
-            <span class="stat-icon purple"
-              ><PlannerIcon name="calendar"
-            /></span>
-            <div>
-              <span>{{
-                contentView === 'timeline' ? '范围事项' : '当天事项'
-              }}</span
-              ><strong>{{ summary.count }}<small>件</small></strong>
-            </div>
-          </div>
-          <div class="stat">
-            <span class="stat-icon peach"><PlannerIcon name="clock" /></span>
-            <div>
-              <span>仍在进行</span
-              ><strong>{{ summary.ongoing }}<small>件</small></strong>
-            </div>
-          </div>
-          <div class="stat">
-            <span class="stat-icon mint"><PlannerIcon name="folder" /></span>
-            <div>
-              <span>涉及分类</span
-              ><strong>{{ summary.categoryCount }}<small>类</small></strong>
-            </div>
-          </div>
-        </section>
         <section
           v-if="contentView === 'timeline'"
           class="timeline-panel"
@@ -596,34 +577,15 @@ const recent = computed(
             </div>
           </div>
           <div class="timeline-filters">
-            <div class="filter-tabs">
-              <button
-                class="filter-tab"
-                :class="{ active: !filter.categoryId }"
-                :aria-pressed="!filter.categoryId"
-                @click="filter.categoryId = ''"
-              >
-                全部</button
-              ><button
-                v-for="category in snapshot.categories"
-                :key="category.id"
-                class="filter-tab"
-                :class="{ active: filter.categoryId === category.id }"
-                :aria-pressed="filter.categoryId === category.id"
-                @click="filter.categoryId = category.id"
-              >
-                {{ category.name }}</button
-              ><RouterLink class="filter-tab manage-tab" to="/categories"
-                >管理分类</RouterLink
-              >
-            </div>
-            <label class="timeline-search"
-              ><PlannerIcon name="search" /><input
-                v-model="filter.search"
-                type="search"
-                aria-label="搜索时间轴事项"
-                placeholder="搜索记录…"
-            /></label>
+            <CategoryTabs
+              :key="snapshot.userId"
+              :categories="snapshot.categories"
+              :selected="filter.categoryId"
+              :disabled="busy || readonly"
+              :reorder="reorderCategories"
+              @select="filter.categoryId = $event"
+            />
+            <InlineSearch v-model="filter.search" />
             <FileTools />
           </div>
           <div class="timeline-range-toolbar">
@@ -698,7 +660,13 @@ const recent = computed(
           <section class="schedule-panel">
             <div class="panel-header">
               <div class="section-title">
-                <h2>这一天，正在做的事</h2>
+                <h2>
+                  {{
+                    filter.status === 'ended'
+                      ? '这一天，已结束的事'
+                      : '这一天，正在做的事'
+                  }}
+                </h2>
                 <span>{{ visible.length }}</span>
               </div>
               <div class="view-toggle" role="group" aria-label="显示方式">
@@ -720,34 +688,19 @@ const recent = computed(
               </div>
             </div>
             <div class="schedule-tools">
-              <div class="filter-tabs">
-                <button
-                  class="filter-tab"
-                  :class="{ active: !filter.categoryId }"
-                  :aria-pressed="!filter.categoryId"
-                  @click="filter.categoryId = ''"
-                >
-                  全部</button
-                ><button
-                  v-for="category in snapshot.categories"
-                  :key="category.id"
-                  class="filter-tab"
-                  :class="{ active: filter.categoryId === category.id }"
-                  :aria-pressed="filter.categoryId === category.id"
-                  @click="filter.categoryId = category.id"
-                >
-                  {{ category.name }}</button
-                ><RouterLink class="filter-tab manage-tab" to="/categories"
-                  >管理分类</RouterLink
-                >
-              </div>
-              <button
-                class="icon-btn"
-                aria-label="搜索事项"
-                @click="searchOpen = !searchOpen"
-              >
-                <PlannerIcon name="search" /></button
-              ><FileTools />
+              <CategoryTabs
+                :key="snapshot.userId"
+                :categories="snapshot.categories"
+                :selected="filter.categoryId"
+                :disabled="busy || readonly"
+                :reorder="reorderCategories"
+                @select="filter.categoryId = $event"
+              />
+              <InlineSearch v-model="filter.search" /><FocusHelp
+                :date="selectedDate"
+                :count="dailyFocusCount"
+                :future="selectedDate > today"
+              /><FileTools />
             </div>
             <div class="state-filters" role="group" aria-label="筛选记录状态">
               <button
@@ -767,29 +720,6 @@ const recent = computed(
                 清除筛选
               </button>
             </div>
-            <label v-if="searchOpen || filter.search" class="search-field"
-              ><PlannerIcon name="search" /><input
-                v-model="filter.search"
-                type="search"
-                placeholder="搜索事项名称…"
-                aria-label="搜索事项名称"
-            /></label>
-            <div class="daily-focus-summary">
-              <div>
-                <PlannerIcon name="star" /><strong
-                  >{{ Number(selectedDate.slice(5, 7)) }}月{{
-                    Number(selectedDate.slice(8))
-                  }}日的重点</strong
-                ><span>{{ dailyFocusCount }}项</span>
-              </div>
-              <p>
-                {{
-                  selectedDate > today
-                    ? '可以记录今天及过去日期的重点。'
-                    : '建议每天选择1–2项 · 星标只属于这一天，可切换日期补记。'
-                }}
-              </p>
-            </div>
             <div class="event-area" :class="{ 'list-mode': listMode }">
               <div v-if="!visible.length" class="empty-state">
                 <div class="empty-art" aria-hidden="true">
@@ -800,10 +730,15 @@ const recent = computed(
                   {{
                     hasFilter
                       ? '这里还没有匹配的记录'
-                      : '记录一段经历，从今天开始'
+                      : snapshot.entries.length
+                        ? '这一天没有进行中的事项'
+                        : '记录一段经历，从今天开始'
                   }}
                 </h3>
                 <p v-if="hasFilter">试试其他分类或状态，或换个关键词。</p>
+                <p v-else-if="snapshot.entries.length">
+                  切换到已结束事项，或选择其他日期继续回看。
+                </p>
                 <p v-else>
                   一本读了一个月的书，一款玩了几周的游戏，<br />都可以在这里，慢慢留下痕迹。
                 </p>
@@ -818,7 +753,12 @@ const recent = computed(
                   class="demo-link"
                   @click="open(null)"
                 >
-                  记录自己的第一件事 →
+                  {{
+                    snapshot.entries.length
+                      ? '记录一件新事项'
+                      : '记录自己的第一件事'
+                  }}
+                  →
                 </button>
               </div>
               <ul v-else class="entry-list">
@@ -1055,6 +995,7 @@ const recent = computed(
         </button>
         <CategoryManager
           :categories="snapshot.categories"
+          :data-version="snapshot.dataVersion"
           :entries="allEntries"
           :busy="busy"
           :mutate="mutate"

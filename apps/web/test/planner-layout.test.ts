@@ -31,7 +31,7 @@ it('keeps only two primary tabs and redirects old record-list links with the dat
     wrapper.findAll('nav[aria-label="主导航"] a').map((link) => link.text()),
   ).toEqual(['每日回看', '时间轴']);
   expect(wrapper.findAll('.mini-days button')).toHaveLength(42);
-  expect(wrapper.find('.stats-row').exists()).toBe(true);
+  expect(wrapper.find('.stats-row').exists()).toBe(false);
   expect(wrapper.find('.distribution-panel').exists()).toBe(true);
   expect(wrapper.find('.account-menu a[href="/data"]').exists()).toBe(false);
   expect(wrapper.find('.account-menu a[href="/drafts"]').exists()).toBe(false);
@@ -125,8 +125,9 @@ it('connects the reference calendar, modal editor, daily focus, categories and t
     .trigger('click');
   await flushPromises();
   expect(wrapper.find('.timeline-panel .gantt-bar').exists()).toBe(true);
+  await wrapper.get('button[aria-label="搜索事项"]').trigger('click');
   await wrapper
-    .get('input[aria-label="搜索时间轴事项"]')
+    .get('input[aria-label="搜索事项名称"]')
     .setValue('不存在的筛选词');
   await flushPromises();
   expect(wrapper.get('.timeline-empty').text()).toContain('还没有匹配的记录');

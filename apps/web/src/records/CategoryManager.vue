@@ -10,6 +10,7 @@ import { createCategorySchema } from '@dayline/contracts';
 import { records, errorMessage } from './record-service';
 const props = defineProps<{
   categories: CategoryDto[];
+  dataVersion: string;
   entries: EntryDto[];
   run?: (action: () => Promise<unknown>) => Promise<unknown>;
   mutate?: (
@@ -29,7 +30,9 @@ const edit = ref<CategoryDto | null>(null);
 const error = ref('');
 const newId = ref(crypto.randomUUID());
 const deleting = ref<CategoryDto | null>(null);
-const targetId = ref('');
+const fallbackId = ref(crypto.randomUUID());
+const deletionVersion = ref(''),
+  deletionCount = ref(0);
 function start(category: CategoryDto) {
   creating.value = false;
   deleting.value = null;
@@ -108,18 +111,29 @@ async function persist(
     saving.value = false;
   }
 }
+function confirmDelete(category: CategoryDto) {
+  if (locked.value) return;
+  deleting.value = category;
+  error.value = '';
+  deletionVersion.value = props.dataVersion;
+  deletionCount.value = props.entries.filter(
+    (entry) => entry.categoryId === category.id,
+  ).length;
+  fallbackId.value = crypto.randomUUID();
+  reset();
+}
 async function remove() {
   if (locked.value) return;
   const source = deleting.value;
-  const target = props.categories.find((value) => value.id === targetId.value);
-  if (!source || !target) return;
+  if (!source) return;
   saving.value = true;
   error.value = '';
   try {
     const input = {
       expectedVersion: source.version,
-      transferToCategoryId: target.id,
-      expectedTargetVersion: target.version,
+      mode: 'trash' as const,
+      expectedDataVersion: deletionVersion.value,
+      fallbackCategoryId: fallbackId.value,
     };
     const cloud = () => records.deleteCategory(source.id, input);
     if (props.mutate)
@@ -131,6 +145,14 @@ async function remove() {
     deleting.value = null;
   } catch (cause) {
     error.value = errorMessage(cause);
+    if (
+      typeof cause === 'object' &&
+      cause !== null &&
+      'code' in cause &&
+      (cause.code === 'DATA_VERSION_CONFLICT' ||
+        cause.code === 'VERSION_CONFLICT')
+    )
+      deleting.value = null;
   } finally {
     saving.value = false;
   }
@@ -145,12 +167,7 @@ watch(
     const removing = props.categories.find(
       (category) => category.id === route?.query.remove,
     );
-    if (removing) {
-      deleting.value = removing;
-      targetId.value =
-        props.categories.find((category) => category.id !== removing.id)?.id ??
-        '';
-    }
+    if (removing && deleting.value?.id !== removing.id) confirmDelete(removing);
   },
   { immediate: true },
 );
@@ -158,7 +175,7 @@ watch(
 <template>
   <section class="record-panel category-manager">
     <h2>分类管理</h2>
-    <p>最多 20 个；删除分类时，记录会转移至你选择的分类。</p>
+    <p>最多 20 个、至少一个。在记录页拖动分类标签可调整顺序。</p>
     <ul class="category-list">
       <li
         v-for="category in categories"
@@ -227,49 +244,28 @@ watch(
               :label="`删除${category.name}分类`"
               danger
               :disabled="locked || categories.length <= 1"
-              @click="
-                deleting = category;
-                targetId =
-                  categories.find((value) => value.id !== category.id)?.id ??
-                  '';
-                reset();
-              "
+              @click="confirmDelete(category)"
             />
           </div>
         </template>
         <div
           v-if="deleting?.id === category.id"
-          class="notice category-transfer"
+          class="category-delete-confirm"
+          role="group"
+          :aria-label="`确认删除${category.name}分类`"
         >
-          <h3>删除“{{ deleting.name }}”？</h3>
           <p>
-            {{
-              entries.filter((entry) => entry.categoryId === deleting?.id)
-                .length
-            }}
-            条记录（含回收站）将转入所选分类。
+            该分类有 <strong>{{ deletionCount }}</strong>
+            条记录。删除分类后，记录将进入回收站，是否删除？
           </p>
-          <label
-            >转入分类<select v-model="targetId" :disabled="locked">
-              <option
-                v-for="category in categories.filter(
-                  (value) => value.id !== deleting?.id,
-                )"
-                :key="category.id"
-                :value="category.id"
-              >
-                {{ category.name }}
-              </option>
-            </select></label
-          >
           <div class="action-bar">
             <button
               type="button"
               class="button danger"
-              :disabled="locked || !targetId"
+              :disabled="locked"
               @click="remove"
             >
-              转移并删除分类</button
+              删除分类与记录</button
             ><button
               type="button"
               class="button subtle"

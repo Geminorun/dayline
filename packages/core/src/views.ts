@@ -68,13 +68,13 @@ export interface ViewEntry {
 export interface EntryFilter {
   search: string;
   categoryId: string;
-  status: 'all' | 'not_started' | 'ongoing' | 'ended';
+  status: 'all' | 'ongoing' | 'ended';
   sort: 'asc' | 'desc';
 }
 export const emptyFilter = (): EntryFilter => ({
   search: '',
   categoryId: '',
-  status: 'all',
+  status: 'ongoing',
   sort: 'desc',
 });
 export function selectEntries<T extends ViewEntry>(
@@ -105,10 +105,7 @@ export function selectEntries<T extends ViewEntry>(
     );
 }
 export function spanLabel(entry: ViewEntry, today: string): string {
-  if (entryStatus(entry, today) === 'not_started')
-    return entry.endDate
-      ? `未开始 · 计划 ${durationDays(entry, today)} 天`
-      : '未开始';
+  if (entry.startDate > today) return `从 ${entry.startDate} 开始`;
   return `${entry.endDate ? '跨度' : '已持续'} ${durationDays(entry, today)} 天`;
 }
 export type TimelineScale = 'month' | 'quarter' | 'year' | 'all';

@@ -52,14 +52,14 @@ describe('complete shared view rules', () => {
       status: 'ongoing',
       sort: 'desc',
     });
-    expect(selected.map((e) => e.id)).toEqual(['a', 'b']);
+    expect(selected.map((e) => e.id)).toEqual(['future', 'a', 'b']);
     expect(summarizeEntries(selected, today)).toMatchObject({
-      count: 2,
-      ongoing: 2,
+      count: 3,
+      ongoing: 3,
       categoryCount: 1,
-      categories: { reading: 2 },
+      categories: { reading: 3 },
     });
-    expect(spanLabel(entries[2] ?? entry, today)).toBe('未开始');
+    expect(spanLabel(entries[2] ?? entry, today)).toBe('从 2027-01-01 开始');
   });
   it('uses inclusive planned end and bounded open intervals, clips bars, and has all four windows', () => {
     expect(timelineWindow([], today, 'all', '0001-01-01').start).toBe(

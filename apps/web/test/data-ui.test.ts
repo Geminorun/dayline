@@ -24,6 +24,8 @@ vi.mock('../src/records/workspace', async () => {
     snapshot: ref(null),
     guest: ref(null),
     readonly: ref(false),
+    notice: ref(''),
+    error: ref(''),
     generation: () => 0,
     ensure: async () => {},
     reload: vi.fn(),
@@ -35,6 +37,8 @@ const now = new Date().toISOString(),
 const wrappers: ReturnType<typeof mount>[] = [];
 beforeEach(async () => {
   api.invalidate();
+  space.notice.value = '';
+  space.error.value = '';
   space.mode.value = 'guest';
   space.identityState.value = 'guest';
   space.guest.value = createGuestPackage(randomUUID, now);
@@ -417,7 +421,7 @@ it('imports a clean missing-color file in one click without opening details or s
   await flushPromises();
   expect(w.find('.file-category').exists()).toBe(false);
   expect(w.find('.file-row').exists()).toBe(false);
-  expect(w.text()).toContain('共 2 条记录');
+  expect(w.text()).toContain('2 条记录待导入');
   await button(w, '导入 2 条').trigger('click');
   await vi.waitFor(async () =>
     expect((await guestRepository.read())?.entries).toHaveLength(2),
@@ -428,4 +432,39 @@ it('imports a clean missing-color file in one click without opening details or s
   expect(created).toHaveLength(2);
   expect(new Set(created.map((c) => c.color)).size).toBe(2);
   expect(w.text()).toContain('导入完成');
+});
+
+it('starts fresh after a cancelled import while retaining explicit history recovery', async () => {
+  await pending('title,start_date,category_name\n上次文件,2026-10-01,旅行');
+  const owner = space.guest.value?.guestDatasetId;
+  if (!owner) throw new Error('owner');
+  const saved = await guestRepository.fileOperation(owner);
+  if (!saved?.localPlan) throw new Error('saved plan');
+  await guestRepository.putFileOperation({
+    ...saved,
+    status: 'cancelled',
+    localPlan: { ...saved.localPlan, status: 'cancelled', canCommit: false },
+  });
+  const w = page();
+  await flushPromises();
+  expect(w.text()).not.toContain('导入已取消');
+  expect(w.text()).not.toContain('上次选择');
+  expect(w.find('input[type=file]').attributes('disabled')).toBeUndefined();
+  await button(w, '模板与说明').trigger('click');
+  await button(w, '查询或恢复原任务').trigger('click');
+  await flushPromises();
+  expect(w.text()).toContain('本次预览已结束');
+  expect(w.emitted('imported')).toBeUndefined();
+});
+
+it('announces a confirmed import independently of a later refresh failure', async () => {
+  await pending('title,start_date,category_name\n已保存,2026-10-01,旅行');
+  vi.spyOn(space, 'reload').mockRejectedValueOnce(new Error('reload offline'));
+  const w = page();
+  await flushPromises();
+  await button(w, '导入 1 条').trigger('click');
+  await vi.waitFor(() => expect(w.emitted('imported')).toHaveLength(1));
+  expect(space.notice.value).toContain('导入成功');
+  expect(space.error.value).toContain('导入已成功，记录刷新失败');
+  expect((await guestRepository.read())?.entries).toHaveLength(1);
 });
