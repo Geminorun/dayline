@@ -36,6 +36,17 @@ sudo nginx -t && sudo systemctl reload nginx
 python3 scripts/diagnostics/fetch.py
 ```
 
+若云环境发布不可用，也可按用户授权将同名配置保存在仓库根目录的 `.env.diagnostics`（Git 忽略，权限 `0600`），包含 `DAYLINE_DIAGNOSTICS_PASSWORD` 和可选的 `DAYLINE_DIAGNOSTICS_URL`。从可信的本地文件加载后执行：
+
+```bash
+set -a
+. ./.env.diagnostics
+set +a
+python3 scripts/diagnostics/fetch.py
+```
+
+该文件只随当前工作区保留，重建后需要重新提供；密码不要写进交接文档或提交到 Git。读取工具使用明确的 `DaylineDiagnostics/1.0` 标识，避免默认 Python 客户端标识被 Cloudflare Browser Integrity Check 误判；不冒充浏览器、不关闭 TLS 校验。
+
 客户端保留环境的 HTTP 代理与证书校验，不跟随重定向转发凭据，并拒绝超过 3 分钟或采集失败的摘要。输出首行带 `generatedAt` 和 `collectionStatus`；采集失败会发布新的失败标记，不保留看起来仍成功的旧数据。读取现有摘要不会触发新的采集或发送邮件。
 
 ### 管理入口

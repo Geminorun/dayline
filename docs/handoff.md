@@ -1,6 +1,6 @@
 # Dayline 会话交接
 
-更新日期：2026-10-28。
+更新日期：2026-10-28。最新状态以本节和下方“读取已打通”记录为准。
 
 ## 当前交接（2026-10-28，优先于下方历史记录）
 
@@ -29,16 +29,17 @@
 - 本工作区 HTTP 可用，但 TCP 访问名单为空，配置中的 `proxy:8088` 也拒绝连接；直连 SSH 在认证前被拒绝。尚未验证服务器公网防火墙是否另有限制。不要再让用户重复找公钥或改用 SSH 密码；认证方式解决不了当前连接阻塞。
 - 用户已改选 **HTTPS Basic Auth + 现有脱敏采集器的定时摘要**。实现、安装和撤销步骤见 [diagnostics.md](diagnostics.md)。
 - 默认地址：`https://dayline.mindreview.me/internal/diagnostics`；账号固定为 `dayline-diag`；客户端从工作区 Secret `DAYLINE_DIAGNOSTICS_PASSWORD` 读取密码。域名变更可用 `DAYLINE_DIAGNOSTICS_URL` 覆盖。
-- **交接文档不保存密码。** 用户将自行在云环境配置中添加 Secret 并发布。当前可用云环境工具只有读取配置 / 诊断的能力，没有添加或修改 Secret 的接口；截至本次检查，运行环境尚未绑定该 Secret，不能宣称已配置成功。工作区 `.env` 不等于持久云环境配置。
-- 服务器安装命令已给用户：下载该功能提交中的 `scripts/diagnostics/setup-https.sh`，执行时传完整 40 位 SHA；输入两次独立诊断密码，再在 Dayline HTTPS server 块中加入 `include /etc/nginx/snippets/dayline-diagnostics.conf;`，测试并重载 Nginx。安装 / include 是否完成尚未得到用户确认。
-- 本次匿名检查诊断地址返回 `200 text/html`，未看到预期的 `401` Basic Auth 挑战，也不是 NDJSON 摘要；不能把 HTTP 200 当作接入成功。需确认用户已完成服务器 Nginx 接入，云环境发布不会自动添加该 include。
+- **交接文档不保存密码。** 云环境发布失败后，用户授权改用本地 env；已将密码和 URL 保存到仓库根目录 `.env.diagnostics`，权限 `0600`，已核实被 Git 忽略，不依赖云环境 Secret。该文件不会随 Git 克隆恢复；若工作区被清空，需要用户重新提供。当前云环境工具只有读取配置 / 诊断的能力，没有添加或修改 Secret 的接口。
+- 服务器安装命令见诊断说明。早期匿名检查曾返回 `200 text/html`，当时入口未确认；**最新已成功认证并读取 `application/x-ndjson` 摘要，不再要求用户重复安装或配置 Nginx。**
+- **读取已打通（2026-10-28 06:22 UTC）**：使用本地 env 和 `DaylineDiagnostics/1.0` 客户端标识得到 HTTP 200、新鲜的 `collectionStatus=ok` 摘要，应用 healthy，运行版本为 `db675212400f18d48b84c59678685b15b0fe8edb`。默认 Python 标识曾触发 Cloudflare `1010`；显式诊断标识已验证可用，读取工具已修正。这个错误属于日志读取链路，不能当作注册邮件失败的原因。
+- 最新 15 分钟摘要只有维护与普通 HTTP 事件，没有注册 / 邮件事件。接下来在用户复现注册或重发后直接读取新摘要，不再要求用户手工复制日志。
 - 真实 Nginx / TLS / Basic Auth、只读方法、不可缓存、客户端密码读取及摘要过期拒绝检查已加入 CI 并通过。定时采集每分钟更新一次；只返回最多 15 分钟 / 1000 行日志的白名单摘要，失败时发布失败标记，文件原子替换。
 
 ### 新会话继续顺序
 
 1. 拉取远端 `main`，阅读本节、`AGENTS.md` 与 `docs/diagnostics.md`。保留已有用户改动，不恢复旧 ZIP 覆盖新代码。
-2. 读取新环境实际配置 / readiness，确认 `DAYLINE_DIAGNOSTICS_PASSWORD` 已生效；只核验是否就绪，不打印密码或完整环境。不复用旧环境 ID / readiness 判断。
-3. 在仓库根目录执行 `python3 scripts/diagnostics/fetch.py`。它使用正常 HTTP 代理与 TLS 校验，不跟随重定向转发凭据，并拒绝超过三分钟或采集失败的摘要。
+2. 优先检查已授权保存的本地 `.env.diagnostics` 是否存在，只核验存在、权限和忽略状态，不打印密码。若使用新环境的云 Secret，则读取实际 readiness；不要复用旧环境的判断。仅在本地配置丢失且无有效云 Secret 时要求用户重新配置。
+3. 本地 env 方式在仓库根目录执行 `set -a`、`. ./.env.diagnostics`、`set +a`，再运行 `python3 scripts/diagnostics/fetch.py`；云 Secret 方式直接运行客户端。它使用正常 HTTP 代理与 TLS 校验，不跟随重定向转发凭据，并拒绝超过三分钟或采集失败的摘要。
 4. 若返回 HTML，先完成服务器的 Nginx include / reload；若 401，核对服务器 Basic Auth 密码与工作区 Secret 是否一致；若 403，先核实 Cloudflare / 代理返回原因，不盲目关闭安全设置。需要用户操作时给出一条具体命令或缺少的配置。
 5. 用户已授权读取此受限诊断摘要，无需再次请求读取日志的许可。取得摘要后结合 `AUTH_EMAIL_FLOW` 和 provider 状态查原因；必要时让用户在网页点击一次注册或重发，再等待最多一分钟采集更新。读取摘要本身不会发送邮件。
 6. 依据实际证据修复、验证，再按既有习惯提交推送；不要猜测根因或要求用户反复粘贴同一份旧日志。

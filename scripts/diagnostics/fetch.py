@@ -30,7 +30,11 @@ def main():
         print('Expected an HTTPS diagnostic URL without credentials or query parameters.', file=sys.stderr)
         return 1
     credentials = base64.b64encode(('dayline-diag:' + password).encode()).decode()
-    request = urllib.request.Request(url, headers={'Authorization': 'Basic ' + credentials})
+    request = urllib.request.Request(url, headers={
+        'Authorization': 'Basic ' + credentials,
+        'User-Agent': 'DaylineDiagnostics/1.0',
+        'Accept': 'application/x-ndjson',
+    })
     try:
         # Retain the environment's normal HTTP proxy/CA handling; do not forward credentials through redirects.
         with urllib.request.build_opener(NoRedirect()).open(request, timeout=20) as response:
