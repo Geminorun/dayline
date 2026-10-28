@@ -15,6 +15,7 @@
     "format:check": "prettier --check .",
     "test": "pnpm build:shared && pnpm -r test",
     "test:deployment": "node --test scripts/deploy/*.test.mjs scripts/deployment-diagnostics.test.mjs",
+    "test:diagnostics": "python3 -m unittest discover -s scripts/diagnostics -p 'test_*.py'",
     "test:integration": "pnpm build && pnpm db:test:deploy && pnpm --filter @dayline/api test:integration",
     "db:test:deploy": "pnpm --filter @dayline/api exec prisma migrate deploy --config prisma.test.config.ts",
     "db:generate": "pnpm --filter @dayline/api db:generate",

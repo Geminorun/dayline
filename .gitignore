@@ -152,6 +152,9 @@ vite.config.ts.timestamp-*
 .local/
 apps/api/src/generated/
 
+# Python diagnostic tests.
+__pycache__/
+
 # TLS material is supplied through deployment secrets.
 *.pem
 *.key

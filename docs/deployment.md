@@ -1,5 +1,7 @@
 # GitHub Actions 部署
 
+运行后需要远程排查邮件等问题时，使用[只读 SSH 诊断](diagnostics.md)；诊断入口独立于部署权限，不通过 Nginx 公开原始日志文件。
+
 默认复用服务器已有的本机 Nginx：Cloudflare 橙云 → 本机 Nginx / HTTPS → `127.0.0.1:13000` → Web + API 应用容器 → 已有 PostgreSQL 17 / 18。Web 与 API 共用一个镜像，数据库保持独立。
 
 只支持服务器本机 Nginx。Workflow 只更新应用，不安装、启动、停止或重载生产服务器的 Nginx，不写 `/etc/nginx`，不管理证书或其他站点，不占用 80 / 443。Nginx 容器、对应 Compose 文件、TLS Secrets 和相关演练已移除。

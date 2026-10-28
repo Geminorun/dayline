@@ -274,6 +274,14 @@ export function createAuth(
           !(returned instanceof APIError)
             ? returned
             : { status: true };
+        logger.log({
+          code: 'AUTH_EMAIL_FLOW',
+          operation: context.path,
+          accountStatus: flow.accountStatus,
+          nextStep: flow.nextStep,
+          mailStatus: flow.mailStatus,
+          retryAfterSeconds: flow.retryAfterSeconds,
+        });
         return context.json({ ...legacy, emailFlow: flow });
       }),
     },

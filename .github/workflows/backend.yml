@@ -51,6 +51,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm test:deployment
+      - run: pnpm test:diagnostics
       - run: pnpm test:integration
   build:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
