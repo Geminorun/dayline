@@ -14,6 +14,10 @@ import {
 import { recordView } from './records/view-state';
 import PlannerIcon from './components/PlannerIcon.vue';
 import PlannerSymbols from './components/PlannerSymbols.vue';
+import SyncStatus from './components/SyncStatus.vue';
+import { useDraftCount } from './records/use-draft-count';
+import { initializeAppearance, stopAppearance } from './appearance/theme';
+import { errorMessage } from './records/record-service';
 import { useWorkspace } from './records/workspace';
 import { useAccount } from './account';
 const workspace = useWorkspace();
@@ -49,6 +53,26 @@ watch(
 );
 const { mode, identityState, switchMode, cacheError } = workspace,
   { current } = useAccount();
+const { count: draftCount, unavailable: draftsUnavailable } = useDraftCount();
+const starting = ref(true);
+const loggingOut = ref(false),
+  logoutError = ref('');
+async function logout() {
+  if (loggingOut.value) return;
+  loggingOut.value = true;
+  logoutError.value = '';
+  try {
+    await useAccount().logout();
+    await switchMode('guest');
+    closeAccountMenu();
+    await router.replace('/day');
+    workspace.notice.value = '已退出登录。';
+  } catch (cause) {
+    logoutError.value = errorMessage(cause);
+  } finally {
+    loggingOut.value = false;
+  }
+}
 function visible() {
   workspace.lifecycle(document.visibilityState === 'visible');
 }
@@ -69,13 +93,17 @@ function outsideAccountMenu(event: PointerEvent) {
     closeAccountMenu();
 }
 onMounted(() => {
-  void workspace.ensure();
+  initializeAppearance();
+  void workspace.ensure().finally(() => {
+    starting.value = false;
+  });
   window.addEventListener('focus', focus);
   window.addEventListener('online', online);
   window.addEventListener('pointerdown', outsideAccountMenu);
   document.addEventListener('visibilitychange', visible);
 });
 onBeforeUnmount(() => {
+  stopAppearance();
   workspace.lifecycle(false);
   window.removeEventListener('focus', focus);
   window.removeEventListener('online', online);
@@ -176,7 +204,7 @@ const pageLabel = computed(() =>
         '/categories':
           recordView.activeView === 'timeline' ? '时间轴' : '每日回看',
         '/trash': '回收站',
-        '/drafts': '草稿',
+        '/drafts': '未提交修改',
         '/data': '数据管理',
         '/settings': '设置',
         '/identity': '账号关联',
@@ -336,20 +364,7 @@ function hasEvent(date: string) {
           我的空间<span>/</span><strong>{{ pageLabel }}</strong>
         </div>
         <div class="topbar-end">
-          <button
-            class="save-state"
-            :disabled="workspace.loading.value || workspace.busy.value"
-            aria-label="刷新记录"
-            @click="workspace.load()"
-          >
-            <PlannerIcon name="clock" />{{
-              workspace.loading.value
-                ? '正在读取记录'
-                : mode === 'guest'
-                  ? '游客 · 仅本机保存'
-                  : '云端记录 · 点击刷新'
-            }}
-          </button>
+          <SyncStatus />
           <details
             ref="accountMenu"
             class="account-menu"
@@ -379,17 +394,35 @@ function hasEvent(date: string) {
                   to="/login"
                   >登录·注册</RouterLink
                 >
-                <button
-                  v-if="mode === 'account'"
-                  class="button"
-                  @click="switchMode('guest')"
-                >
-                  继续游客
-                </button>
                 <RouterLink class="button" to="/settings">设置</RouterLink
-                ><RouterLink class="button" to="/data">导入 / 导出</RouterLink
-                ><RouterLink class="button" to="/drafts">草稿</RouterLink
+                ><RouterLink
+                  v-if="draftCount > 0 || draftsUnavailable"
+                  class="button"
+                  to="/drafts"
+                  >未提交修改
+                  <span
+                    class="draft-count"
+                    :title="
+                      draftsUnavailable
+                        ? '本机未提交内容暂时无法读取'
+                        : undefined
+                    "
+                    >{{ draftsUnavailable ? '!' : draftCount }}</span
+                  ></RouterLink
                 ><RouterLink class="button" to="/trash">回收站</RouterLink>
+                <button
+                  v-if="current"
+                  class="button account-logout"
+                  :disabled="loggingOut"
+                  @click="logout"
+                >
+                  <PlannerIcon name="logout" />{{
+                    loggingOut ? '正在退出…' : '退出登录'
+                  }}
+                </button>
+                <p v-if="logoutError" role="alert" class="settings-error">
+                  {{ logoutError }}
+                </p>
               </div>
             </section>
           </details>
@@ -397,7 +430,10 @@ function hasEvent(date: string) {
       </header>
       <div class="main-content">
         <section
-          v-if="identityState === 'unknown' || identityState === 'expired'"
+          v-if="
+            !starting &&
+            (identityState === 'unknown' || identityState === 'expired')
+          "
           class="notice"
           role="status"
         >

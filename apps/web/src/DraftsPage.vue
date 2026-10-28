@@ -220,8 +220,8 @@ onBeforeUnmount(unsubscribe);
 </script>
 <template>
   <section class="records-page">
-    <h1>本机未提交草稿</h1>
-    <p>仅显示当前重新验证账号的输入；不计入正式记录或云端备份。</p>
+    <h1>未提交修改</h1>
+    <p>这些内容只暂存在此设备。继续编辑并保存后，才会上传到账号。</p>
     <p v-if="error" class="error">{{ error }}</p>
     <article v-for="draft in drafts" :key="draft.draftId" class="record-panel">
       <h2>{{ draft.fields.title || '未命名草稿' }}</h2>
@@ -235,8 +235,8 @@ onBeforeUnmount(unsubscribe);
         @click="resume(draft)"
         >继续编辑</RouterLink
       ><button class="secondary" @click="copy(draft)">复制输入</button
-      ><button class="secondary" @click="download(draft)">下载草稿</button
-      ><button class="secondary" @click="discard(draft)">放弃草稿</button>
+      ><button class="secondary" @click="download(draft)">下载副本</button
+      ><button class="secondary" @click="discard(draft)">放弃修改</button>
     </article>
     <section
       v-if="
@@ -245,7 +245,7 @@ onBeforeUnmount(unsubscribe);
       "
       class="record-panel"
     >
-      <h2>合并后的旧账号草稿</h2>
+      <h2>恢复合并前的修改</h2>
       <p>
         只有重新验证统一账号并取得后端映射后，才读取本机来源草稿。普通切换账号不会迁移草稿。
       </p>
@@ -290,6 +290,6 @@ onBeforeUnmount(unsubscribe);
         <button @click="recover(draft)">保留原稿，复制为待核对草稿</button>
       </article>
     </section>
-    <p v-if="!error && !drafts.length">当前账号没有已暂存草稿。</p>
+    <p v-if="!error && !drafts.length">没有未提交的修改。</p>
   </section>
 </template>

@@ -6,7 +6,10 @@ import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import EntryEditor from '../src/records/EntryEditor.vue';
 import { useAccount } from '../src/account';
 import { api } from '../src/api';
-import { localRepository } from '../src/adapters/local-repository';
+import {
+  localEnvironment,
+  localRepository,
+} from '../src/adapters/local-repository';
 import { useWorkspace } from '../src/records/workspace';
 import type {
   CreateEntryInput,
@@ -380,4 +383,63 @@ describe('acknowledged baseline while draft storage is pending', () => {
     );
     expect(w.emitted('saved')).toBeUndefined();
   });
+});
+
+describe('acknowledged restored edits', () => {
+  it.each([false, true])(
+    'cleans only the restored revision after saving, preserving newer source edits: %s',
+    async (changedElsewhere) => {
+      const restored: EntryDraft = {
+        environment: localEnvironment,
+        userId,
+        format: 'dayline-draft',
+        localSchemaVersion: 1,
+        draftId: crypto.randomUUID(),
+        entryId,
+        baseEntryVersion: entry.version,
+        baseEntry: entry,
+        inputRevision: 1,
+        persistedRevision: 1,
+        savedLocallyAt: time,
+        fields: {
+          title: '恢复后保存',
+          startDate: entry.startDate,
+          endDate: entry.endDate,
+          categoryId,
+        },
+      };
+      await localRepository.putDraft(restored);
+      const save = vi.fn(async () => {
+        if (changedElsewhere)
+          await localRepository.putDraft({
+            ...restored,
+            inputRevision: 2,
+            persistedRevision: 2,
+            fields: { ...restored.fields, title: '另一个窗口的更新' },
+          });
+        return {
+          data: {
+            entry: { ...entry, title: '恢复后保存', version: 2 },
+            alreadyExists: false,
+          },
+        };
+      });
+      const wrapper = mount(EntryEditor, {
+        props: {
+          entry,
+          categories: [category],
+          today: '2026-10-26',
+          draft: restored,
+          save,
+        },
+      });
+      wrappers.push(wrapper);
+      await wrapper.get('form').trigger('submit');
+      await vi.waitFor(() => expect(wrapper.emitted('saved')).toHaveLength(1));
+      const source = await localRepository.draft(userId, restored.draftId);
+      if (changedElsewhere)
+        expect(source?.fields.title).toBe('另一个窗口的更新');
+      else expect(source).toBeNull();
+    },
+  );
 });

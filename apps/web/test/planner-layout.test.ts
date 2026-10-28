@@ -33,7 +33,10 @@ it('keeps only two primary tabs and redirects old record-list links with the dat
   expect(wrapper.findAll('.mini-days button')).toHaveLength(42);
   expect(wrapper.find('.stats-row').exists()).toBe(true);
   expect(wrapper.find('.distribution-panel').exists()).toBe(true);
-  expect(wrapper.find('.account-menu a[href="/data"]').exists()).toBe(true);
+  expect(wrapper.find('.account-menu a[href="/data"]').exists()).toBe(false);
+  expect(wrapper.find('.account-menu a[href="/drafts"]').exists()).toBe(false);
+  expect(wrapper.find('button[aria-label="导入记录"]').exists()).toBe(true);
+  expect(wrapper.find('button[aria-label="导出记录"]').exists()).toBe(true);
 });
 
 it('connects the reference calendar, modal editor, daily focus, categories and timeline to real guest data', async () => {

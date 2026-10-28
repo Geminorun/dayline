@@ -288,16 +288,8 @@ export function useWorkspace() {
       if (initialized) return Promise.resolve();
       if (bootWork) return bootWork;
       const work = (async () => {
-        let chosen: string | null = null;
-        try {
-          chosen = sessionStorage.getItem('dayline:storage-mode');
-        } catch {
-          /* preference only */
-        }
-        if (chosen === 'guest') {
-          identityState.value = 'guest';
-          await load();
-        } else await switchMode('account', false);
+        // A valid session always opens its account; anonymous sessions fall back to local records.
+        await switchMode('account', false);
       })();
       const result = work.finally(() => {
         if (bootWork === result) bootWork = null;

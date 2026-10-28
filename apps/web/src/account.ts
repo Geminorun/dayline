@@ -1,4 +1,8 @@
-import { sessionStatusSchema, userDtoSchema } from '@dayline/contracts';
+import {
+  sessionStatusSchema,
+  userDtoSchema,
+  successDtoSchema,
+} from '@dayline/contracts';
 import { readonly, ref } from 'vue';
 import type { UserDto } from '@dayline/contracts';
 import { ClientError } from '@dayline/api-client';
@@ -94,6 +98,15 @@ export function useAccount() {
   function announce() {
     channel?.postMessage({ type: 'identity-may-have-changed' });
   }
+  async function logout() {
+    await api.request('/api/v1/auth/logout', {
+      method: 'POST',
+      account: true,
+      body: {},
+      decode: successDtoSchema.parse,
+    });
+    clear();
+  }
   return {
     pauseProbes,
     serverTime: readonly(serverTime),
@@ -102,5 +115,6 @@ export function useAccount() {
     refresh,
     clear,
     announce,
+    logout,
   };
 }

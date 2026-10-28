@@ -622,6 +622,12 @@ onBeforeUnmount(() => {
         ><button v-if="recoveryId" :disabled="busy" @click="query()">
           查询本次提交结果
         </button>
+        <RouterLink
+          v-if="jobs.some((job) => job.status === 'committed')"
+          class="settings-link"
+          to="/drafts"
+          >恢复合并前的未提交修改</RouterLink
+        >
       </section></template
     >
     <section v-if="plan && !isEmailCallback && own()" class="record-panel">

@@ -257,7 +257,8 @@ describe('minimal record interface', () => {
     expect(requests.filter((path) => path.endsWith(entryId))).toHaveLength(0);
     await button(wrapper, '确认移入回收站').trigger('click');
     await flushPromises();
-    expect(wrapper.text()).toContain('已保存到云端');
+    expect(useWorkspace().notice.value).toContain('已保存到云端');
+    expect(wrapper.text()).not.toContain('已保存到云端');
     await router.push('/trash');
     await flushPromises();
     expect(wrapper.text()).toContain('阅读三体');

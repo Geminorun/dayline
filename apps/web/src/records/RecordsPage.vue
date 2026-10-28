@@ -40,6 +40,7 @@ import CategoryManager from './CategoryManager.vue';
 import TimelineView from './TimelineView.vue';
 import PlannerIcon from '../components/PlannerIcon.vue';
 import PlannerDialog from '../components/PlannerDialog.vue';
+import FileTools from '../components/FileTools.vue';
 import {
   localEnvironment,
   localRepository,
@@ -50,6 +51,7 @@ const route = useRoute(),
   router = useRouter();
 const {
   mode,
+  identityState,
   snapshot,
   loading,
   busy,
@@ -58,9 +60,9 @@ const {
   serverTime,
   readonly,
   ensure,
-  load,
   mutate,
 } = useWorkspace();
+const { loading: accountLoading } = useAccount();
 const { selectedDate, filter, scale, anchor, limit } = toRefs(recordView);
 const timeline = ref<InstanceType<typeof TimelineView> | null>(null);
 const editor = ref<{
@@ -447,7 +449,7 @@ const recent = computed(
       </button>
     </div>
     <section
-      v-if="mode === 'guest'"
+      v-if="mode === 'guest' && identityState === 'guest'"
       class="account-panel"
       aria-label="记录保存方式"
     >
@@ -458,14 +460,16 @@ const recent = computed(
         </p>
       </div>
     </section>
-    <p v-if="loading" class="notice" role="status">正在完整读取记录…</p>
-    <p v-if="error" class="error" role="alert">
-      {{ error }}
-      <button class="button subtle" :disabled="loading || busy" @click="load">
-        重试读取
-      </button>
-    </p>
-    <p v-if="notice" class="notice" role="status">{{ notice }}</p>
+    <div
+      v-if="!snapshot && (loading || accountLoading)"
+      class="records-skeleton"
+      role="status"
+      aria-label="正在加载记录"
+    >
+      <div class="skeleton-date"></div>
+      <div class="skeleton-stats"><i></i><i></i><i></i></div>
+      <div class="skeleton-content"></div>
+    </div>
     <template v-if="snapshot">
       <p v-if="readonly" class="notice">账号受限，当前仅可查看。</p>
       <template v-if="contentView === 'day' || contentView === 'timeline'">
@@ -619,6 +623,7 @@ const recent = computed(
                 aria-label="搜索时间轴事项"
                 placeholder="搜索记录…"
             /></label>
+            <FileTools />
           </div>
           <div class="timeline-range-toolbar">
             <div
@@ -741,13 +746,7 @@ const recent = computed(
                 @click="searchOpen = !searchOpen"
               >
                 <PlannerIcon name="search" /></button
-              ><RouterLink
-                class="icon-btn"
-                to="/data"
-                aria-label="导入导出记录"
-                title="导入 / 导出记录"
-                ><PlannerIcon name="download"
-              /></RouterLink>
+              ><FileTools />
             </div>
             <div class="state-filters" role="group" aria-label="筛选记录状态">
               <button

@@ -2,6 +2,17 @@
 <template>
   <svg class="sprite" aria-hidden="true">
     <defs>
+      <symbol id="i-upload" viewBox="0 0 24 24">
+        <path d="M12 16V3m-4 4 4-4 4 4M4 16v4h16v-4" />
+      </symbol>
+      <symbol id="i-logout" viewBox="0 0 24 24">
+        <path d="M9 4H4v16h5m5-12 4 4-4 4m-6-4h12" />
+      </symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24">
+        <path
+          d="M10.3 4.5 2.8 18a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0ZM12 9v4m0 3v.5"
+        />
+      </symbol>
       <symbol id="i-calendar" viewBox="0 0 24 24">
         <rect x="3" y="5" width="18" height="16" rx="3"></rect>
         <path d="M7 3v4m10-4v4M3 11h18m-13 4h1m6 0h1m-8 3h1"></path>

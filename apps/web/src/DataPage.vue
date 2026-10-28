@@ -30,6 +30,7 @@ import { guestRepository } from './adapters/guest-repository';
 import { localRepository, localEnvironment } from './adapters/local-repository';
 import { errorMessage } from './records/record-service';
 const account = useAccount();
+defineProps<{ action?: 'import' | 'export' }>();
 const space = useWorkspace(),
   client = createImportsClient(api),
   operation = ref<FileOperation | null>(null),
@@ -640,13 +641,20 @@ const fieldLabel: Record<string, string> = {
   />
   <template v-else>
     <section class="records-page">
-      <p class="eyebrow">DAYLINE · 数据管理</p>
-      <h1>导入与导出</h1>
+      <h1>
+        {{
+          action === 'import'
+            ? '导入记录'
+            : action === 'export'
+              ? '导出记录'
+              : '导入与导出'
+        }}
+      </h1>
       <p v-if="scopeKey">
         {{
           space.mode.value === 'guest'
-            ? '游客 · 仅本机保存'
-            : '当前已验证账号 · 云端记录'
+            ? '此设备上的游客记录'
+            : '当前账号的云端记录'
         }}
       </p>
       <p v-if="initializing || recovering" role="status" class="notice">
@@ -661,28 +669,46 @@ const fieldLabel: Record<string, string> = {
         <button class="secondary" @click="initialize">重新准备数据管理</button>
       </div>
       <p>
-        CSV 包含全部活动事项；完整 JSON
-        包含分类配色、重点及仍保留的回收站。缺少文件行不会删除现有记录。
+        {{
+          action === 'import'
+            ? '选择 CSV 或 JSON 文件，先核对预览再导入。文件中未包含的记录会保留。'
+            : action === 'export'
+              ? 'CSV 导出全部活动事项；完整 JSON 包含分类配色、重点及回收站记录。'
+              : 'CSV 包含全部活动事项；完整 JSON 包含分类配色、重点及仍保留的回收站。缺少文件行不会删除现有记录。'
+        }}
       </p>
       <p v-if="error" role="alert" class="error">{{ error }}</p>
       <p v-if="notice" role="status" class="notice">{{ notice }}</p>
-      <section class="record-panel">
-        <h2>文件</h2>
-        <button class="secondary" @click="download(csvTemplate(), 'csv', true)">
+      <section class="record-panel data-file-actions">
+        <h2 class="sr-only">文件操作</h2>
+        <button
+          v-if="action !== 'export'"
+          class="secondary"
+          @click="download(csvTemplate(), 'csv', true)"
+        >
           下载 CSV 模板
         </button>
-        <button :disabled="blocked" @click="exportFile('csv')">导出 CSV</button
-        ><button :disabled="blocked" @click="exportFile('json')">
+        <button
+          v-if="action !== 'import'"
+          :disabled="blocked"
+          @click="exportFile('csv')"
+        >
+          导出 CSV</button
+        ><button
+          v-if="action !== 'import'"
+          :disabled="blocked"
+          @click="exportFile('json')"
+        >
           导出完整 JSON
         </button>
-        <label
+        <label v-if="action !== 'export'"
           >选择 CSV / JSON 文件（UTF-8，最多 10 MiB）<input
             type="file"
             accept=".csv,.json,text/csv,application/json"
             :disabled="blocked || space.readonly.value"
             @change="select"
         /></label>
-        <p>
+        <p v-if="action !== 'export'">
           日期填写
           YYYY-MM-DD，多重点日用分号隔开。先预览并处理所有错误与冲突，确认后整笔保存。
         </p>
@@ -698,14 +724,23 @@ const fieldLabel: Record<string, string> = {
             继续只导出云端记录
           </button>
         </div>
-        <button class="secondary" :disabled="blocked" @click="recover">
+        <button
+          v-if="action !== 'export'"
+          class="secondary"
+          :disabled="blocked"
+          @click="recover"
+        >
           查询或恢复原任务
         </button>
-        <button v-if="operation && !plan" :disabled="blocked" @click="retry">
+        <button
+          v-if="action !== 'export' && operation && !plan"
+          :disabled="blocked"
+          @click="retry"
+        >
           用原文件重试准备
         </button>
         <button
-          v-if="operation && !plan"
+          v-if="action !== 'export' && operation && !plan"
           class="secondary"
           :disabled="blocked"
           @click="repreview"
@@ -713,7 +748,7 @@ const fieldLabel: Record<string, string> = {
           保留原文件，重新建立预览
         </button>
       </section>
-      <section v-if="plan" class="record-panel">
+      <section v-if="action !== 'export' && plan" class="record-panel">
         <h2>
           {{
             plan.status === 'committed'

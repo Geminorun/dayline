@@ -316,6 +316,14 @@ async function confirmed(
     if (userId) {
       try {
         await localRepository.removeDraft(userId, draftId, requestRevision);
+        if (props.draft && props.draft.entryId === id.value) {
+          // Remove only the restored revision; a newer edit in another tab stays intact.
+          await localRepository.removeDraft(
+            userId,
+            props.draft.draftId,
+            props.draft.inputRevision,
+          );
+        }
       } catch {
         localError.value =
           '已保存到云端，但本机草稿清理失败，可稍后核对后放弃。';
@@ -523,8 +531,11 @@ async function copy() {
       {{
         local
           ? '游客记录保存在当前浏览器。'
-          : '未保存的修改会暂存为本机草稿，点击保存后提交。'
+          : '未提交的修改会暂存在此设备，点击保存后上传。'
       }}
+    </p>
+    <p v-if="draft" class="editor-recovery-note" role="status">
+      已恢复上次未提交的修改，保存后才会上传。
     </p>
     <p v-if="status" role="status" class="notice">{{ status }}</p>
     <p v-if="localError" role="alert" class="error">{{ localError }}</p>

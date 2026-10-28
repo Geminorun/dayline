@@ -1,6 +1,5 @@
 import DeletionPage from './DeletionPage.vue';
 import IdentityPage from './IdentityPage.vue';
-import DataPage from './DataPage.vue';
 import DraftsPage from './DraftsPage.vue';
 import AuthPage from './AuthPage.vue';
 import AccountPage from './AccountPage.vue';
@@ -23,7 +22,7 @@ export const routes: RouteRecordRaw[] = [
   { path: '/account', redirect: '/settings' },
   { path: '/settings', component: AccountPage },
   { path: '/drafts', component: DraftsPage },
-  { path: '/data', component: DataPage },
+  { path: '/data', component: () => import('./DataPage.vue') },
   { path: '/identity', component: IdentityPage },
   { path: '/account-deletion', component: DeletionPage },
   { path: '/auth/email-binding', component: IdentityPage },
