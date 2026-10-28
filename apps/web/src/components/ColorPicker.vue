@@ -78,7 +78,7 @@ function custom(event: Event) {
             type="color"
             :value="modelValue"
             :disabled="disabled"
-            @input="custom"
+            @change="custom"
         /></label>
       </div>
     </div>

@@ -5,6 +5,7 @@ import { createGuestPackage, type GuestMutation } from '@dayline/contracts';
 import { nextCategoryColor } from '@dayline/core';
 import CategoryManager from '../src/records/CategoryManager.vue';
 import PasswordInput from '../src/components/PasswordInput.vue';
+import ColorPicker from '../src/components/ColorPicker.vue';
 
 describe('category tools and themed controls', () => {
   it('keeps names inline, uses versioned palette updates and retains transfer confirmation for deletion', async () => {
@@ -109,4 +110,18 @@ describe('category tools and themed controls', () => {
       w.unmount();
     }
   });
+});
+
+it('waits for native custom-color confirmation before emitting a save, rather than persisting every preview movement', async () => {
+  const w = mount(ColorPicker, { props: { modelValue: '#123456' } });
+  try {
+    const picker = w.get<HTMLInputElement>('input[type=color]');
+    picker.element.value = '#abcdef';
+    await picker.trigger('input');
+    expect(w.emitted('update:modelValue')).toBeUndefined();
+    await picker.trigger('change');
+    expect(w.emitted('update:modelValue')).toEqual([['#ABCDEF']]);
+  } finally {
+    w.unmount();
+  }
 });
