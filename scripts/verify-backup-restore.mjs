@@ -12,6 +12,8 @@ import { createApp } from '../apps/api/dist/app.factory.js';
 import { PrismaService } from '../apps/api/dist/database/prisma.service.js';
 import { AuthAdapter } from '../apps/api/dist/auth/adapter/auth-adapter.js';
 import { MaintenanceService } from '../apps/api/dist/maintenance/maintenance.service.js';
+import { repositoryMigrations } from './migration-manifest.mjs';
+const expectedMigrations = await repositoryMigrations();
 const require = createRequire(
     new URL('../apps/api/package.json', import.meta.url),
   ),
@@ -321,6 +323,13 @@ try {
   await migrate.completed;
   const clone = new Client({ connectionString: cloneUrl.toString() });
   await clone.connect();
+  const appliedMigrations = await clone.query(
+    'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name',
+  );
+  assert.deepEqual(
+    appliedMigrations.rows.map((row) => row.migration_name),
+    expectedMigrations,
+  );
   // Restored sessions/standard links predate the recovery decision. Revoke before application readiness.
   await clone.query('BEGIN');
   await clone.query('UPDATE users SET auth_epoch=auth_epoch+1');
@@ -397,7 +406,7 @@ try {
     backupPath: backup,
     backupBytes: (await stat(backup)).size,
     mode: (await stat(backup)).mode & 0o777,
-    migrations: 8,
+    migrations: expectedMigrations.length,
     verification: {
       categories: 6,
       entries: 2,

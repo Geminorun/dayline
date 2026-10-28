@@ -23,6 +23,8 @@ import { request as httpRequest } from 'node:http';
 import { createServer as createTcpServer } from 'node:net';
 import { startTestHostNginx } from './test-host-nginx.mjs';
 import { redactDiagnostics } from './deployment-diagnostics.mjs';
+import { repositoryMigrations } from './migration-manifest.mjs';
+const expectedMigrations = await repositoryMigrations();
 
 const suffix = randomUUID().slice(0, 8);
 const project = `dayline-deploy-${suffix}`;
@@ -393,12 +395,16 @@ try {
     );
     assert.equal(response.status, 401);
   }
-  assert.equal(
-    await sql(
-      'SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL',
-      database,
-    ),
-    '8',
+  assert.deepEqual(
+    (
+      await sql(
+        'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name',
+        database,
+      )
+    )
+      .split('\n')
+      .filter(Boolean),
+    expectedMigrations,
   );
   assert.equal(
     await sql(
@@ -463,7 +469,7 @@ try {
   const report = {
     passed: true,
     postgres: 17,
-    migrations: 8,
+    migrations: expectedMigrations.length,
     singleContainerWebAndApi: true,
     nginxMode: 'host',
     nginxTlsGateway: true,
