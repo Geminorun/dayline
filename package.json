@@ -14,7 +14,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "pnpm build:shared && pnpm -r --workspace-concurrency=1 test",
-    "test:deployment": "node --test scripts/deploy/*.test.mjs scripts/deployment-diagnostics.test.mjs",
+    "test:deployment": "node --test scripts/ci/*.test.mjs scripts/deploy/*.test.mjs scripts/deployment-diagnostics.test.mjs",
     "test:diagnostics": "python3 -m unittest discover -s scripts/diagnostics -p 'test_*.py'",
     "test:integration": "pnpm build && pnpm db:test:deploy && pnpm --filter @dayline/api test:integration",
     "db:test:deploy": "pnpm --filter @dayline/api exec prisma migrate deploy --config prisma.test.config.ts",
@@ -27,7 +27,13 @@
     "verify:capacity": "pnpm build && node scripts/verify-capacity.mjs",
     "verify:backup-restore": "pnpm build && node scripts/verify-backup-restore.mjs",
     "verify:containers": "pnpm build && node scripts/verify-containers.mjs",
-    "check:i18n": "node scripts/check-i18n.mjs"
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "build:server": "pnpm --filter @dayline/api... --filter @dayline/web... -r build",
+    "typecheck:server": "pnpm build:shared && pnpm --filter @dayline/api... --filter @dayline/web... -r typecheck",
+    "test:server": "pnpm build:shared && pnpm --filter @dayline/api... --filter @dayline/web... -r --workspace-concurrency=1 test",
+    "test:integration:server": "pnpm build:server && pnpm db:test:deploy && pnpm --filter @dayline/api test:integration",
+    "lint:server": "eslint apps/api apps/web packages scripts eslint.config.mjs",
+    "format:check:server": "prettier --check --ignore-unknown apps/api apps/web packages scripts infra .github/workflows/server.yml '*.{json,yaml,yml,mjs}'"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

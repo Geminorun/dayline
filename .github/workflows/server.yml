@@ -1,0 +1,281 @@
+name: Dayline server
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: publish = check/build/deploy; check = checks only; retry/verify = reuse a prepared run
+        type: choice
+        options: [publish, check, retry, verify]
+        default: publish
+      release_run_id:
+        description: Source Dayline server run ID, required only for retry/verify
+        type: string
+
+permissions:
+  contents: read
+
+# No workflow-level cancellation: an unrelated push must not interrupt a migration.
+jobs:
+  changes:
+    name: Detect server changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      affected: ${{ steps.scope.outputs.affected }}
+      shared: ${{ steps.scope.outputs.shared }}
+      checks: ${{ steps.scope.outputs.checks }}
+      build: ${{ steps.scope.outputs.build }}
+      prepare: ${{ steps.scope.outputs.prepare }}
+      mode: ${{ steps.scope.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+      - name: Route changes without GitHub file-list limits
+        id: scope
+        run: node scripts/ci/server-changes.mjs
+
+  check:
+    name: Web/API checks
+    needs: changes
+    if: needs.changes.outputs.checks == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: server-check-${{ github.event.pull_request.number || github.ref }}-${{ needs.changes.outputs.mode }}
+      cancel-in-progress: true
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: dayline
+          POSTGRES_PASSWORD: dayline_ci_only
+          POSTGRES_DB: dayline_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U dayline -d dayline_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      DATABASE_URL: postgresql://dayline:dayline_ci_only@127.0.0.1:5432/dayline_test
+      TEST_DATABASE_URL: postgresql://dayline:dayline_ci_only@127.0.0.1:5432/dayline_test
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm --filter dayline --filter @dayline/api... --filter @dayline/web... install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm check:i18n
+      - run: pnpm format:check:server
+      - run: pnpm lint:server
+      - run: pnpm typecheck:server
+      - run: pnpm test:server
+      - run: pnpm test:deployment
+      - run: pnpm test:diagnostics
+      - run: pnpm test:integration:server
+
+  mini_compat:
+    name: Shared package compatibility
+    needs: changes
+    if: needs.changes.outputs.checks == 'true' && needs.changes.outputs.shared == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: server-shared-${{ github.event.pull_request.number || github.ref }}-${{ needs.changes.outputs.mode }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm --filter dayline --filter @dayline/miniapp... install --frozen-lockfile
+      - run: pnpm build:shared
+      - run: pnpm --filter @dayline/miniapp typecheck
+      - run: pnpm --filter @dayline/miniapp test
+      - run: pnpm --filter @dayline/miniapp build
+
+  build:
+    name: Prepare image
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    concurrency:
+      group: server-build-${{ github.ref }}
+      cancel-in-progress: true
+    outputs:
+      attempt: ${{ steps.metadata.outputs.attempt }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+      - uses: docker/setup-buildx-action@v3
+      - name: Select immutable release
+        id: metadata
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          echo "name=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "attempt=$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        id: image
+        with:
+          context: .
+          push: true
+          load: true
+          platforms: linux/amd64
+          tags: ${{ steps.metadata.outputs.name }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Install native Nginx for the isolated CI fixtures
+        run: |
+          if ! command -v nginx >/dev/null || ! command -v htpasswd >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends nginx apache2-utils
+          fi
+      - name: Verify diagnostic authentication and snapshot publishing
+        run: python3 -m unittest discover -s scripts/diagnostics -p 'test_*.py'
+      - name: Verify deployment through an existing host Nginx
+        env:
+          DAYLINE_TEST_IMAGE: ${{ steps.metadata.outputs.name }}@${{ steps.image.outputs.digest }}
+        run: node scripts/verify-containers.mjs
+      - name: Write verified release manifest
+        env:
+          DAYLINE_IMAGE: ${{ steps.metadata.outputs.name }}@${{ steps.image.outputs.digest }}
+          RELEASE_MANIFEST: ${{ runner.temp }}/dayline-release/release.json
+        run: node scripts/deploy/release.mjs write
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dayline-release-${{ github.sha }}
+          path: ${{ runner.temp }}/dayline-release/release.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 90
+
+  result:
+    name: Server result
+    if: always()
+    needs: [changes, check, mini_compat, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Require all applicable checks
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          CHECKS_REQUIRED: ${{ needs.changes.outputs.checks }}
+          CHECK_RESULT: ${{ needs.check.result }}
+          SHARED_REQUIRED: ${{ needs.changes.outputs.shared }}
+          SHARED_RESULT: ${{ needs.mini_compat.result }}
+          BUILD_REQUIRED: ${{ needs.changes.outputs.build }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          test "$CHANGES_RESULT" = success
+          if [ "$CHECKS_REQUIRED" = true ]; then test "$CHECK_RESULT" = success; fi
+          if [ "$SHARED_REQUIRED" = true ]; then test "$SHARED_RESULT" = success; fi
+          if [ "$BUILD_REQUIRED" = true ]; then test "$BUILD_RESULT" = success; fi
+          echo 'All applicable server checks passed; unrelated changes require no deployment.' >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: Validate release
+    needs: [changes, result, build]
+    if: always() && needs.result.result == 'success' && needs.changes.outputs.prepare == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      image: ${{ steps.release.outputs.image }}
+      revision: ${{ steps.release.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+      - name: Select the exact prepared run
+        id: source
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_MODE: ${{ needs.changes.outputs.mode }}
+          RELEASE_SOURCE_RUN: ${{ inputs.release_run_id }}
+          BUILD_RUN_ATTEMPT: ${{ needs.build.outputs.attempt }}
+        run: node scripts/deploy/release.mjs select
+      - uses: actions/download-artifact@v4
+        with:
+          name: dayline-release-${{ steps.source.outputs.revision }}
+          path: ${{ runner.temp }}/dayline-release
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.source.outputs.run_id }}
+      - name: Validate the release manifest
+        id: release
+        env:
+          RELEASE_MANIFEST: ${{ runner.temp }}/dayline-release/release.json
+          RELEASE_REVISION: ${{ steps.source.outputs.revision }}
+          RELEASE_RUN_ID: ${{ steps.source.outputs.run_id }}
+          RELEASE_RUN_ATTEMPT: ${{ steps.source.outputs.run_attempt }}
+        run: node scripts/deploy/release.mjs read
+
+  deploy:
+    name: Deploy server
+    needs: [changes, release]
+    if: needs.changes.outputs.mode != 'verify'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    concurrency:
+      group: dayline-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+      - name: Reject a superseded server release
+        id: current
+        env:
+          RELEASE_REVISION: ${{ needs.release.outputs.revision }}
+        run: node scripts/deploy/release.mjs current
+      - name: Deploy over verified SSH
+        if: steps.current.outputs.current == 'true'
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          APP_ENV: ${{ secrets.APP_ENV }}
+          DAYLINE_IMAGE: ${{ needs.release.outputs.image }}
+          RELEASE_REVISION: ${{ needs.release.outputs.revision }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/deploy/dispatch.mjs

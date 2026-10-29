@@ -70,28 +70,50 @@ APP_ENV 必填字段：`POSTGRES_CONTAINER`、`POSTGRES_PASSWORD`、`BETTER_AUTH
 
 ## 发布过程
 
-保留两个 workflow，不增加 Secrets；main 推送后先检查，通过后自动发布：
+Web 与 API 共用 **Dayline server**（`.github/workflows/server.yml`），检查、构建与部署在同一次运行中完成。原 `backend.yml` / `deploy.yml` 已合并，不再通过 `workflow_run` 串联。小程序上传流水线留待后续接入。
 
-| Workflow | 触发方式 | 工作 |
+### 自动触发与范围
+
+PR（目标 main）和 main 推送先运行轻量变更识别，始终返回 **Server result** 汇总检查。只有相关变化才启动重任务：
+
+| 变化 | 服务器检查 / 构建 / 部署 | 小程序兼容性检查 |
 | --- | --- | --- |
-| Dayline checks（backend.yml） | 推送 main、PR、手动运行 | main 并行执行代码 / PG17 检查与镜像构建 / 本机 Nginx 演练，保存镜像 digest；整次 CI 全部成功后才允许发布 |
-| Deploy Dayline（deploy.yml） | main 推送的 Dayline checks 成功后自动触发；也保留手动运行 | 自动发布绑定触发它的 CI 提交、运行 ID 和 attempt，手动发布查找同一提交成功 CI；复用镜像，SSH 备份、迁移、启动应用和验证公共 HTTPS |
+| `apps/web/**`、`apps/api/**`（含 Prisma 迁移） | 是 | 否 |
+| `packages/**`、根目录依赖 / 锁文件 / 公共工具配置 | 是 | 是，不上传微信 |
+| `infra/**`、Docker / Compose、服务器脚本与工作流 | 是 | 否 |
+| `apps/miniapp/**`、未来的小程序上传脚本 / 工作流 | 否 | 否 |
+| 普通文档、截图、AGENTS.md | 否 | 否 |
 
-PR 和其他分支的手动 CI 只运行检查，不推送镜像或产生可发布清单。main 的 CI、演练均不读取生产 Secrets，不访问生产服务器；原生 Nginx 仅安装在临时 CI runner 中。
+分类规则集中在 `scripts/deploy/server-scope.mjs`，同时用于触发识别和过时版本检查。推送同时检查整个 before..after 的文件差异与提交记录（含回退 / 重新应用、合并时的修改），PR 使用 merge base；本地 Git 不受 GitHub 300 个变更文件限制，删除 / 移出监控目录也计入。识别失败会失败关闭，不能当成“没有变化”。
 
-日常发布只需：
+PR 只执行检查 / 构建验证，不推送镜像、不读取生产 Secrets。main 的相关提交并行执行 Web/API 检查（含 PG17 集成测试）和镜像构建 / 本机 Nginx 演练，两边及适用的共享包兼容检查全部成功后，才允许发布固定 digest 镜像。普通服务器检查不递归构建小程序；共享包 / 公共配置变化暂在本工作流中验证小程序兼容性。
 
-1. 推送或合并到 main，自动运行 **Dayline checks**，完成测试、构建与演练。
-2. 全部成功后，**Deploy Dayline** 自动发布同一次 CI 生成的镜像，不重复测试、构建或演练。
-3. 查看自动发布结果；公共 readiness、版本 SHA 和网页都通过才记为成功。
+若仓库启用了分支保护，将必需状态检查设为 **Server result**，替换旧的 `check`。文档或小程序专用提交会得到成功的汇总结果，不会因为整条工作流被 paths 跳过而一直等待检查。
 
-失败、取消、PR 或其他仓库的 CI 不会发布；仅手动运行 Dayline checks 也不会自动发布。自动发布开始 SSH 操作前再次核对 main 的最新提交，已有新提交时跳过旧版本。发布串行执行，进行中的备份 / 迁移不会被新推送取消。
+### 日常发布与手动操作
 
-需要手动重试时，Actions → **Deploy Dayline** → **Run workflow**，选择 main。仍保留 `verify_only`，仅验证可复用的发布清单，不连接生产服务器。若 `production` Environment 已设置审批规则，自动触发后仍遵守该规则。
+1. 推送 / 合并到 main；有服务器相关变化时，自动检查、构建和演练。
+2. **Server result** 通过后，同一次运行使用已构建镜像部署，不重复构建。
+3. 查看 **Deploy server**；公共 readiness、版本 SHA 和网页通过后才记为成功。
 
-需要先确认发布清单时，勾选 `verify_only`；只查询和校验已准备的清单，不连接服务器、不读取生产 Secrets。发布清单是普通 JSON，只含仓库、提交 SHA、镜像 digest 和 CI run / attempt，不含配置或凭据，保留 90 天。
+Actions → **Dayline server** → **Run workflow**，选择 main：
 
-只接受 main 上 **相同 SHA** 的成功 CI 产物，不按“最近一次成功”退回旧版本，不使用可变 latest tag。若 CI 仍在运行、失败、没有发布清单或清单过期，发布会提前停止，提示等待或手动运行 **Dayline checks** 一次；需要重新运行旧任务时，也应从 main 新开发布任务，旧任务仍引用其原提交的 workflow。
+| mode | 操作 | release_run_id |
+| --- | --- | --- |
+| `publish`（默认） | 强制完整检查、准备新镜像并部署，即使没有相关文件变化 | 留空 |
+| `check` | 强制检查 / 编译验证，不推送镜像、不连接生产服务器 | 留空 |
+| `retry` | 复用指定运行的已验证镜像重试部署，不重复检查或构建 | 必填，源运行 URL 末尾的数字 |
+| `verify` | 仅选择、下载并校验指定运行的发布清单，不连接服务器、不读取生产 Secrets | 同上 |
+
+只允许从 main 手动运行。新工作流首次使用 `publish`；旧 Dayline checks 的清单不适用于新的汇总闸门。后续也可对失败的部署直接使用 GitHub 的 **Re-run failed jobs**；清单绑定成功构建的 attempt，即使只重试部署，也不会错认成新构建。
+
+`retry` / `verify` 指定明确的源运行，不查找“最近一次成功”版本。源运行必须属于本仓库、main、`server.yml`、push / manual 事件，已经结束，并且 **Web/API checks、Prepare image、Server result** 全部成功；即使源运行最终因 SSH 部署失败，也可以复用。来源、SHA、构建 attempt 和镜像 digest 都会核对；缺失 / 过期清单或失败 / 跳过的闸门不能发布。清单保留 90 天，仅含仓库、提交、镜像和运行元数据。
+
+### 发布串行与新提交
+
+只在检查 / 构建 job 上取消过时任务，不设置工作流级取消。生产部署按 `dayline-production` 串行；新的推送不会中断正在进行的备份或数据库迁移。现有 `production` Environment 审批规则继续生效。
+
+开始 SSH 前重新获取 main：目标必须仍在 main 历史中，且其后没有服务器相关提交。只有小程序 / 文档的新提交不会阻止已验证的服务器版本；有更新的服务器或共享配置提交时跳过旧版本，等待新版本通过检查。该规则对自动发布和手动 retry 一致，不提供绕过过时保护的回滚入口。
 
 服务器执行过程保留这些步骤：
 
@@ -101,7 +123,7 @@ PR 和其他分支的手动 CI 只运行检查，不推送镜像或产生可发�
 4. 仅停止上一版应用写入，备份目标库，再执行 Prisma migrate deploy。备份失败且迁移未开始时，尝试恢复上一版应用；不重启 Nginx。禁止 reset、drop 或 db push。
 5. 启动应用、检查 readiness，再从公共 HTTPS 验证 SHA 和网页；通过后更新 `current` 和 `deployed-revision`。
 
-检查与镜像准备并行，耗时不再简单累加；只有整次 CI 成功的清单才可复用，构建先结束不代表已获准发布。总体验证和镜像准备仍需时间，但每个 main 提交只做一次；后续发布复用结果。Docker 构建只编译共享包、API 和 Web，小程序由 CI 独立验证；文档、workflow 与部署脚本修改不再使应用编译层失效。实际发布耗时仍取决于镜像下载、数据库备份和迁移，不承诺固定两分钟。
+检查与镜像准备并行，耗时不再简单累加；只有相关检查与汇总闸门成功的清单才可复用，构建先结束不代表已获准发布。总体验证和镜像准备仍需时间，但每个 main 提交只做一次；后续发布复用结果。Docker 构建只安装 / 编译服务器所需工作区，小程序仅在共享变化时做兼容验证；文档、workflow 与部署脚本修改不再使应用编译层失效。实际发布耗时仍取决于镜像下载、数据库备份和迁移，不承诺固定两分钟。
 
 首次不必手动建库。更新只补未执行的迁移，密码轮换需先在数据库显式完成再同步 Secret。PG 被其原 Compose 重建后，需要重新补回专用网络连接；长期可在原 PG 配置声明同一外部网络，自动重启策略也由原服务管理。
 
@@ -115,7 +137,7 @@ PR 和其他分支的手动 CI 只运行检查，不推送镜像或产生可发�
 
 应用日志带 UTC 时间、INFO / WARN / ERROR、模块名和 requestId；成功健康检查不记录请求日志，失败仍记录。排查邮件时查找 MAIL_ACCEPTED / MAIL_DELIVERY_FAILED；前者只代表传输受理，最终送达仍以 Resend 状态为准。LOG_LEVEL 默认 info，warn 隐藏成功业务请求，error 只保留错误。
 
-代码修改提交并推送 main 后，Dayline checks 成功即自动更新服务器；手动重试发布时新建一次 Deploy Dayline，重启旧容器或重跑旧版本任务不会带入新代码。可用 `docker exec dayline-app-1 printenv RELEASE_REVISION` 核对运行版本，用 `docker logs --follow --since 5m dayline-app-1` 查看最近日志；旧日志会保留，不能仅凭历史健康检查记录判断新版本是否生效。
+服务器相关代码推送 main 后，Dayline server 的汇总检查成功即自动更新服务器；需要新代码时使用 publish，retry 只复用指定旧运行的镜像，重启旧容器不会带入新代码。可用 `docker exec dayline-app-1 printenv RELEASE_REVISION` 核对运行版本，用 `docker logs --follow --since 5m dayline-app-1` 查看最近日志；旧日志会保留，不能仅凭历史健康检查记录判断新版本是否生效。
 
 发布前备份不代替每日备份。上线前设置每日任务、至少七天保留、受控异地副本并定期在新库恢复。脚本不自动删除历史发布、镜像或备份，恢复闸门见 [自托管与恢复](self-hosting.md)。
 

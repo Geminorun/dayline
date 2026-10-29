@@ -56,7 +56,7 @@ pnpm dev
 
 ## 生产部署
 
-生产复用服务器已有 PostgreSQL 17 / 18 容器，缺少专用账号 / 数据库时自动创建；Web 与 API 共用一个镜像，由已有本机 Nginx / HTTPS 反代。推送 main 后 **Dayline checks** 自动检查、构建、演练并保存镜像 digest；手动 **Deploy Dayline** 复用同一提交的已验证镜像，执行 SSH 发布、备份、迁移和公共入口检查。只需六项 GitHub Secrets，不再部署 Nginx 容器或传输 TLS 证书，具体见 [部署指南](docs/deployment.md) 和 [APP_ENV 模板](infra/production.env.example)。`compose.production.yaml` 只管理 app，不与开发用 `compose.yaml` 叠加。
+生产复用服务器已有 PostgreSQL 17 / 18 容器，缺少专用账号 / 数据库时自动创建；Web 与 API 共用一个镜像，由已有本机 Nginx / HTTPS 反代。**Dayline server** 按变更范围处理 PR 和 main：服务器相关提交才检查、构建、演练并自动部署，纯文档 / 小程序界面提交跳过服务器发布。手动支持 `publish`、`check`、指定运行的 `retry` / `verify`；固定镜像 digest、备份、迁移和公共入口校验保持不变。沿用六项 GitHub Secrets，具体见 [部署指南](docs/deployment.md) 和 [APP_ENV 模板](infra/production.env.example)。`compose.production.yaml` 只管理 app，小程序上传流程后续独立接入。
 
 ## 邮件配置
 

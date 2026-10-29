@@ -3,6 +3,7 @@ import console from 'node:console';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { git, serverRevisionIsCurrent } from './server-scope.mjs';
 
 function validateContext(repository, revision) {
   if (!/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repository || ''))
@@ -40,76 +41,75 @@ export function validateRelease(release, expected) {
   return release;
 }
 
-function eligibleRun(run, repository, revision) {
-  return (
-    run?.head_sha === revision &&
-    run.head_branch === 'main' &&
-    run.head_repository?.full_name?.toLowerCase() ===
-      repository.toLowerCase() &&
-    run.path === '.github/workflows/backend.yml' &&
-    ['push', 'workflow_dispatch'].includes(run.event) &&
-    run.status === 'completed' &&
-    run.conclusion === 'success' &&
-    Number.isSafeInteger(run.id) &&
-    run.id > 0 &&
-    Number.isSafeInteger(run.run_attempt) &&
-    run.run_attempt > 0
-  );
-}
-
-export function releaseSource(repository, revision, eventName, event) {
-  if (eventName !== 'workflow_run') {
-    validateContext(repository, revision);
-    return { revision };
-  }
-  const run = event?.workflow_run;
+/** A failed SSH deployment may reuse a run whose checks, image and gate succeeded. */
+export async function selectReleaseRun(repository, runId, getJson) {
+  if (
+    !/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repository || '') ||
+    !Number.isSafeInteger(runId) ||
+    runId < 1
+  )
+    throw new Error('Invalid source server workflow run.');
+  const run = await getJson(`/repos/${repository}/actions/runs/${runId}`);
   validateContext(repository, run?.head_sha);
-  if (run.event !== 'push' || !eligibleRun(run, repository, run.head_sha))
+  if (
+    run.id !== runId ||
+    run.head_branch !== 'main' ||
+    run.head_repository?.full_name?.toLowerCase() !==
+      repository.toLowerCase() ||
+    run.path !== '.github/workflows/server.yml' ||
+    !['push', 'workflow_dispatch'].includes(run.event) ||
+    run.status !== 'completed' ||
+    !Number.isSafeInteger(run.run_attempt) ||
+    run.run_attempt < 1
+  )
     throw new Error(
-      'Automatic deployment requires successful main push CI from this repository.',
+      'Source must be a completed main server workflow from this repository.',
     );
-  return { revision: run.head_sha, runId: run.id, runAttempt: run.run_attempt };
-}
-
-export async function selectReleaseRun(
-  repository,
-  revision,
-  getJson,
-  source = {},
-) {
-  validateContext(repository, revision);
-  const runs =
-    source.runId !== undefined
-      ? [await getJson(`/repos/${repository}/actions/runs/${source.runId}`)]
-      : ((
-          await getJson(
-            `/repos/${repository}/actions/workflows/backend.yml/runs?head_sha=${revision}&branch=main&status=success&per_page=30`,
-          )
-        ).workflow_runs ?? []);
-  for (const run of runs) {
-    if (
-      !eligibleRun(run, repository, revision) ||
-      (source.runId !== undefined && run.id !== source.runId) ||
-      (source.runAttempt !== undefined && run.run_attempt !== source.runAttempt)
-    )
-      continue;
-    const { artifacts = [] } = await getJson(
-      `/repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`,
+  const jobs = [];
+  for (let page = 1; page <= 10; page++) {
+    const result = await getJson(
+      `/repos/${repository}/actions/runs/${runId}/jobs?filter=latest&per_page=100&page=${page}`,
     );
-    if (
-      artifacts.some(
-        (artifact) =>
-          artifact.name === `dayline-release-${revision}` &&
-          artifact.expired === false &&
-          artifact.workflow_run?.id === run.id &&
-          artifact.workflow_run?.head_sha === revision,
-      )
-    )
-      return { runId: run.id, runAttempt: run.run_attempt };
+    if (!Array.isArray(result.jobs))
+      throw new Error('Missing source workflow jobs.');
+    jobs.push(...result.jobs);
+    if (result.jobs.length < 100) break;
+    if (page === 10) throw new Error('Too many workflow jobs to validate.');
   }
-  throw new Error(
-    'No prepared release for this commit. Wait for Dayline checks to succeed on main, or run Dayline checks once if its release artifact has expired.',
+  const required = ['Web/API checks', 'Prepare image', 'Server result'].map(
+    (name) => {
+      const matches = jobs.filter((job) => job.name === name);
+      const job = matches[0];
+      if (
+        matches.length !== 1 ||
+        job.status !== 'completed' ||
+        job.conclusion !== 'success' ||
+        job.run_id !== runId ||
+        job.head_sha !== run.head_sha ||
+        !Number.isSafeInteger(job.run_attempt) ||
+        job.run_attempt < 1 ||
+        job.run_attempt > run.run_attempt
+      )
+        throw new Error(`Source server gate did not succeed: ${name}.`);
+      return job;
+    },
   );
+  const { artifacts = [] } = await getJson(
+    `/repos/${repository}/actions/runs/${runId}/artifacts?per_page=100`,
+  );
+  if (
+    !artifacts.some(
+      (artifact) =>
+        artifact.name === `dayline-release-${run.head_sha}` &&
+        artifact.expired === false &&
+        artifact.workflow_run?.id === runId &&
+        artifact.workflow_run?.head_sha === run.head_sha,
+    )
+  )
+    throw new Error(
+      'Source release artifact is missing or expired; run publish to prepare a new image.',
+    );
+  return { revision: run.head_sha, runId, runAttempt: required[1].run_attempt };
 }
 
 async function getGitHubJson(repositoryPath) {
@@ -128,26 +128,15 @@ async function getGitHubJson(repositoryPath) {
   return response.json();
 }
 
-export async function automaticReleaseIsCurrent(repository, revision, getJson) {
-  validateContext(repository, revision);
-  const ref = await getJson(`/repos/${repository}/git/ref/heads/main`);
-  validateContext(repository, ref?.object?.sha);
-  return ref.object.sha === revision;
-}
-
 async function main() {
   const repository = process.env.GITHUB_REPOSITORY;
-  const source = releaseSource(
-    repository,
-    process.env.GITHUB_SHA,
-    process.env.GITHUB_EVENT_NAME,
-    process.env.GITHUB_EVENT_NAME === 'workflow_run'
-      ? JSON.parse(await readFile(process.env.GITHUB_EVENT_PATH, 'utf8'))
-      : undefined,
-  );
-  const { revision } = source;
-  if (process.env.GITHUB_REF !== 'refs/heads/main')
-    throw new Error('Prepare and deploy releases from main.');
+  const revision = process.env.RELEASE_REVISION || process.env.GITHUB_SHA;
+  validateContext(repository, revision);
+  if (
+    process.env.GITHUB_REF !== 'refs/heads/main' ||
+    !['push', 'workflow_dispatch'].includes(process.env.GITHUB_EVENT_NAME)
+  )
+    throw new Error('Prepare and deploy releases from main push/manual runs.');
   const mode = process.argv[2];
   const output = async (values) =>
     appendFile(
@@ -157,26 +146,47 @@ async function main() {
         .join(''),
     );
   if (mode === 'select') {
-    const selected = await selectReleaseRun(
-      repository,
-      revision,
-      getGitHubJson,
-      source,
-    );
+    let source;
+    if (['retry', 'verify'].includes(process.env.RELEASE_MODE)) {
+      source = await selectReleaseRun(
+        repository,
+        Number(process.env.RELEASE_SOURCE_RUN),
+        getGitHubJson,
+      );
+    } else {
+      if (process.env.RELEASE_MODE !== 'publish')
+        throw new Error('Expected publish, retry or verify release mode.');
+      const runId = Number(process.env.GITHUB_RUN_ID),
+        runAttempt = Number(process.env.BUILD_RUN_ATTEMPT);
+      if (
+        !Number.isSafeInteger(runId) ||
+        runId < 1 ||
+        !Number.isSafeInteger(runAttempt) ||
+        runAttempt < 1 ||
+        runAttempt > Number(process.env.GITHUB_RUN_ATTEMPT)
+      )
+        throw new Error('Missing successful image job metadata.');
+      source = { revision, runId, runAttempt };
+    }
     await output({
-      revision,
-      run_id: selected.runId,
-      run_attempt: selected.runAttempt,
+      revision: source.revision,
+      run_id: source.runId,
+      run_attempt: source.runAttempt,
     });
   } else if (mode === 'current') {
-    const current =
-      process.env.GITHUB_EVENT_NAME !== 'workflow_run' ||
-      (await automaticReleaseIsCurrent(repository, revision, getGitHubJson));
+    git([
+      'fetch',
+      '--no-tags',
+      'origin',
+      '+refs/heads/main:refs/remotes/origin/main',
+    ]);
+    const head = git(['rev-parse', 'refs/remotes/origin/main']).trim();
+    const current = serverRevisionIsCurrent(revision, head);
     await output({ current: String(current) });
     if (!current)
       await appendFile(
         process.env.GITHUB_STEP_SUMMARY,
-        `Skipped automatic deployment of \`${revision}\`: main has a newer commit.\n`,
+        `Skipped deployment of \`${revision}\`: main contains a newer server change or no longer contains this commit.\n`,
       );
   } else if (mode === 'write') {
     const release = validateRelease(
@@ -199,15 +209,14 @@ async function main() {
       {
         repository,
         revision,
-        runId: source.runId ?? Number(process.env.RELEASE_RUN_ID),
-        runAttempt:
-          source.runAttempt ?? Number(process.env.RELEASE_RUN_ATTEMPT),
+        runId: Number(process.env.RELEASE_RUN_ID),
+        runAttempt: Number(process.env.RELEASE_RUN_ATTEMPT),
       },
     );
-    await output({ image: release.image });
+    await output({ image: release.image, revision });
     await appendFile(
       process.env.GITHUB_STEP_SUMMARY,
-      `Prepared release: \`${revision}\`\n\nImage: \`${release.image}\`\n\n[Successful CI run](https://github.com/${repository}/actions/runs/${release.runId})\n`,
+      `Validated server release: \`${revision}\`\n\nImage: \`${release.image}\`\n\n[Source workflow](https://github.com/${repository}/actions/runs/${release.runId})\n`,
     );
   } else
     throw new Error(
