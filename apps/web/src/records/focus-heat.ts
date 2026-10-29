@@ -31,9 +31,4 @@ export const FOCUS_HEAT_STEPS = [
   },
 ] as const;
 
-export function focusHeatLevel(count: number): number {
-  let level = 1;
-  for (const step of FOCUS_HEAT_STEPS)
-    if (count >= step.from) level = step.level;
-  return level;
-}
+export { focusHeatLevel } from '@dayline/core';

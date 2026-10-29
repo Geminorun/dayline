@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageShell from '../../components/PageShell.vue';
 import { formatBeijingTime, tr, messageRef } from '../../i18n/index';
 
 import { msg } from '@dayline/locales';
@@ -109,7 +110,7 @@ onUnload(() => {
 });
 </script>
 <template>
-  <view class="page"
+  <PageShell
     ><view class="card"
       ><text class="subtitle">{{ tr('confirm.daylineWebLogin') }}</text
       ><text class="title">{{
@@ -160,6 +161,6 @@ onUnload(() => {
       ><text v-if="state === 'cancelled'" class="text notice">{{
         tr('common.thisOperationHasBeenCancelled')
       }}</text></view
-    ></view
+    ></PageShell
   >
 </template>

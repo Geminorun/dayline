@@ -7,12 +7,6 @@
       }
     },
     {
-      "path": "pages/entries/index",
-      "style": {
-        "navigationBarTitleText": "%native.entries%"
-      }
-    },
-    {
       "path": "pages/timeline/index",
       "style": {
         "navigationBarTitleText": "%native.timeline%"
@@ -55,12 +49,6 @@
       }
     },
     {
-      "path": "pages/account/identity",
-      "style": {
-        "navigationBarTitleText": "%native.account.identity%"
-      }
-    },
-    {
       "path": "pages/account/deletion",
       "style": {
         "navigationBarTitleText": "%native.account.deletion%"
@@ -69,22 +57,19 @@
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",
-    "navigationBarBackgroundColor": "#f6f4fa",
-    "backgroundColor": "#f6f4fa"
+    "navigationBarBackgroundColor": "#f6f7f4",
+    "backgroundColor": "#f6f7f4",
+    "enablePullDownRefresh": false
   },
   "tabBar": {
-    "color": "#727789",
-    "selectedColor": "#7970CF",
+    "color": "#637268",
+    "selectedColor": "#315c4d",
     "backgroundColor": "#FFFFFF",
     "borderStyle": "white",
     "list": [
       {
         "pagePath": "pages/day/index",
         "text": "%native.tabs.day%"
-      },
-      {
-        "pagePath": "pages/entries/index",
-        "text": "%native.tabs.entries%"
       },
       {
         "pagePath": "pages/timeline/index",

@@ -13,7 +13,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "pnpm build:shared && pnpm -r test",
+    "test": "pnpm build:shared && pnpm -r --workspace-concurrency=1 test",
     "test:deployment": "node --test scripts/deploy/*.test.mjs scripts/deployment-diagnostics.test.mjs",
     "test:diagnostics": "python3 -m unittest discover -s scripts/diagnostics -p 'test_*.py'",
     "test:integration": "pnpm build && pnpm db:test:deploy && pnpm --filter @dayline/api test:integration",

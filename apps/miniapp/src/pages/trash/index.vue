@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PageShell from '../../components/PageShell.vue';
+import SyncStatus from '../../components/SyncStatus.vue';
 import { formatBeijingTime, spanLabel, tr } from '../../i18n/index';
 
 import { ref } from 'vue';
@@ -6,18 +8,8 @@ import { onShow } from '@dcloudio/uni-app';
 import type { EntryDto } from '@dayline/contracts';
 
 import { useWorkspace, records, message } from '../../workspace';
-const {
-  snapshot,
-  loading,
-  busy,
-  error,
-  notice,
-  readonly,
-  serverTime,
-  ensure,
-  load,
-  mutate,
-} = useWorkspace();
+const { snapshot, busy, error, readonly, serverTime, ensure, mutate } =
+  useWorkspace();
 const confirm = ref<
   | { kind: 'purge'; entry: EntryDto }
   | { kind: 'clear'; dataVersion: string }
@@ -51,14 +43,11 @@ async function purge() {
 }
 </script>
 <template>
-  <view class="page"
-    ><text class="title">{{ tr('mini.trash30Days') }}</text
-    ><text v-if="loading" class="text">{{ tr('common.loadingRecords2') }}</text
-    ><text v-if="error" class="text error">{{ error }}</text
-    ><text v-if="notice" class="text notice">{{ notice }}</text
-    ><button class="secondary" :disabled="busy || loading" @click="load">
-      {{ tr('common.completeReadAgain') }}</button
-    ><template v-if="snapshot"
+  <PageShell
+    ><view class="screen-heading"
+      ><text class="title">回收站</text><SyncStatus
+    /></view>
+    <template v-if="snapshot"
       ><button
         v-if="snapshot.trashEntries.length && !readonly"
         :disabled="busy"
@@ -130,6 +119,6 @@ async function purge() {
       ><button class="secondary" :disabled="busy" @click="confirm = null">
         {{ tr('common.cancel') }}
       </button></view
-    ></view
+    ></PageShell
   >
 </template>

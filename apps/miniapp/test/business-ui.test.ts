@@ -14,6 +14,7 @@ vi.mock('@dcloudio/uni-app', () => ({
   onShow(callback: () => Promise<void> | void) {
     hooks.show.push(callback);
   },
+  onUnload: () => {},
   onLoad(callback: typeof hooks.load) {
     hooks.load = callback;
   },
@@ -32,7 +33,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 function button(wrapper: ReturnType<typeof mount>, text: string) {
-  const result = wrapper.findAll('button').find((b) => b.text() === text);
+  const result = wrapper
+    .findAll('button')
+    .find((b) => b.text() === text || b.attributes('aria-label') === text);
   if (!result) throw new Error('Missing ' + text);
   return result;
 }
@@ -87,7 +90,11 @@ describe('independent miniapp business controls', () => {
     await flushPromises();
     expect(screen.text()).toContain('游客');
     await button(screen, '＋ 新建事项').trigger('click');
-    expect(navigate).toHaveBeenCalledWith({ url: '/pages/entry/edit' });
+    expect(navigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: expect.stringContaining('/pages/entry/edit?date='),
+      }),
+    );
     const editor = mount(EntryEdit);
     wrappers.push(editor);
     await hooks.load?.({});
@@ -95,12 +102,16 @@ describe('independent miniapp business controls', () => {
     const inputs = editor.findAll('input');
     await inputs[0]?.setValue('小程序本机经历');
     await inputs[1]?.setValue('2026-10-01');
-    await button(editor, '保存到本机').trigger('click');
+    await button(editor, '保存').trigger('click');
     await flushPromises();
     expect(cloud).not.toHaveBeenCalled();
     expect(screen.text()).toContain('小程序本机经历');
     expect(storage.size).toBeGreaterThan(1);
-    await screen.get('input').setValue('2026-10-25');
+    screen
+      .get('picker')
+      .element.dispatchEvent(
+        new CustomEvent('change', { detail: { value: '2026-10-25' } }),
+      );
     await flushPromises();
     await button(screen, '标记 2026-10-25 重点').trigger('click');
     await flushPromises();
@@ -113,7 +124,7 @@ describe('independent miniapp business controls', () => {
     await button(screen, '确认移入回收站').trigger('click');
     await flushPromises();
     expect(useWorkspace().snapshot.value?.trashEntries).toHaveLength(1);
-    expect(screen.get('input').element.value).toBe('2026-10-25');
+    expect(screen.get('picker').attributes('value')).toBe('2026-10-25');
     const workspace = useWorkspace(),
       userId = randomUUID(),
       guestSnapshot = workspace.snapshot.value;
@@ -208,45 +219,27 @@ describe('independent miniapp business controls', () => {
     wrappers.push(wrapper);
     await hooks.show[0]?.();
     await flushPromises();
+    const all = wrapper
+      .findAll('.status-tabs button')
+      .find((b) => b.text() === '已结束');
+    await all?.trigger('click');
     wrapper
-      .findAll('picker')[2]
-      ?.element.dispatchEvent(
+      .get('.timeline-toolbar picker')
+      .element.dispatchEvent(
         new CustomEvent('change', { detail: { value: 3 } }),
       );
     await nextTick();
     await flushPromises();
-    const statusPicker = wrapper
-      .findAll('picker')
-      .find((p) => p.attributes('range')?.includes('已结束'));
-    statusPicker?.element.dispatchEvent(
-      new CustomEvent('change', { detail: { value: 2 } }),
-    );
-    await nextTick();
-    await flushPromises();
-    // Choose the scale picker by its range, independently from filter pickers.
-    const scalePicker = wrapper
-      .findAll('picker')
-      .find((p) => p.attributes('range')?.includes('季度'));
-    scalePicker?.element.dispatchEvent(
-      new CustomEvent('change', { detail: { value: 3 } }),
-    );
-    await nextTick();
-    await flushPromises();
-    expect(wrapper.findAll('.name-row').length).toBe(
-      wrapper.findAll('.track').length,
-    );
-    expect(wrapper.findAll('.track').length).toBeLessThan(30);
-    expect(wrapper.findAll('.tick').length).toBeLessThanOrEqual(80);
-    wrapper
-      .get('.date-body')
-      .element.dispatchEvent(
-        new CustomEvent('scroll', { detail: { scrollLeft: 125 } }),
-      );
-    await nextTick();
-    expect(wrapper.get('.date-header').attributes('scroll-left')).toBe('125');
-    await wrapper.findAll('.focus')[0]?.trigger('click');
+    expect(wrapper.findAll('.name-row').length).toBeLessThan(30);
+    expect(wrapper.findAll('.timeline-lane').length).toBeLessThan(30);
+    expect(wrapper.findAll('.tick').length).toBeLessThanOrEqual(41);
+    await wrapper.findAll('.focus-marker')[0]?.trigger('click');
     expect(wrapper.text()).toContain('个重点日');
+    await wrapper.get('[aria-label="关闭"]').trigger('click');
     await wrapper.findAll('.name-row')[0]?.trigger('click');
+    expect(navigate).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('事项详情');
+    await wrapper.get('[aria-label="编辑事项"]').trigger('click');
     expect(navigate).toHaveBeenCalledWith({ url: '/pages/entry/edit?id=0' });
   });
 });

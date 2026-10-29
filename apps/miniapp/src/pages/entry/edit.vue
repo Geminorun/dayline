@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import PageShell from '../../components/PageShell.vue';
 import { spanLabel, tr, messageRef } from '../../i18n/index';
 
 import { msg } from '@dayline/locales';
 import { computed, ref, watch } from 'vue';
-import { onLoad } from '@dcloudio/uni-app';
+import { onLoad, onUnload } from '@dcloudio/uni-app';
 import {
   createEntrySchema,
+  dateSchema,
   focusRemovalDetailsSchema,
   GuestError,
   entryResultSchema,
@@ -53,7 +55,25 @@ const focuses = computed(
       .filter((f) => f.entryId === id.value && f.focused)
       .map((f) => f.date) ?? [],
 );
-watch([title, start, end, categoryId], () => (ack.value = null));
+let initialFields = '';
+watch([title, start, end, categoryId], () => {
+  ack.value = null;
+  if (ready.value) {
+    if (
+      JSON.stringify([
+        title.value,
+        start.value,
+        end.value,
+        categoryId.value,
+      ]) !== initialFields
+    )
+      uni.enableAlertBeforeUnload?.({
+        message: '还有未保存的修改，确定离开？',
+      });
+    else uni.disableAlertBeforeUnload?.();
+  }
+});
+onUnload(() => uni.disableAlertBeforeUnload?.());
 onLoad(async (query) => {
   await ensure();
   try {
@@ -69,13 +89,26 @@ onLoad(async (query) => {
     entry.value = found ? { ...found } : null;
     id.value = found?.id ?? (await newId());
     title.value = found?.title ?? '';
-    start.value = found?.startDate ?? today.value;
+    start.value =
+      found?.startDate ??
+      (dateSchema.safeParse(query?.date).success
+        ? String(query?.date)
+        : today.value);
     end.value = found?.endDate ?? '';
     categoryId.value =
-      found?.categoryId ?? snapshot.value.categories[0]?.id ?? '';
+      found?.categoryId ??
+      snapshot.value.categories.find((c) => c.id === query?.categoryId)?.id ??
+      snapshot.value.categories[0]?.id ??
+      '';
     focusDate.value = today.value;
     editorSpace = spaceRevision.value;
     editorActor = api.getGeneration();
+    initialFields = JSON.stringify([
+      title.value,
+      start.value,
+      end.value,
+      categoryId.value,
+    ]);
     ready.value = true;
   } catch (cause) {
     error.value = message(cause);
@@ -165,10 +198,16 @@ async function save(confirm = false) {
       error.value = msg('edit.theSameStableIdentifierAlreadyHasDifferent');
       return;
     }
+    uni.disableAlertBeforeUnload?.();
     uni.navigateBack({
-      fail: () => uni.switchTab({ url: '/pages/entries/index' }),
+      fail: () => uni.switchTab({ url: '/pages/day/index' }),
     });
   } catch (cause) {
+    if (
+      editorSpace !== spaceRevision.value ||
+      editorActor !== api.getGeneration()
+    )
+      return;
     if (
       (cause instanceof ClientError || cause instanceof GuestError) &&
       cause.code === 'FOCUS_REMOVAL_CONFIRMATION_REQUIRED'
@@ -230,12 +269,12 @@ async function focus() {
 }
 function back() {
   uni.navigateBack({
-    fail: () => uni.switchTab({ url: '/pages/entries/index' }),
+    fail: () => uni.switchTab({ url: '/pages/day/index' }),
   });
 }
 </script>
 <template>
-  <view class="page"
+  <PageShell
     ><text class="title">{{
       entry ? tr('edit.entryDetailsEdit') : tr('common.newEntry2')
     }}</text
@@ -336,13 +375,7 @@ function back() {
           {{ tr('common.cancelConfirmation') }}
         </button></view
       ><button :disabled="saving || busy || readonly" @click="save()">
-        {{
-          saving
-            ? tr('common.saving')
-            : mode === 'guest'
-              ? tr('common.saveToLocalMachine')
-              : tr('common.saveToCloud')
-        }}</button
+        保存</button
       ><button
         class="secondary"
         :disabled="saving || busy"
@@ -378,6 +411,6 @@ function back() {
       ><button class="secondary" @click="leave = false">
         {{ tr('common.continueEditing') }}</button
       ><button @click="back">{{ tr('common.discardAndGoBack') }}</button></view
-    ></view
+    ></PageShell
   >
 </template>

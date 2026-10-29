@@ -1,159 +1,357 @@
 <script setup lang="ts">
-import { tickLabel } from '../../i18n';
-import { tr } from '../../i18n/index';
-import { computed, nextTick, ref, watch } from 'vue';
+import {
+  computed,
+  getCurrentInstance,
+  nextTick,
+  onBeforeUnmount,
+  ref,
+  watch,
+} from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import {
+  businessToday,
   dateOrdinal,
   emptyFilter,
-  isCalendarDate,
+  entryStatus,
+  focusHeatLevel,
+  ordinalDate,
+  packTimelineLanes,
   selectEntries,
-  shiftMonth,
-  summarizeEntries,
-  timelineBar,
+  timelineCanvasWindow,
   timelineFocusGroups,
-  timelineWindow,
+  TIMELINE_RECENT_POSITION,
   visibleRows,
 } from '@dayline/core';
-import type { TimelineScale } from '@dayline/core';
+import type { TimelineFocusGroup, TimelineScale } from '@dayline/core';
 import type { EntryDto } from '@dayline/contracts';
 import { requestedDay, useWorkspace } from '../../workspace';
+import { calendarLabel } from '../../i18n';
+import { TimelineGesture } from '../../timeline/gestures';
+import type { TouchPoint, CameraChange } from '../../timeline/gestures';
+import PageShell from '../../components/PageShell.vue';
+import SyncStatus from '../../components/SyncStatus.vue';
+import IconButton from '../../components/IconButton.vue';
 import Filters from '../../components/Filters.vue';
-const { mode, snapshot, loading, error, notice, ensure, load } = useWorkspace();
-const detailOffset = ref(0);
+import EntryDetails from '../../components/EntryDetails.vue';
+import BottomSheet from '../../components/BottomSheet.vue';
+const w = useWorkspace(),
+  { snapshot, busy, readonly, ensure } = w;
 const filter = ref(emptyFilter()),
   scale = ref<TimelineScale>('month'),
-  anchor = ref(''),
-  scrollTop = ref(0),
-  scrollLeft = ref(0),
-  details = ref<{ entryId: string; dates: string[] } | null>(null);
-const scales = computed(() => [
-    tr('common.month2'),
-    tr('common.quarter2'),
-    tr('common.year2'),
-    tr('common.allTime'),
-  ]),
+  cameraDay = ref<number>(),
+  cameraDays = ref<number>();
+const detail = ref<EntryDto | null>(null),
+  focus = ref<TimelineFocusGroup | null>(null),
+  focusLimit = ref(50),
+  selected = ref(''),
+  plotTop = ref(0),
+  listTop = ref(0);
+const plotWidth = ref(263),
+  plotLeft = ref(98),
+  rowHeight = 56;
+const scales = ['月', '季度', '年', '全部'],
   scaleValues = ['month', 'quarter', 'year', 'all'] as const;
-const today = computed(() => snapshot.value?.businessToday ?? '');
-const filtered = computed(() =>
-  snapshot.value
-    ? selectEntries(snapshot.value.entries, today.value, filter.value)
-    : [],
-);
-const window = computed(() =>
-  timelineWindow(
-    filtered.value,
+const today = computed(() => snapshot.value?.businessToday ?? businessToday());
+const range = computed(() =>
+  timelineCanvasWindow(
+    snapshot.value?.entries ?? [],
     today.value,
     scale.value,
-    anchor.value || today.value,
-    700,
-    true,
+    cameraDay.value,
+    plotWidth.value,
+    cameraDays.value,
   ),
 );
+const filtered = computed(() =>
+  selectEntries(snapshot.value?.entries ?? [], today.value, filter.value),
+);
 const entries = computed(() =>
-  selectEntries(filtered.value, today.value, filter.value, window.value),
-);
-const summary = computed(() => summarizeEntries(entries.value, today.value));
-const rows = computed(() =>
-  visibleRows(entries.value.length, scrollTop.value, 420, 56),
-);
-const visible = computed(() =>
-  entries.value.slice(rows.value.start, rows.value.end),
+  selectEntries(
+    filtered.value,
+    today.value,
+    { ...emptyFilter(), status: 'all' },
+    range.value,
+  ),
 );
 const groups = computed(() =>
   timelineFocusGroups(
     entries.value,
     snapshot.value?.focusDays ?? [],
     today.value,
-    window.value,
+    range.value,
+    { position: 'dates-center', minimumDistance: 36 },
   ),
 );
-function color(e: EntryDto) {
+let previousLanes = new Map<string, number>();
+const lanes = computed(() => {
+  const result = packTimelineLanes(
+    entries.value,
+    today.value,
+    range.value,
+    groups.value,
+    previousLanes,
+  );
+  previousLanes = new Map(
+    result.flatMap((lane) => lane.map((p) => [p.entry.id, p.lane] as const)),
+  );
+  return result;
+});
+const plotHeight = computed(() =>
+  Math.min(320, Math.max(168, lanes.value.length * rowHeight)),
+);
+const displayTicks = computed(() => {
+  const min =
+    range.value.endExclusive - range.value.start > 730
+      ? 52
+      : range.value.focusUnit === 'week'
+        ? 34
+        : 26;
+  let previous = -Infinity;
+  return range.value.ticks.filter((tick) => {
+    if (tick.x - previous < min) return false;
+    previous = tick.x;
+    return true;
+  });
+});
+const rows = computed(() =>
+  visibleRows(
+    lanes.value.length,
+    plotTop.value,
+    plotHeight.value,
+    rowHeight,
+    3,
+  ),
+);
+const visibleLanes = computed(() =>
+  lanes.value
+    .slice(rows.value.start, rows.value.end)
+    .map((items, index) => ({ index: rows.value.start + index, items })),
+);
+const listRows = computed(() =>
+  visibleRows(
+    entries.value.length,
+    listTop.value,
+    plotHeight.value,
+    rowHeight,
+    3,
+  ),
+);
+const visibleList = computed(() =>
+  entries.value.slice(listRows.value.start, listRows.value.end),
+);
+const rangeLabel = computed(
+  () =>
+    calendarLabel(ordinalDate(Math.floor(range.value.start))) +
+    ' — ' +
+    calendarLabel(ordinalDate(Math.ceil(range.value.endExclusive) - 1)),
+);
+const monthGroups = computed(() => {
+  const result: { key: string; label: string; left: number; width: number }[] =
+    [];
+  for (const tick of range.value.ticks) {
+    const date = ordinalDate(tick.day),
+      key = date.slice(0, range.value.focusUnit === 'month' ? 4 : 7);
+    if (result.at(-1)?.key === key) continue;
+    const previous = result.at(-1);
+    if (previous) previous.width = tick.x - previous.left;
+    result.push({
+      key,
+      label:
+        range.value.focusUnit === 'month'
+          ? date.slice(0, 4) + '年'
+          : Number(date.slice(0, 4)) + '年' + Number(date.slice(5, 7)) + '月',
+      left: tick.x,
+      width: range.value.width - tick.x,
+    });
+  }
+  return result;
+});
+function color(entry: EntryDto) {
   return (
-    snapshot.value?.categories.find((c) => c.id === e.categoryId)?.color ??
-    '#7970CF'
+    snapshot.value?.categories.find((c) => c.id === entry.categoryId)?.color ??
+    '#6C9BCE'
   );
 }
-function bar(e: EntryDto) {
-  return timelineBar(e, today.value, window.value);
+function heat(count: number) {
+  return focusHeatLevel(count);
 }
-function syncX(event: { detail: { scrollLeft: number } }) {
-  if (Math.abs(scrollLeft.value - event.detail.scrollLeft) > 1)
-    scrollLeft.value = event.detail.scrollLeft;
+function camera(value: CameraChange) {
+  cameraDay.value = value.day;
+  cameraDays.value = value.days;
+  scale.value =
+    value.days >= range.value.maxDays - 0.01
+      ? 'all'
+      : value.days <= 31.01
+        ? 'month'
+        : value.days <= 140
+          ? 'quarter'
+          : 'year';
+}
+function chooseScale(event: { detail: { value: string | number } }) {
+  scale.value = scaleValues[Number(event.detail.value)] ?? 'month';
+  cameraDay.value = undefined;
+  cameraDays.value = undefined;
+  plotTop.value = 0;
 }
 function move(amount: number) {
-  anchor.value = shiftMonth(
-    anchor.value,
-    amount * (scale.value === 'year' ? 12 : scale.value === 'quarter' ? 3 : 1),
-  );
+  const days = range.value.endExclusive - range.value.start;
+  camera({
+    day: range.value.start + days * (TIMELINE_RECENT_POSITION + amount * 0.8),
+    days,
+  });
 }
-async function locate() {
-  anchor.value = today.value;
-  if (scale.value === 'all' && window.value.todayX === null)
-    scale.value = 'month';
-  await nextTick();
-  scrollLeft.value = Math.max(0, (window.value.todayX ?? 0) - 100);
-}
-let touchX = 0,
-  touchY = 0,
-  suppressUntil = 0;
-function touchStart(event: {
-  touches: { readonly [index: number]: { clientX: number; clientY: number } };
-}) {
-  touchX = event.touches[0]?.clientX ?? 0;
-  touchY = event.touches[0]?.clientY ?? 0;
-}
-function touchMove(event: {
-  touches: { readonly [index: number]: { clientX: number; clientY: number } };
-}) {
-  if (
-    Math.abs((event.touches[0]?.clientX ?? 0) - touchX) > 8 ||
-    Math.abs((event.touches[0]?.clientY ?? 0) - touchY) > 8
-  )
-    suppressUntil = Date.now() + 350;
-}
-function edit(entry: EntryDto) {
-  if (Date.now() < suppressUntil) return;
-  uni.navigateTo({ url: '/pages/entry/edit?id=' + entry.id });
-}
-function focusDetail(group: { entryId: string; dates: string[] }) {
-  if (Date.now() >= suppressUntil) {
-    details.value = group;
-    detailOffset.value = 0;
-  }
+function locate() {
+  camera({
+    day: dateOrdinal(today.value) + 0.5,
+    days: range.value.endExclusive - range.value.start,
+  });
 }
 function create() {
   uni.navigateTo({ url: '/pages/entry/edit' });
 }
-function day(date: string) {
+function edit(entry: EntryDto) {
+  detail.value = null;
+  uni.navigateTo({ url: '/pages/entry/edit?id=' + entry.id });
+}
+function review(date: string) {
   requestedDay.value = date;
+  detail.value = null;
+  focus.value = null;
   uni.switchTab({ url: '/pages/day/index' });
 }
-watch(
-  () => [scale.value, anchor.value],
-  () => {
-    scrollTop.value = 0;
-    scrollLeft.value = 0;
-  },
-);
-watch(
-  () => entries.value.length,
-  (count) =>
-    (scrollTop.value = Math.max(
+const gesture = new TimelineGesture();
+let suppression = 0,
+  lastPoints: TouchPoint[] = [],
+  active = false;
+interface TouchEvent {
+  touches: ArrayLike<TouchPoint>;
+}
+let cameraTimer: ReturnType<typeof setTimeout> | undefined,
+  pendingCamera: CameraChange | undefined;
+function flushCamera() {
+  clearTimeout(cameraTimer);
+  cameraTimer = undefined;
+  const next = pendingCamera;
+  pendingCamera = undefined;
+  if (next) camera(next);
+}
+function queueCamera(next: CameraChange) {
+  pendingCamera = next;
+  if (!cameraTimer) cameraTimer = setTimeout(flushCamera, 16);
+}
+function touchStart(event: TouchEvent) {
+  const points = Array.from(event.touches).slice(0, 2);
+  if (active) {
+    flushCamera();
+    gesture.rebase(points, range.value, plotTop.value);
+  } else {
+    gesture.start(points, range.value, plotLeft.value, 0, plotTop.value);
+    active = true;
+  }
+  lastPoints = points;
+}
+function touchMove(event: TouchEvent) {
+  const points = Array.from(event.touches).slice(0, 2);
+  if (points.length !== lastPoints.length) {
+    gesture.rebase(points, range.value, plotTop.value);
+    lastPoints = points;
+    return;
+  }
+  const change = gesture.move(points);
+  if (change?.camera) queueCamera(change.camera);
+  if (change?.scroll !== undefined)
+    plotTop.value = Math.max(
       0,
-      Math.min(scrollTop.value, count * 56 - 420),
-    )),
-);
+      Math.min(
+        Math.max(0, lanes.value.length * rowHeight - plotHeight.value),
+        change.scroll,
+      ),
+    );
+  lastPoints = points;
+}
+function touchEnd(event: TouchEvent) {
+  flushCamera();
+  if (gesture.moved) suppression = Date.now() + 400;
+  const points = Array.from(event.touches ?? []).slice(0, 2);
+  if (points.length) {
+    gesture.rebase(points, range.value, plotTop.value);
+    lastPoints = points;
+  } else {
+    gesture.end();
+    active = false;
+    lastPoints = [];
+  }
+}
+function touchCancel() {
+  clearTimeout(cameraTimer);
+  cameraTimer = undefined;
+  pendingCamera = undefined;
+  gesture.end();
+  active = false;
+  lastPoints = [];
+  suppression = Date.now() + 400;
+}
+function view(entry: EntryDto) {
+  if (Date.now() < suppression) return;
+  selected.value = entry.id;
+  detail.value = entry;
+}
+function focusDetail(group: TimelineFocusGroup) {
+  if (Date.now() < suppression) return;
+  focus.value = group;
+  focusLimit.value = 50;
+  selected.value = group.entryId;
+}
+const instance = getCurrentInstance();
+function measure() {
+  if (typeof uni.createSelectorQuery !== 'function') return;
+  let query = uni.createSelectorQuery();
+  if (instance?.proxy) query = query.in(instance.proxy);
+  query
+    .select('.timeline-plot')
+    .boundingClientRect((rect) => {
+      if (!Array.isArray(rect) && rect.width && rect.width >= 240) {
+        plotWidth.value = rect.width;
+        plotLeft.value = rect.left ?? 0;
+      }
+    })
+    .exec();
+}
+function resize() {
+  void nextTick(measure);
+}
+if (typeof uni !== 'undefined') uni.onWindowResize?.(resize);
+onBeforeUnmount(() => {
+  if (typeof uni !== 'undefined') uni.offWindowResize?.(resize);
+  touchCancel();
+});
 watch(
-  () => snapshot.value?.userId,
+  () => w.spaceRevision.value,
   () => {
     filter.value = emptyFilter();
+    detail.value = null;
+    focus.value = null;
+    selected.value = '';
+    cameraDay.value = undefined;
+    cameraDays.value = undefined;
+    plotTop.value = 0;
+    listTop.value = 0;
+    previousLanes = new Map();
+    touchCancel();
   },
 );
-watch(mode, () => {
-  filter.value = emptyFilter();
-  details.value = null;
-});
+watch(
+  () => lanes.value.length,
+  (count) => {
+    plotTop.value = Math.max(
+      0,
+      Math.min(
+        plotTop.value,
+        Math.max(0, count * rowHeight - plotHeight.value),
+      ),
+    );
+  },
+);
 watch(
   () => snapshot.value?.categories,
   () => {
@@ -166,370 +364,475 @@ watch(
 );
 onShow(async () => {
   await ensure();
-  if (!anchor.value) anchor.value = today.value;
+  await nextTick();
+  measure();
 });
 </script>
 <template>
-  <view class="page timeline-page"
-    ><text class="subtitle"
-      >DAYLINE ·
-      {{
-        mode === 'guest'
-          ? tr('recordsScreen.guestSaveLocallyOnly')
-          : tr('common.cloudRecording')
+  <PageShell
+    ><view class="screen-heading"
+      ><view
+        ><text class="eyebrow">每一段经历，都有自己的跨度</text
+        ><text class="title">时间轴</text></view
+      ><SyncStatus /></view
+    ><view class="timeline-toolbar"
+      ><picker
+        :range="scales"
+        :value="scaleValues.indexOf(scale)"
+        @change="chooseScale"
+        ><view class="scale-picker"
+          >{{ scales[scaleValues.indexOf(scale)] }} ▾</view
+        ></picker
+      ><text class="muted">双指缩放 · 单指拖动</text
+      ><IconButton
+        v-if="!readonly"
+        icon="plus"
+        label="新建事项"
+        :disabled="busy"
+        @click="create" /></view
+    ><Filters v-model="filter" :categories="snapshot?.categories ?? []" />
+    <view class="range-controls"
+      ><IconButton icon="back" label="上一段时间" @click="move(-1)" /><text>{{
+        rangeLabel
       }}</text
-    ><text class="title">{{ tr('common.completeTimeline') }}</text
-    ><text v-if="loading" class="text">{{ tr('common.loadingRecords2') }}</text
-    ><text v-if="error" class="text error">{{ error }}</text
-    ><text v-if="notice" class="text notice">{{ notice }}</text
-    ><button class="secondary" @click="load">
-      {{ tr('common.completeReadAgain') }}</button
-    ><template v-if="snapshot"
-      ><button @click="create">{{ tr('common.createNewEntry') }}</button
-      ><Filters v-model="filter" :categories="snapshot.categories" /><view
-        class="card"
-        ><picker
-          :range="scales"
-          @change="scale = scaleValues[Number($event.detail.value)] ?? 'month'"
-          ><view class="picker"
-            >{{ scales[scaleValues.indexOf(scale)] }} ▾</view
-          ></picker
-        ><text class="text">{{ tr('common.dateToView') }}</text
-        ><input
-          v-model="anchor"
-          :aria-label="tr('mini.timelineAnchorYyyyMmDd')"
-          placeholder="YYYY-MM-DD"
-        /><text v-if="!isCalendarDate(anchor)" class="text error">{{
-          tr('common.pleaseEnterAValidDate')
-        }}</text
-        ><view class="actions"
-          ><button
-            class="secondary"
-            :disabled="
-              scale === 'all' ||
-              !isCalendarDate(anchor) ||
-              anchor === '0001-01-01'
-            "
-            @click="move(-1)"
-          >
-            {{ tr('common.previousPeriod') }}</button
-          ><button class="secondary" @click="locate">
-            {{ tr('common.goToToday') }}</button
-          ><button
-            class="secondary"
-            :disabled="
-              scale === 'all' ||
-              !isCalendarDate(anchor) ||
-              anchor.slice(0, 4) === '9999'
-            "
-            @click="move(1)"
-          >
-            {{ tr('common.nextPeriod') }}
-          </button></view
-        ><text class="text muted">{{
-          tr('mini.slideTheDateHorizontallyAndBrowseThe')
-        }}</text
-        ><text class="text">{{
-          tr('mini.selectedEntireRangeEntryStillInProgress', {
-            value0: summary.count,
-            value1: summary.ongoing,
-            value2: summary.categoryCount,
-          })
-        }}</text
-        ><text class="text muted">{{
-          tr('recordsScreen.categoryDistributionByNumberOfEntries')
-        }}</text
-        ><text v-for="(count, id) in summary.categories" :key="id" class="text"
-          >{{ snapshot.categories.find((c) => c.id === id)?.name }}
-          {{ count }}</text
-        ></view
-      ><text v-if="!entries.length" class="text empty">{{
-        filter.search || filter.categoryId || filter.status !== 'all'
-          ? tr('recordsScreen.noResultsAfterFilteringPleaseAdjustOr')
-          : tr('mini.thereIsNoEntryInTheCurrent')
-      }}</text>
-      <view
-        v-if="isCalendarDate(anchor)"
-        class="mini-timeline"
-        @touchstart="touchStart"
-        @touchmove="touchMove"
-        ><view class="timeline-head"
-          ><view class="name-heading">{{ tr('common.entryDate') }}</view
-          ><scroll-view
-            scroll-x
-            :scroll-left="scrollLeft"
-            class="date-header"
-            @scroll="syncX"
-            ><view class="axis" :style="{ width: window.width + 'px' }"
-              ><text
-                v-for="tick in window.ticks"
-                :key="tick.day"
-                class="tick"
-                :style="{ left: tick.x + 'px' }"
-                >{{ tickLabel(tick.label) }}</text
-              ></view
-            ></scroll-view
-          ></view
-        >
-        <scroll-view
-          scroll-y
-          class="timeline-body"
-          :scroll-top="scrollTop"
-          @scroll="scrollTop = $event.detail.scrollTop"
-          ><view class="timeline-columns"
-            ><view class="name-column"
-              ><view :style="{ height: rows.before + 'px' }"></view
-              ><view
-                v-for="entry in visible"
-                :key="entry.id"
-                class="name-row"
-                :style="{ borderLeft: `4px solid ${color(entry)}` }"
-                role="button"
-                @click="edit(entry)"
-                >{{ entry.title }}</view
-              ><view :style="{ height: rows.after + 'px' }"></view></view
-            ><scroll-view
-              scroll-x
-              :scroll-left="scrollLeft"
-              class="date-body"
-              :style="{ height: entries.length * 56 + 'px' }"
-              @scroll="syncX"
-              ><view :style="{ width: window.width + 'px' }"
-                ><view :style="{ height: rows.before + 'px' }"></view
-                ><view
-                  v-for="entry in visible"
-                  :key="entry.id"
-                  class="track"
-                  :style="{ width: window.width + 'px' }"
-                  ><view
-                    v-if="window.todayX !== null"
-                    class="today-line"
-                    :style="{ left: window.todayX + 'px' }"
-                  ></view
-                  ><view
-                    v-if="bar(entry)"
-                    class="bar"
-                    :class="{ future: entry.startDate > today }"
-                    :style="{
-                      left: bar(entry)?.left + 'px',
-                      width: bar(entry)?.width + 'px',
-                      backgroundColor:
-                        entry.startDate > today
-                          ? '#F0EEFB'
-                          : color(entry) + '88',
-                      borderColor: color(entry),
-                    }"
-                    role="button"
-                    :aria-label="
-                      tr('mini.to', {
-                        value0: entry.title,
-                        value1: entry.startDate,
-                        value2:
-                          entry.endDate ??
-                          (entry.startDate > today
-                            ? tr('common.endingPending')
-                            : tr('common.today')),
-                      })
-                    "
-                    @click="edit(entry)"
-                    ><text
-                      >{{ bar(entry)?.continuesBefore ? '‹' : ''
-                      }}{{ bar(entry)?.continuesAfter ? '›' : ''
-                      }}{{
-                        entry.startDate > today ? tr('common.notStarted') : ''
-                      }}</text
-                    ></view
-                  ><view
-                    v-for="group in groups.filter(
-                      (g) => g.entryId === entry.id,
-                    )"
-                    :key="group.key"
-                    class="focus"
-                    :style="{ left: group.left + 'px' }"
-                    role="button"
-                    :aria-label="
-                      tr('timelineView.focusDays2', {
-                        value0: group.dates.length,
-                      })
-                    "
-                    @click.stop="focusDetail(group)"
-                    >★{{
-                      group.dates.length > 1 ? group.dates.length : ''
-                    }}</view
-                  ></view
-                ><view
-                  :style="{ height: rows.after + 'px' }"
-                ></view></view></scroll-view></view></scroll-view
-      ></view>
-      <view v-if="details" class="card"
-        ><text class="heading">{{
-          tr('mini.focusDays', {
-            value0: entries.find((e) => e.id === details?.entryId)?.title,
-            value1: details.dates.length,
-          })
-        }}</text
-        ><scroll-view scroll-y class="dates-scroll"
-          ><button
-            v-for="date in details.dates.slice(
-              detailOffset,
-              detailOffset + 100,
-            )"
-            :key="date"
-            class="secondary"
-            @click="day(date)"
-          >
-            {{ tr('mini.review', { value0: date }) }}
-          </button></scroll-view
-        ><text class="text">{{
-          tr('mini.page', {
-            value0: Math.floor(detailOffset / 100) + 1,
-            value1: Math.ceil(details.dates.length / 100),
-          })
-        }}</text
-        ><view class="actions"
-          ><button
-            class="secondary"
-            :disabled="detailOffset === 0"
-            @click="detailOffset -= 100"
-          >
-            {{ tr('common.previousPageFocusDates') }}</button
-          ><button
-            class="secondary"
-            :disabled="detailOffset + 100 >= details.dates.length"
-            @click="detailOffset += 100"
-          >
-            {{ tr('common.nextPageFocusDates') }}
-          </button></view
-        ><button class="secondary" @click="details = null">
-          {{ tr('common.closeKeyDetails') }}
-        </button></view
+      ><IconButton icon="arrow" label="下一段时间" @click="move(1)" /><button
+        class="text-button"
+        @click="locate"
       >
-      <view class="card"
-        ><text class="heading">{{ tr('common.dateAndSpanDetails') }}</text
-        ><text class="text muted">{{
-          tr('mini.equivalentInformationOutsideTheChartClickTo')
-        }}</text
-        ><view
-          v-for="entry in visible"
-          :key="entry.id"
-          class="text"
-          role="button"
-          @click="edit(entry)"
-          >{{ entry.title }} · {{ entry.startDate }} →
-          {{
-            entry.endDate ??
-            (entry.startDate > today
-              ? tr('common.endingPending')
-              : tr('common.present'))
-          }}
-          ·
-          {{
-            entry.startDate > today
-              ? tr('common.notStarted')
-              : dateOrdinal(entry.endDate ?? today) -
-                dateOrdinal(entry.startDate) +
-                1 +
-                tr('common.days')
-          }}</view
+        今天
+      </button></view
+    >
+    <view class="mini-timeline"
+      ><view class="name-column"
+        ><view class="name-heading">本屏 {{ entries.length }} 项</view
+        ><scroll-view
+          scroll-y
+          class="name-scroll"
+          :style="{ height: plotHeight + 'px' }"
+          :scroll-top="listTop"
+          @scroll="listTop = $event.detail.scrollTop"
+          ><view :style="{ height: listRows.before + 'px' }" /><view
+            v-for="entry in visibleList"
+            :key="entry.id"
+            class="name-row"
+            :class="{ highlighted: selected === entry.id }"
+            @click="view(entry)"
+            ><text class="name-title"
+              ><text :style="{ color: color(entry) }">● </text
+              >{{ entry.title }}</text
+            ><text class="name-status">{{
+              entryStatus(entry, today) === 'ended' ? '已结束' : '进行中'
+            }}</text></view
+          ><view :style="{ height: listRows.after + 'px' }" /></scroll-view
+      ></view>
+      <view
+        class="timeline-plot"
+        @touchstart="touchStart"
+        @touchmove.stop.prevent="touchMove"
+        @touchend="touchEnd"
+        @touchcancel="touchCancel"
+        ><view class="date-header"
+          ><view
+            v-for="month in monthGroups"
+            :key="month.key"
+            class="month-heading"
+            :style="{ left: month.left + 'px', width: month.width + 'px' }"
+            >{{ month.label }}</view
+          ><view
+            v-for="tick in displayTicks"
+            :key="tick.day"
+            class="tick"
+            :style="{ left: tick.x + 'px' }"
+            >{{ tick.label }}</view
+          ></view
+        ><view class="timeline-body" :style="{ height: plotHeight + 'px' }"
+          ><view
+            class="lane-canvas"
+            :style="{
+              height: Math.max(plotHeight, lanes.length * rowHeight) + 'px',
+              transform: 'translateY(-' + plotTop + 'px)',
+            }"
+            ><view
+              v-if="range.todayX !== null"
+              class="today-line"
+              :style="{ left: range.todayX + 'px' }" /><view
+              v-for="lane in visibleLanes"
+              :key="lane.index"
+              class="timeline-lane"
+              :style="{ top: lane.index * rowHeight + 'px' }"
+              ><view
+                v-for="p in lane.items"
+                :key="p.entry.id"
+                class="timeline-item"
+                :class="{ highlighted: selected === p.entry.id }"
+                :data-entry-id="p.entry.id"
+                ><view
+                  class="bar-hit"
+                  role="button"
+                  :aria-label="
+                    p.entry.title +
+                    '，' +
+                    p.entry.startDate +
+                    ' 至 ' +
+                    (p.entry.endDate || '今天')
+                  "
+                  :style="{
+                    left: p.hitLeft + 'px',
+                    width: p.hitWidth + 'px',
+                  }"
+                  @click="view(p.entry)"
+                  ><view
+                    class="bar"
+                    :style="{
+                      left: p.bar.left - p.hitLeft + 'px',
+                      width: p.bar.width + 'px',
+                      borderColor: color(p.entry),
+                      backgroundColor: color(p.entry) + '22',
+                    }"
+                    ><text
+                      >{{ p.bar.continuesBefore ? '‹ ' : ''
+                      }}{{ p.entry.title }}</text
+                    ><text v-if="!p.entry.endDate" class="ongoing-badge">{{
+                      p.entry.startDate > today ? '未结束' : '至今'
+                    }}</text></view
+                  ></view
+                ><view
+                  v-for="group in p.groups"
+                  :key="group.key"
+                  class="focus-marker"
+                  role="button"
+                  :aria-label="
+                    p.entry.title + ' · ' + group.dates.length + ' 个重点日'
+                  "
+                  :style="{ left: group.left - 16 + 'px' }"
+                  @click.stop="focusDetail(group)"
+                  ><view
+                    class="focus-cell"
+                    :class="
+                      'heat-' + heat(group.dates.length)
+                    " /></view></view></view></view
+          ><view v-if="!entries.length" class="timeline-empty">{{
+            w.loading.value ? '正在更新…' : '这段时间没有匹配的记录'
+          }}</view></view
         ></view
-      ></template
-    ></view
-  >
+      ></view
+    >
+    <view class="timeline-footer"
+      ><text>重点日</text
+      ><view class="heat-legend"
+        ><text>少</text
+        ><view
+          v-for="level in [1, 2, 3, 4]"
+          :key="level"
+          class="focus-cell"
+          :class="'heat-' + level"
+        /><text>多</text></view
+      ><text>{{ entries.length }} 项 · {{ lanes.length }} 行</text></view
+    >
+    <text class="text muted timeline-note"
+      >点击事项查看详情；点击色块回看重点日期。未结束的事项延续到今天。</text
+    >
+    <EntryDetails
+      v-if="detail && snapshot"
+      :entry="detail"
+      :categories="snapshot.categories"
+      :focus-days="snapshot.focusDays"
+      :today="today"
+      :readonly="readonly"
+      @close="detail = null"
+      @edit="edit(detail)"
+      @day="review"
+    />
+    <BottomSheet
+      v-if="focus"
+      :title="entries.find((e) => e.id === focus?.entryId)?.title ?? '重点日期'"
+      @close="focus = null"
+      ><text class="text">本色块包含 {{ focus.dates.length }} 个重点日</text
+      ><view class="focus-date-list"
+        ><button
+          v-for="date in focus.dates.slice(0, focusLimit)"
+          :key="date"
+          class="date-chip"
+          @click="review(date)"
+        >
+          {{ date }}
+        </button></view
+      ><button
+        v-if="focus.dates.length > focusLimit"
+        class="secondary"
+        @click="focusLimit += 50"
+      >
+        显示更多日期</button
+      ><text class="text muted">点击日期进入每日回看。</text></BottomSheet
+    >
+  </PageShell>
 </template>
 <style scoped>
+.timeline-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+.scale-picker {
+  font-size: 25rpx;
+  padding: 12rpx 20rpx;
+  border: 1px solid var(--line);
+  border-radius: 10rpx;
+  background: var(--surface);
+}
+.timeline-toolbar > .muted {
+  font-size: 22rpx;
+}
+.range-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0;
+  margin: 8rpx -12rpx;
+}
+.range-controls > text {
+  font-size: 19rpx;
+  color: var(--muted);
+  flex: 1;
+  text-align: center;
+}
+.range-controls .icon-button {
+  width: 30px;
+  min-width: 30px;
+  padding: 7px;
+}
+.range-controls .text-button {
+  font-size: 22rpx;
+  padding: 8rpx;
+}
 .mini-timeline {
-  background: white;
-  border: 1px solid #eef0f5;
-  border-radius: 12px;
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14rpx;
   overflow: hidden;
 }
-.timeline-head,
-.timeline-columns {
-  display: flex;
-}
-.name-heading,
 .name-column {
-  width: 112px;
-  flex-shrink: 0;
-}
-.name-heading {
-  height: 52px;
-  box-sizing: border-box;
-  padding: 16px 8px;
-  background: #f0eefb;
-  font-size: 13px;
-}
-.date-header,
-.date-body {
-  flex: 1;
+  border-right: 1px solid var(--line);
   min-width: 0;
 }
-.axis {
-  height: 52px;
+.name-heading {
+  height: 56px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 10rpx;
+  font-size: 22rpx;
+  font-weight: 600;
+  border-bottom: 1px solid var(--line);
+}
+.name-scroll {
+  height: 320px;
+}
+.name-row {
+  height: 56px;
+  box-sizing: border-box;
+  padding: 8rpx 10rpx;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6rpx;
+}
+.name-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 22rpx;
+}
+.name-status {
+  font-size: 18rpx;
+  color: var(--muted);
+}
+.name-row.highlighted {
+  background: var(--accent-soft);
+}
+.timeline-plot {
+  min-width: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+.date-header {
+  height: 56px;
   position: relative;
-  background: #f7f8fc;
+  border-bottom: 1px solid var(--line);
+  box-sizing: border-box;
+  overflow: hidden;
+  background: var(--surface-subtle);
+}
+.month-heading {
+  position: absolute;
+  top: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 18rpx;
+  color: var(--muted);
+  padding-left: 6rpx;
+  box-sizing: border-box;
+  border-right: 1px solid var(--line);
 }
 .tick {
   position: absolute;
-  top: 18px;
-  font-size: 10px;
-  border-left: 1px solid #daddea;
-  white-space: nowrap;
-  padding-left: 3px;
-  color: #687086;
+  top: 28px;
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding-left: 4rpx;
+  font-size: 18rpx;
+  color: var(--muted);
+  border-left: 1px solid var(--line);
 }
 .timeline-body {
-  height: 420px;
-}
-.name-row,
-.track {
-  height: 56px;
-  box-sizing: border-box;
-  border-bottom: 1px solid #eef0f5;
-}
-.name-row {
-  padding: 9px 8px;
-  font-size: 13px;
-  line-height: 19px;
-  overflow: hidden;
-  background: white;
-  border-right: 1px solid #eef0f5;
-}
-.track {
+  height: 320px;
   position: relative;
+  overflow: hidden;
+}
+.lane-canvas {
+  position: relative;
+  width: 100%;
+}
+.timeline-lane {
+  height: 56px;
+  position: absolute;
+  width: 100%;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--line);
+}
+.timeline-item {
+  position: static;
+}
+.bar-hit {
+  position: absolute;
+  top: 4px;
+  height: 26px;
+}
+.bar-hit .bar {
+  top: 0;
 }
 .bar {
   position: absolute;
-  top: 22px;
-  height: 24px;
-  background: #c5bff0;
-  border-radius: 4px;
-  font-size: 10px;
-  color: #51408a;
-  min-width: 4px;
+  top: 4px;
+  height: 26px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  padding: 0 8rpx;
+  border: 1px solid;
+  border-left-width: 3px;
+  border-radius: 5px;
+  overflow: hidden;
+  font-size: 21rpx;
 }
-.bar.future {
-  background: #f0eefb;
-  border: 1px dashed #7970cf;
+.bar > text:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+.ongoing-badge {
+  font-size: 16rpx;
+  white-space: nowrap;
+  background: var(--surface);
+  border-radius: 2px;
+  padding: 0 3rpx;
+  color: var(--muted);
+}
+.highlighted .bar {
+  box-shadow: 0 0 0 1px var(--accent-ink);
 }
 .today-line {
   position: absolute;
   top: 0;
   bottom: 0;
-  border-left: 2px solid #c47982;
+  border-left: 1px dashed var(--muted);
+  opacity: 0.4;
+  pointer-events: none;
 }
-.focus {
+.focus-marker {
   position: absolute;
-  top: 0;
-  width: 44px;
-  height: 44px;
-  background: #f0eefb;
-  border-radius: 4px;
-  color: #6550a1;
-  font-size: 12px;
-
+  top: 28px;
+  width: 32px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.focus-cell {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--accent-ink);
+}
+.heat-1 {
+  opacity: 0.25;
+}
+.heat-2 {
+  opacity: 0.45;
+}
+.heat-3 {
+  opacity: 0.7;
+}
+.heat-4 {
+  opacity: 1;
+}
+.timeline-footer {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 20rpx 0;
+  font-size: 20rpx;
+  color: var(--muted);
+}
+.timeline-footer > text:last-child {
+  margin-left: auto;
+}
+.heat-legend {
+  display: flex;
+  align-items: center;
+  gap: 7rpx;
+}
+.timeline-empty {
+  position: absolute;
+  top: 70px;
+  left: 12px;
+  right: 12px;
   text-align: center;
-  line-height: 44px;
-  transform: translateX(-50%);
+  font-size: 25rpx;
+  color: var(--muted);
+}
+.timeline-note {
+  font-size: 22rpx;
+}
+.focus-date-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}
+.date-chip {
+  background: var(--surface-subtle);
+  color: var(--ink);
+  font-size: 24rpx;
+  margin: 0;
+  padding: 14rpx;
+}
+@media (max-width: 350px) {
+  .mini-timeline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .name-column {
+    display: none;
+  }
 }
 </style>

@@ -9,22 +9,16 @@ import {
 import type { ViewEntry } from '@dayline/core';
 import type { Ref } from 'vue';
 import { nativePageKeys, nativeTabs } from './native-pages';
-import { computed, customRef, watch } from 'vue';
+import { customRef, watch } from 'vue';
 import { createI18n } from 'vue-i18n';
-import {
-  DEFAULT_LOCALE,
-  normalizeLocale,
-  sharedMessages,
-  isMessage,
-} from '@dayline/locales';
-import type { Locale, UiText } from '@dayline/locales';
+import { DEFAULT_LOCALE, sharedMessages, isMessage } from '@dayline/locales';
+import type { UiText } from '@dayline/locales';
 import { vueMessages, pluralParams } from '@dayline/locales/ui';
 const legacyKeys = new Map(
   Object.values(sharedMessages).flatMap((catalog) =>
     Object.entries(catalog).map(([key, text]) => [text, key]),
   ),
 );
-const storageKey = 'dayline:locale:v1';
 export const i18n = createI18n({
   legacy: false,
   locale: DEFAULT_LOCALE,
@@ -36,10 +30,6 @@ export const i18n = createI18n({
   messages: { 'zh-CN': { ...vueMessages['zh-CN'] }, en: { ...vueMessages.en } },
 });
 export const locale = i18n.global.locale;
-export const languageChoices = [
-  { value: 'zh-CN', label: '简体中文' },
-  { value: 'en', label: 'English' },
-] as const;
 export function tr(key: string, params: Record<string, unknown> = {}): string {
   const values = Object.fromEntries(
     Object.entries(params).map(([k, v]) => [
@@ -79,46 +69,14 @@ export function messageRef(initial: UiText = '') {
     },
   })) as MessageRef;
 }
-let owner: string | null = null,
-  previousPreference: Locale | null = null;
-export function applyAccountLanguage(id: string, preferred: Locale) {
-  if (id !== owner || preferred !== previousPreference)
-    changeLanguage(preferred, false);
-  owner = id;
-  previousPreference = preferred;
-}
-export function clearAccountLanguage() {
-  owner = null;
-  previousPreference = null;
-}
-export const languageName = computed(
-  () =>
-    languageChoices.find((c) => c.value === locale.value)?.label ?? '简体中文',
-);
-export function changeLanguage(value: Locale, persist = true) {
-  locale.value = normalizeLocale(value);
+export function initializeLanguage() {
+  locale.value = DEFAULT_LOCALE;
   try {
-    uni.setLocale(locale.value === 'en' ? 'en' : 'zh-Hans');
+    uni.setLocale('zh-Hans');
   } catch {
-    /* Native platform language can be unavailable in tests. */
+    /* Native API may be unavailable before launch. */
   }
   syncNavigationLanguage();
-  if (persist)
-    try {
-      uni.setStorageSync(storageKey, locale.value);
-    } catch {
-      return false;
-    }
-  return true;
-}
-export function initializeLanguage() {
-  let selected: unknown;
-  try {
-    selected = uni.getStorageSync(storageKey) || uni.getLocale();
-  } catch {
-    selected = DEFAULT_LOCALE;
-  }
-  changeLanguage(normalizeLocale(selected), false);
 }
 export function syncNavigationLanguage() {
   if (typeof getCurrentPages !== 'function') return;
@@ -179,6 +137,7 @@ export function monthYearLabel(year: number, month: number): string {
     : year + '年' + month + '月';
 }
 export function calendarLabel(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return '选择日期';
   const [year, month, day] = value.split('-').map(Number);
   return locale.value === 'en'
     ? monthName(year ?? 1, month ?? 1).slice(0, 3) + ' ' + day + ', ' + year

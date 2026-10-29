@@ -1,22 +1,22 @@
 <script setup lang="ts">
-import { formatBeijingTime, tr } from '../../i18n/index';
+import PageShell from '../../components/PageShell.vue';
 
 import { msg } from '@dayline/locales';
 
-import AdmissionReview from '../../components/AdmissionReview.vue';
-import { useAdmission } from '../../admission';
-import { ref, watch } from 'vue';
+import GuestAdmission from '../../components/GuestAdmission.vue';
+import { computed, ref, watch } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { patchProfileSchema, userDtoSchema } from '@dayline/contracts';
 import { useWorkspace, message } from '../../workspace';
 import { api } from '../../api';
-import LanguageSettings from '../../i18n/LanguageSettings.vue';
+import AppearanceSettings from '../../appearance/AppearanceSettings.vue';
+import SyncStatus from '../../components/SyncStatus.vue';
+import MiniIcon from '../../components/MiniIcon.vue';
 const {
   mode,
   credentialWarning,
   identityState,
   current,
-  snapshot,
   busy,
   loading,
   error,
@@ -27,16 +27,25 @@ const {
   restoreSession,
   logout,
 } = useWorkspace();
+const accountOptions = ref(false),
+  editing = ref(false);
+const avatar = computed(
+  () => [...(current.value?.displayName ?? '日')][0] ?? '日',
+);
 const name = ref(''),
   base = ref(0);
 onShow(async () => {
   await ensure();
-  name.value = current.value?.displayName ?? '';
-  base.value = current.value?.profileVersion ?? 0;
+  if (!editing.value) {
+    name.value = current.value?.displayName ?? '';
+    base.value = current.value?.profileVersion ?? 0;
+  }
 });
 watch(
   () => current.value?.id,
   () => {
+    editing.value = false;
+    accountOptions.value = false;
     name.value = current.value?.displayName ?? '';
     base.value = current.value?.profileVersion ?? 0;
   },
@@ -61,8 +70,8 @@ async function save() {
   }
   busy.value = true;
   error.value = '';
+  const generation = api.getGeneration();
   try {
-    const generation = api.getGeneration();
     const response = await api.request('/api/v1/me', {
       method: 'PATCH',
       account: true,
@@ -73,11 +82,12 @@ async function save() {
       current.value = response.data;
       base.value = response.data.profileVersion;
       notice.value = msg('common.displayNameSaved');
+      editing.value = false;
     }
   } catch (cause) {
-    error.value = message(cause);
+    if (generation === api.getGeneration()) error.value = message(cause);
   } finally {
-    busy.value = false;
+    if (generation === api.getGeneration()) busy.value = false;
   }
 }
 function navigate(url: string) {
@@ -85,124 +95,93 @@ function navigate(url: string) {
 }
 </script>
 <template>
-  <view class="page"
-    ><text class="subtitle">DAYLINE</text
-    ><text class="title">{{ tr('common.myDayline') }}</text
-    ><text v-if="loading" class="text">{{ tr('common.loading') }}</text
-    ><text v-if="error" class="text error">{{ error }}</text
-    ><text v-if="credentialWarning" class="text error">{{
-      credentialWarning
-    }}</text
-    ><text v-if="notice" class="text notice">{{ notice }}</text
-    ><view
-      v-if="identityState === 'unknown' || identityState === 'expired'"
-      class="card"
-      ><text class="text">{{
-        tr('mini.identityNotConfirmedPrivateCacheHiddenPlease')
-      }}</text
-      ><button class="secondary" @click="restoreSession">
-        {{ tr('common.reauthenticateExistingSession') }}</button
-      ><button class="secondary" @click="switchMode('guest')">
-        {{ tr('common.continueAsGuest') }}
-      </button></view
-    ><LanguageSettings /><view class="card"
-      ><text class="heading">{{
-        mode === 'guest'
-          ? tr('recordsScreen.guestSaveLocallyOnly')
-          : tr('mini.verifiedAccountCloudRecords')
-      }}</text
-      ><text class="text muted">{{
-        mode === 'guest'
-          ? tr('mini.theLocalRecordOnlyExistsOnThis')
-          : tr('mini.whenSavingOnlineUnsavedInputOnThe')
-      }}</text
-      ><text v-if="snapshot" class="text">{{
-        tr('mini.activeEntriesCategories', {
-          value0: snapshot.entries.length,
-          value1: snapshot.categories.length,
-        })
-      }}</text
-      ><button class="secondary" :disabled="busy" @click="switchMode('guest')">
-        {{ tr('mini.continueToUseGuestNativeLogging') }}</button
-      ><button v-if="current" :disabled="busy" @click="switchMode('account')">
-        {{ tr('mini.enterVerifiedAccountRecords') }}</button
-      ><template v-else
-        ><button :disabled="busy" @click="login">
-          {{ tr('common.signInWithWechat3') }}</button
-        ><button class="secondary" :disabled="busy" @click="restoreSession">
-          {{ tr('mini.readExistingSessionAndEnterAccount') }}
-        </button></template
-      ><text class="text muted">{{
-        tr('mini.guestAndAccountRecordsAreKeptSeparately')
-      }}</text></view
-    ><AdmissionReview
-      v-if="mode === 'account' && current?.status === 'active'"
-    /><button
-      v-if="mode === 'account' && current?.status === 'active'"
-      class="secondary"
-      @click="useAdmission().begin(true)"
+  <PageShell>
+    <view class="screen-heading"
+      ><view
+        ><text class="eyebrow">DAYLINE</text
+        ><text class="title">我的</text></view
+      ><SyncStatus
+    /></view>
+    <view v-if="identityState === 'unknown'" class="card"
+      ><text class="text">暂时无法确认登录状态，本机记录仍保留。</text
+      ><button :disabled="busy" @click="restoreSession">重试连接</button></view
     >
-      {{ tr('mini.prepareOrQueryGuestAccess') }}</button
-    ><view v-if="current" class="card"
-      ><text class="heading">{{ tr('common.accountInformation') }}</text
-      ><text class="text">{{ current.displayName }}</text
-      ><text class="text">{{
-        tr('mini.email', {
-          value0: current.email ?? tr('common.noRealEmailAddressHasBeenBound'),
-          value1: current.emailVerified
-            ? tr('common.verified')
-            : tr('common.notVerified'),
-        })
-      }}</text
-      ><text class="text">{{
-        tr('mini.wechat', {
-          value0: current.wechatBound
-            ? tr('common.alreadyAssociated')
-            : tr('common.notAssociatedYet'),
-        })
-      }}</text
-      ><text class="text">{{
-        tr('mini.password', {
-          value0: current.passwordEnabled
-            ? tr('common.enabled')
-            : tr('common.notEnabled'),
-        })
-      }}</text
-      ><text v-if="current.status !== 'active'" class="text notice">{{
-        tr('mini.accountRestrictedCancellationDue', {
-          value0: formatBeijingTime(current.deletionDueAt),
-        })
-      }}</text
-      ><text class="text">{{ tr('common.displayName') }}</text
-      ><input
-        v-model="name"
-        :maxlength="80"
-        :aria-label="tr('common.displayName')"
-      /><button :disabled="busy || current.status !== 'active'" @click="save">
-        {{ tr('common.saveDisplayName') }}</button
-      ><button class="secondary" :disabled="busy" @click="logout">
-        {{ tr('common.logOutOfCurrentAccount') }}
-      </button></view
-    ><view class="card"
-      ><button
+    <view class="card profile-card">
+      <view class="avatar">{{ avatar }}</view>
+      <view class="profile-main"
+        ><text class="heading">{{
+          current?.displayName || '记录生活，从这里开始'
+        }}</text
+        ><text class="muted">{{
+          mode === 'account' ? '微信账号 · 云端保存' : '游客 · 仅保存在本机'
+        }}</text></view
+      >
+      <button v-if="!current" :disabled="busy || loading" @click="login">
+        微信登录
+      </button>
+      <button
+        v-else-if="mode !== 'account'"
+        :disabled="busy"
+        @click="switchMode('account')"
+      >
+        进入云端记录
+      </button>
+    </view>
+    <text v-if="!current" class="text muted"
+      >无需登录也能记录。微信登录后，可将本机记录同步到账号，换手机后继续回看。</text
+    >
+    <GuestAdmission v-if="mode === 'account' && current?.status === 'active'" />
+    <view class="card"><AppearanceSettings /></view>
+    <view class="card menu-list">
+      <button class="menu-row" @click="navigate('/pages/categories/index')">
+        <MiniIcon name="folder" /><text>分类管理</text
+        ><MiniIcon name="chevron-right" />
+      </button>
+      <button class="menu-row" @click="navigate('/pages/trash/index')">
+        <MiniIcon name="trash" /><text>回收站</text
+        ><MiniIcon name="chevron-right" />
+      </button>
+      <button
         v-if="current"
-        class="secondary"
-        @click="navigate('/pages/account/deletion')"
+        class="menu-row danger-ink"
+        :disabled="busy"
+        @click="logout"
       >
-        {{ tr('mini.cancelAccountCheckStatusAndCancellation') }}</button
-      ><button class="secondary" @click="navigate('/pages/categories/index')">
-        {{ tr('common.categoryManagement') }}</button
-      ><button class="secondary" @click="navigate('/pages/trash/index')">
-        {{ tr('common.trash') }}</button
-      ><button
-        v-if="current?.status === 'active'"
-        class="secondary"
-        @click="navigate('/pages/account/identity')"
-      >
-        {{ tr('mini.addEmailBindWechatMergeAccounts') }}</button
-      ><text class="text muted">{{
-        tr('mini.pleaseOperateCsvJsonFilesOnThe')
-      }}</text></view
-    ></view
-  >
+        <MiniIcon name="logout" /><text>退出登录</text>
+      </button>
+    </view>
+    <view v-if="current" class="card"
+      ><button class="menu-row" @click="accountOptions = !accountOptions">
+        <text>账号管理</text><MiniIcon name="chevron-right" /></button
+      ><template v-if="accountOptions">
+        <view class="settings-row"
+          ><text>显示名</text
+          ><button class="text-button" @click="editing = !editing">
+            {{ editing ? '取消' : '修改' }}
+          </button></view
+        >
+        <view v-if="editing"
+          ><input v-model="name" :maxlength="80" aria-label="显示名" /><button
+            :disabled="busy || current.status !== 'active'"
+            @click="save"
+          >
+            保存
+          </button></view
+        >
+        <button
+          class="menu-row danger-ink"
+          @click="navigate('/pages/account/deletion')"
+        >
+          <text>{{
+            current.status === 'pending_deletion'
+              ? '注销进度与撤销'
+              : '注销账号'
+          }}</text
+          ><MiniIcon name="chevron-right" />
+        </button> </template
+    ></view>
+    <text v-if="credentialWarning" class="text error">{{
+      credentialWarning
+    }}</text>
+  </PageShell>
 </template>

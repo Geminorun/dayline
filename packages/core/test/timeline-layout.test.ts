@@ -170,3 +170,19 @@ it('clips extreme dates and excludes offscreen or deleted records', () => {
   expect(result[0]?.[0]?.bar.continuesBefore).toBe(true);
   expect(result[0]?.[0]?.bar.continuesAfter).toBe(true);
 });
+
+it('reserves separate tracks for future-ending ongoing entries with disjoint planned dates', () => {
+  const result = packTimelineLanes(
+    [
+      entry('first', '2026-10-02', '2026-10-04'),
+      entry('second', '2026-10-10', '2026-10-12'),
+    ],
+    '2026-10-01',
+    range,
+  );
+  expect(result).toHaveLength(2);
+  expect(result.flatMap((row) => row.map((p) => p.entry.id)).sort()).toEqual([
+    'first',
+    'second',
+  ]);
+});

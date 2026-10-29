@@ -3,7 +3,6 @@ import { msg } from '@dayline/locales';
 
 import { ApiClient, ClientError } from '@dayline/api-client';
 import type { Transport } from '@dayline/api-client';
-import { locale } from './i18n';
 export const credentialWarning = messageRef();
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
 const tokenKey = `dayline:${import.meta.env.MODE}:${encodeURIComponent(baseUrl)}:auth:signed-token:v1`;
@@ -70,7 +69,7 @@ export const bearerTransport: Transport = (request) =>
       url: baseUrl.replace(/\/$/, '') + request.path,
       method: request.method === 'PATCH' ? 'POST' : request.method,
       header: {
-        'Accept-Language': locale.value,
+        'Accept-Language': 'zh-CN',
         ...request.headers,
         ...(request.method === 'PATCH'
           ? { 'X-Dayline-Method-Override': 'PATCH' }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageShell from '../../components/PageShell.vue';
 import { formatBeijingTime, tr, messageRef } from '../../i18n/index';
 
 import { msg } from '@dayline/locales';
@@ -15,7 +16,6 @@ const w = useWorkspace(),
 const confirmed = ref(false),
   operationId = ref(''),
   proof = ref(''),
-  password = ref(''),
   busy = ref(false),
   ready = ref(false),
   error = messageRef(),
@@ -30,7 +30,6 @@ function reset() {
   ready.value = false;
   busy.value = false;
   proof.value = '';
-  password.value = '';
   confirmed.value = false;
   operationId.value = '';
   error.value = '';
@@ -70,7 +69,7 @@ async function load() {
     if (current() && sequence === loadSequence) error.value = message(e);
   }
 }
-async function verify(wechat: boolean) {
+async function verify() {
   if (
     busy.value ||
     !confirmed.value ||
@@ -90,9 +89,7 @@ async function verify(wechat: boolean) {
     const id = operationId.value || (await newId());
     if (!current()) return;
     operationId.value = id;
-    const credential = wechat
-      ? { code: await wechatCode() }
-      : { password: password.value };
+    const credential = { code: await wechatCode() };
     if (!current()) return;
     const r = await client.reauth({
       purpose,
@@ -101,7 +98,6 @@ async function verify(wechat: boolean) {
       ...credential,
     });
     if (!current()) return;
-    password.value = '';
     proof.value = r.data?.proof ?? '';
     notice.value = msg('deletion.thisIdentityHasBeenVerifiedAndWill');
   } catch (e) {
@@ -172,7 +168,7 @@ onUnload(() => {
 });
 </script>
 <template>
-  <view class="page"
+  <PageShell
     ><text class="title">{{
       pending
         ? tr('common.accountDeletionStatusAndRevocation')
@@ -209,23 +205,10 @@ onUnload(() => {
         }}
       </button>
       <template v-if="confirmed"
-        ><input
-          v-if="w.current.value.passwordEnabled"
-          v-model="password"
-          password
-          :maxlength="128"
-          :placeholder="tr('common.currentAccountPassword')"
-          :aria-label="tr('common.currentAccountPassword')"
-        /><button
-          v-if="w.current.value.passwordEnabled"
-          :disabled="busy"
-          @click="verify(false)"
-        >
-          {{ tr('common.verifyCurrentPassword') }}</button
         ><button
           v-if="w.current.value.wechatBound"
           :disabled="busy"
-          @click="verify(true)"
+          @click="verify()"
         >
           {{ tr('deletion.reVerifyUsingCurrentWechat') }}
         </button></template
@@ -251,5 +234,5 @@ onUnload(() => {
         {{ tr('deletion.goBackToMineAndLogIn') }}
       </button></view
     >
-  </view>
+  </PageShell>
 </template>

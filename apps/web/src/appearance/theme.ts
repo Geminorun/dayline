@@ -1,3 +1,4 @@
+import { themePalettes } from '@dayline/core';
 import { messageRef } from '../i18n/index';
 import { msg } from '@dayline/locales';
 import { computed, reactive, readonly, ref } from 'vue';
@@ -34,7 +35,8 @@ const resolvedMode = computed<ColorMode>(() =>
 const preset = computed(
   () =>
     themePresets.find((item) => item.id === preferences.theme) ??
-    themePresets[0],
+    themePresets[0] ??
+    themePalettes[0],
 );
 const palette = computed(() => preset.value[resolvedMode.value]);
 const accent = computed(() => preferences.accent ?? palette.value.accent);

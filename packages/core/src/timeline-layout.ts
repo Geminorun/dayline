@@ -1,4 +1,5 @@
 import { MinPriorityQueue } from '@datastructures-js/priority-queue';
+import { entryStatus } from './index.js';
 import { timelineBar } from './views.js';
 import type { TimelineFocusGroup, TimelineWindow, ViewEntry } from './views.js';
 
@@ -68,6 +69,7 @@ export function packTimelineLanes<T extends ViewEntry>(
   );
   const free = new MinPriorityQueue<number>();
   const available = new Set<number>();
+  const ongoingLanes = new Set<number>();
   const lanes: TimelinePlacement<T>[][] = [];
   for (const placement of placements) {
     // End dates are inclusive in timelineBar; touching pixel edges may share a lane.
@@ -77,7 +79,7 @@ export function packTimelineLanes<T extends ViewEntry>(
       (active.front()?.right ?? Infinity) <= placement.left + 1e-7
     ) {
       const released = active.dequeue();
-      if (released) {
+      if (released && !ongoingLanes.has(released.lane)) {
         available.add(released.lane);
         free.enqueue(released.lane);
       }
@@ -94,6 +96,9 @@ export function packTimelineLanes<T extends ViewEntry>(
       lane = lanes.length;
       lanes.push([]);
     }
+    // Each ongoing entry keeps its own lane, including future-starting entries.
+    if (entryStatus(placement.entry, today) === 'ongoing')
+      ongoingLanes.add(lane);
     placement.lane = lane;
     lanes[lane]?.push(placement);
     active.enqueue({ right: placement.right, lane });

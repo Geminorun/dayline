@@ -40,10 +40,16 @@ import {
   platformStorage,
 } from './adapters/guest-repository';
 import { uuidBatch, newId } from './adapters/uuid';
-import { applyAccountLanguage, clearAccountLanguage } from './i18n';
+
 export const records = createRecordsClient(api);
 export const requestedDay = ref('');
 export function message(cause: unknown) {
+  if (
+    cause instanceof ClientError &&
+    cause.status === 429 &&
+    cause.retryAfterSeconds !== undefined
+  )
+    startRetry(cause.retryAfterSeconds);
   return cause instanceof ClientError || cause instanceof GuestError
     ? (cause.localized ?? cause.message)
     : msg('record-service.theOperationIsNotCompletedPleaseTry');
@@ -59,9 +65,32 @@ const mode = ref<'guest' | 'account'>('guest'),
   serverTime = ref(''),
   identityState = ref<'unknown' | 'guest' | 'verified' | 'expired'>('unknown'),
   spaceRevision = ref(0);
-watch(current, (profile) => {
-  if (profile) applyAccountLanguage(profile.id, profile.locale);
-  else clearAccountLanguage();
+const retrySeconds = ref(0);
+let retryUntil = 0,
+  retryTimer: ReturnType<typeof setInterval> | undefined,
+  noticeTimer: ReturnType<typeof setTimeout> | undefined;
+function retryTick() {
+  retrySeconds.value = Math.max(0, Math.ceil((retryUntil - Date.now()) / 1000));
+  if (!retrySeconds.value) {
+    clearInterval(retryTimer);
+    retryTimer = undefined;
+  }
+}
+function startRetry(seconds: number) {
+  retryUntil = Math.max(
+    retryUntil,
+    Date.now() + Math.min(3600, Math.max(0, seconds)) * 1000,
+  );
+  retryTick();
+  if (!retryTimer && retrySeconds.value)
+    retryTimer = setInterval(retryTick, 1000);
+}
+watch(notice, () => {
+  clearTimeout(noticeTimer);
+  if (notice.value)
+    noticeTimer = setTimeout(() => {
+      notice.value = '';
+    }, 3500);
 });
 const namespace = `dayline:${import.meta.env.MODE}:${encodeURIComponent(import.meta.env.VITE_API_BASE_URL ?? 'unconfigured')}:v1:guest`;
 async function localRepository() {
@@ -142,12 +171,20 @@ function schedule() {
     mode.value === 'account' &&
     current.value?.status === 'active'
   )
-    timer = setTimeout(() => {
-      coordinator.tick();
-      void useWorkspace().load().finally(schedule);
-    }, 30000);
+    timer = setTimeout(
+      () => {
+        coordinator.tick();
+        void useWorkspace().load().finally(schedule);
+      },
+      Math.max(30000, retrySeconds.value * 1000),
+    );
 }
 api.onIdentityChange(() => {
+  clearInterval(retryTimer);
+  retryTimer = undefined;
+  retryUntil = 0;
+  retrySeconds.value = 0;
+  notice.value = '';
   pendingNavigation = false;
   scopeGeneration++;
   spaceRevision.value = scopeGeneration;
@@ -211,6 +248,8 @@ export function useWorkspace() {
   }
 
   function load(): Promise<void> {
+    retryTick();
+    if (retrySeconds.value > 0) return Promise.resolve();
     if (identityWritePending) return Promise.resolve();
     if (loadWork) return loadWork;
     const generation = scopeGeneration;
@@ -276,6 +315,17 @@ export function useWorkspace() {
     mutation: GuestMutation,
     cloud: () => Promise<unknown>,
   ) {
+    retryTick();
+    if (retrySeconds.value > 0)
+      throw new ClientError(
+        'RATE_LIMITED',
+        msg('errors.theOperationIsTooFrequentPleaseWait', {
+          value0: retrySeconds.value,
+        }),
+        0,
+        undefined,
+        retrySeconds.value,
+      );
     if (busy.value || loading.value)
       throw new Error(tr('common.operationInProgress'));
     const generation = scopeGeneration;
@@ -321,6 +371,8 @@ export function useWorkspace() {
     }
   }
   async function login() {
+    retryTick();
+    if (retrySeconds.value > 0) return;
     const intent = ++switchIntent;
     busy.value = true;
     error.value = '';
@@ -352,6 +404,8 @@ export function useWorkspace() {
     }
   }
   async function restoreSession() {
+    retryTick();
+    if (retrySeconds.value > 0) return;
     if (identityWritePending) return;
     const intent = ++switchIntent;
     error.value = '';
@@ -444,6 +498,10 @@ export function useWorkspace() {
   }
   return {
     mode,
+    retrySeconds,
+    dismissNotice: () => {
+      notice.value = '';
+    },
     credentialWarning,
     spaceRevision,
     identityState,
@@ -456,6 +514,12 @@ export function useWorkspace() {
     serverTime,
     lifecycle: (active: boolean) => {
       foreground = active;
+      retryTick();
+      if (!active) {
+        clearInterval(retryTimer);
+        retryTimer = undefined;
+      } else if (retrySeconds.value && !retryTimer)
+        retryTimer = setInterval(retryTick, 1000);
       stop();
       if (active) {
         coordinator.tick();
