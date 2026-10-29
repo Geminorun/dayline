@@ -773,7 +773,9 @@ const recent = computed(
           <footer class="timeline-footer">
             <span><i></i>未结束事项自动延伸到今天</span
             ><span class="focus-legend"
-              ><b>★</b>重点日期 · 缩小时按周 / 月汇总</span
+              ><i class="focus-legend-dot" aria-hidden="true"></i>重点日
+              <b class="focus-legend-cluster" aria-hidden="true">3</b
+              >聚合天数</span
             ><span>{{ visible.length }} 件事项</span>
           </footer>
         </section>

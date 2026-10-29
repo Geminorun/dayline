@@ -6,10 +6,12 @@ import {
   onMounted,
   ref,
   watch,
+  useId,
 } from 'vue';
 import {
   timelineBar,
   timelineFocusGroups,
+  validFocusDays,
   timelineCanvasWindow,
   TIMELINE_RECENT_POSITION,
   visibleRows,
@@ -19,8 +21,13 @@ import {
   dateOrdinal,
 } from '@dayline/core';
 import { recordView } from './view-state';
+import IconButton from '../components/IconButton.vue';
 import PlannerIcon from '../components/PlannerIcon.vue';
-import type { TimelineCanvasWindow, TimelineScale } from '@dayline/core';
+import type {
+  TimelineCanvasWindow,
+  TimelineScale,
+  TimelineFocusGroup,
+} from '@dayline/core';
 import type { CategoryDto, EntryDto, FocusDayDto } from '@dayline/contracts';
 const props = defineProps<{
   categories?: CategoryDto[];
@@ -43,7 +50,12 @@ const emit = defineEmits<{
 const detailOffset = ref(0);
 const viewport = ref<HTMLElement | null>(null),
   scrollTop = ref(0),
-  details = ref<{ entryId: string; dates: string[] } | null>(null);
+  selection = ref<string | null>(null);
+const panelId = useId();
+const focusPanel = ref<HTMLElement | null>(null);
+const focusOpen = ref(false);
+const focusPosition = ref({ left: '0px', top: '0px' });
+let focusTrigger: HTMLButtonElement | null = null;
 const plotWidth = ref(900);
 const sourceWindow = computed(
   () =>
@@ -229,7 +241,102 @@ const groups = computed(() =>
     props.focusDays,
     props.today,
     window.value,
+    { minimumDistance: 28, position: 'dates-center' },
   ),
+);
+const groupsByEntry = computed(() => {
+  const result = new Map<string, TimelineFocusGroup[]>();
+  for (const group of groups.value) {
+    const list = result.get(group.entryId) ?? [];
+    list.push(group);
+    result.set(group.entryId, list);
+  }
+  return result;
+});
+const focusTotals = computed(() => {
+  const counts = new Map<string, number>();
+  for (const focus of validFocusDays(
+    props.entries,
+    props.focusDays,
+    props.today,
+  ))
+    counts.set(focus.entryId, (counts.get(focus.entryId) ?? 0) + 1);
+  return counts;
+});
+const details = computed(
+  () => groups.value.find((group) => group.key === selection.value) ?? null,
+);
+const focusTitle = computed(
+  () => props.entries.find((e) => e.id === details.value?.entryId)?.title ?? '',
+);
+function focusLabel(group: TimelineFocusGroup) {
+  const title = props.entries.find((e) => e.id === group.entryId)?.title ?? '';
+  return group.dates.length === 1
+    ? `${title} · ${group.dates[0]} · 重点日`
+    : `${title} · ${group.dates.length} 个重点日 · ${group.dates.slice(0, 3).join('、')}${group.dates.length > 3 ? '…' : ''}`;
+}
+async function openFocus(group: TimelineFocusGroup, event: MouseEvent) {
+  if (!(event.currentTarget instanceof HTMLButtonElement)) return;
+  focusTrigger = event.currentTarget;
+  selection.value = group.key;
+  detailOffset.value = 0;
+  const rect = focusTrigger.getBoundingClientRect();
+  placeFocus(rect, 360);
+  await nextTick();
+  if (selection.value !== group.key || !focusTrigger?.isConnected) return;
+  focusPanel.value?.showPopover?.();
+  placeFocus(rect, focusPanel.value?.getBoundingClientRect().height || 360);
+  focusOpen.value = true;
+  focusPanel.value
+    ?.querySelector<HTMLButtonElement>('[data-focus-date]')
+    ?.focus({ preventScroll: true });
+}
+function placeFocus(rect: DOMRect, panelHeight: number) {
+  const width = Math.min(320, globalThis.innerWidth - 24);
+  const height = Math.min(panelHeight, globalThis.innerHeight - 24);
+  focusPosition.value = {
+    left: `${Math.max(12, Math.min(rect.left + rect.width / 2 - width / 2, globalThis.innerWidth - width - 12))}px`,
+    top: `${Math.max(12, rect.bottom + height + 8 <= globalThis.innerHeight ? rect.bottom + 8 : Math.min(rect.top - height - 8, globalThis.innerHeight - height - 12))}px`,
+  };
+}
+function pageFocus(amount: number) {
+  detailOffset.value += amount * 50;
+  const list = focusPanel.value?.querySelector('.focus-date-list');
+  if (list instanceof HTMLElement) list.scrollTop = 0;
+}
+function closeFocus(returnFocus = false) {
+  focusPanel.value?.hidePopover?.();
+  focusOpen.value = false;
+  selection.value = null;
+  if (returnFocus && focusTrigger?.isConnected)
+    focusTrigger.focus({ preventScroll: true });
+}
+function focusToggle(event: Event) {
+  if (
+    event.currentTarget instanceof HTMLElement &&
+    typeof event.currentTarget.showPopover === 'function'
+  )
+    focusOpen.value = event.currentTarget.matches(':popover-open');
+}
+function visitFocus(date: string) {
+  closeFocus();
+  emit('day', date);
+}
+watch(
+  [
+    () => window.value.start,
+    () => window.value.endExclusive,
+    () => window.value.width,
+    () => scrollTop.value,
+  ],
+  () => closeFocus(),
+);
+watch(
+  () => details.value?.dates.join('|'),
+  (value) => {
+    detailOffset.value = 0;
+    if (!value) closeFocus();
+  },
 );
 function color(entry: EntryDto) {
   return (
@@ -290,13 +397,22 @@ onMounted(() => {
     observer.observe(viewport.value);
   }
   viewport.value?.addEventListener('wheel', wheel, { passive: false });
+  globalThis.addEventListener('resize', dismissFocus);
+  globalThis.addEventListener('scroll', dismissFocus, true);
   if (viewport.value) {
     viewport.value.scrollTop = recordView.timelineTop;
     viewport.value.scrollLeft = recordView.timelineLeft;
     scrollTop.value = recordView.timelineTop;
   }
 });
+function dismissFocus(event: Event) {
+  if (event.target instanceof Node && focusPanel.value?.contains(event.target))
+    return;
+  closeFocus();
+}
 onBeforeUnmount(() => {
+  globalThis.removeEventListener('resize', dismissFocus);
+  globalThis.removeEventListener('scroll', dismissFocus, true);
   observer?.disconnect();
   clearTimeout(wheelTimer);
   viewport.value?.removeEventListener('wheel', wheel);
@@ -406,14 +522,13 @@ defineExpose({ locateToday });
                   entryStatus(entry, today)
                 ]
               }}</span
-            ><span>{{ durationDays(entry, today) }}天</span
-            ><span
-              >★{{
-                focusDays.filter(
-                  (focus) => focus.entryId === entry.id && focus.focused,
-                ).length
-              }}天</span
-            >
+            ><span>持续 {{ durationDays(entry, today) }} 天</span>
+          </div>
+          <div
+            class="gantt-focus-total"
+            :class="{ 'has-focus': focusTotals.get(entry.id) }"
+          >
+            累计重点 {{ focusTotals.get(entry.id) ?? 0 }} 天
           </div>
         </div>
         <div
@@ -446,67 +561,93 @@ defineExpose({ locateToday });
             >{{ bar(entry)?.continuesAfter ? '›' : '' }}
           </button>
           <button
-            v-for="group in groups.filter((g) => g.entryId === entry.id)"
+            v-for="group in groupsByEntry.get(entry.id) ?? []"
             :key="group.key"
-            class="focus-marker gantt-focus-mark"
+            type="button"
+            class="focus-marker timeline-focus-marker"
             :class="{
-              'focus-day':
-                window.focusUnit === 'day' && group.dates.length === 1,
-              'focus-group':
-                window.focusUnit !== 'day' || group.dates.length > 1,
+              'is-cluster': group.dates.length > 1,
+              'is-large-count': group.dates.length > 999,
             }"
-            :style="{
-              left: group.left + 'px',
-              width:
-                (window.focusUnit === 'day' && group.dates.length === 1
-                  ? Math.max(5, Math.min(28, window.pixelsPerDay - 8))
-                  : 30) + 'px',
-            }"
-            :aria-label="`${entry.title} ${group.dates.length} 个重点日`"
-            @click="
-              details = group;
-              detailOffset = 0;
-            "
+            :style="{ left: group.left + 'px' }"
+            :title="focusLabel(group)"
+            :aria-label="focusLabel(group)"
+            :aria-controls="panelId"
+            :aria-expanded="focusOpen && selection === group.key"
+            @click="openFocus(group, $event)"
           >
-            <template
-              v-if="window.focusUnit !== 'day' || group.dates.length > 1"
-              >★{{ group.dates.length }}</template
-            >
+            <span class="timeline-focus-dot" aria-hidden="true">{{
+              group.dates.length > 1
+                ? group.dates.length > 999
+                  ? '999+'
+                  : group.dates.length
+                : ''
+            }}</span>
           </button>
         </div>
       </div>
       <div :style="{ height: rows.after + 'px' }"></div>
     </div>
   </div>
-  <section v-if="details" class="record-panel" aria-label="重点日期详情">
-    <h2>重点日期 · {{ details.dates.length }} 天</h2>
-    <div class="date-list">
-      <button
-        v-for="date in details.dates.slice(detailOffset, detailOffset + 100)"
-        :key="date"
-        class="secondary"
-        @click="emit('day', date)"
-      >
-        {{ date }} · 回看
-      </button>
+  <Teleport to="body">
+    <div
+      :id="panelId"
+      ref="focusPanel"
+      popover="auto"
+      class="timeline-focus-popover"
+      :style="focusPosition"
+      role="dialog"
+      :aria-labelledby="panelId + '-heading'"
+      @toggle="focusToggle"
+      @keydown.esc="closeFocus(true)"
+    >
+      <template v-if="details">
+        <div class="focus-popover-heading">
+          <div>
+            <h2 :id="panelId + '-heading'">
+              重点日期 · {{ details.dates.length }} 天
+            </h2>
+            <p>{{ focusTitle }}</p>
+          </div>
+          <IconButton
+            icon="close"
+            label="关闭重点详情"
+            @click="closeFocus(true)"
+          />
+        </div>
+        <p class="focus-popover-hint">当前标记包含的日期，点击进入每日回看。</p>
+        <div class="date-list focus-date-list">
+          <button
+            v-for="date in details.dates.slice(detailOffset, detailOffset + 50)"
+            :key="date"
+            type="button"
+            data-focus-date
+            :aria-label="`回看 ${date}`"
+            @click="visitFocus(date)"
+          >
+            <span class="focus-date-dot" aria-hidden="true"></span
+            ><span>{{ date }}</span
+            ><PlannerIcon name="chevron" />
+          </button>
+        </div>
+        <div v-if="details.dates.length > 50" class="focus-popover-pages">
+          <IconButton
+            icon="chevron"
+            class="flip"
+            label="上一页重点日期"
+            :disabled="detailOffset === 0"
+            @click="pageFocus(-1)"
+          /><span
+            >{{ Math.floor(detailOffset / 50) + 1 }} /
+            {{ Math.ceil(details.dates.length / 50) }}</span
+          ><IconButton
+            icon="chevron"
+            label="下一页重点日期"
+            :disabled="detailOffset + 50 >= details.dates.length"
+            @click="pageFocus(1)"
+          />
+        </div>
+      </template>
     </div>
-    <p>
-      第 {{ Math.floor(detailOffset / 100) + 1 }} /
-      {{ Math.ceil(details.dates.length / 100) }} 页
-    </p>
-    <button
-      class="secondary"
-      :disabled="detailOffset === 0"
-      @click="detailOffset -= 100"
-    >
-      上一页重点日期</button
-    ><button
-      class="secondary"
-      :disabled="detailOffset + 100 >= details.dates.length"
-      @click="detailOffset += 100"
-    >
-      下一页重点日期
-    </button>
-    <button class="secondary" @click="details = null">关闭重点详情</button>
-  </section>
+  </Teleport>
 </template>

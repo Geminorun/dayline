@@ -283,3 +283,106 @@ it('keeps inclusive end dates visible when a panned window starts partway throug
     }),
   ).toEqual([]);
 });
+
+it('keeps neighboring daily dots separate when they fit and positions aggregates over their actual dates', async () => {
+  const { timelineCanvasWindow, validFocusDays } =
+    await import('../src/index.js');
+  const item = { ...entry, startDate: '2026-01-01' };
+  const focus = ['2026-09-01', '2026-10-26', '2026-10-27', '2026-10-28'].map(
+    (date) => ({ entryId: item.id, date, focused: true }),
+  );
+  const window = timelineCanvasWindow(
+    [item],
+    '2026-10-28',
+    'month',
+    undefined,
+    1000,
+  );
+  const options = { minimumDistance: 28, position: 'dates-center' } as const;
+  const groups = timelineFocusGroups(
+    [item],
+    focus,
+    '2026-10-28',
+    window,
+    options,
+  );
+  expect(groups.map((group) => group.dates)).toEqual([
+    ['2026-10-26'],
+    ['2026-10-27'],
+    ['2026-10-28'],
+  ]);
+  expect(groups[2]?.left).toBeCloseTo(850, 6);
+  const year = timelineCanvasWindow(
+    [item],
+    '2026-10-28',
+    'year',
+    undefined,
+    1000,
+  );
+  const aggregate = timelineFocusGroups(
+    [item],
+    focus,
+    '2026-10-28',
+    year,
+    options,
+  );
+  expect(aggregate.flatMap((group) => group.dates)).toEqual(
+    focus.map((day) => day.date),
+  );
+  expect(aggregate.find((group) => group.dates.length === 3)?.left).toBeCloseTo(
+    (dateOrdinal('2026-10-27') + 0.5 - year.start) * year.pixelsPerDay,
+    6,
+  );
+  expect(
+    validFocusDays(
+      [item],
+      [
+        ...focus,
+        { entryId: item.id, date: '2026-10-29', focused: true },
+        { entryId: item.id, date: '2026-10-25', focused: false },
+      ],
+      '2026-10-28',
+    ),
+  ).toHaveLength(4);
+});
+it('retains exact dates in dense centered clusters and includes a partially visible focus day', () => {
+  const item = { ...entry, startDate: '0001-01-01', endDate: '9999-12-31' };
+  const dates = Array.from({ length: 10000 }, (_, i) => ({
+    entryId: item.id,
+    date: ordinalDate(i * 365 + 1),
+    focused: true,
+  }));
+  const window = timelineWindow([item], '9999-12-31', 'all', '9999-12-31', 900);
+  const options = { minimumDistance: 28, position: 'dates-center' } as const;
+  const groups = timelineFocusGroups(
+    [item],
+    dates,
+    '9999-12-31',
+    window,
+    options,
+  );
+  expect(groups.flatMap((group) => group.dates)).toHaveLength(10000);
+  expect(groups.length).toBeLessThanOrEqual(80);
+  for (let i = 1; i < groups.length; i++)
+    expect(
+      (groups[i]?.left ?? 0) - (groups[i - 1]?.left ?? 0),
+    ).toBeGreaterThanOrEqual(28);
+  const day = dateOrdinal('2026-10-01');
+  const partial = {
+    ...window,
+    start: day + 0.75,
+    endExclusive: day + 31,
+    width: 310,
+    pixelsPerDay: 10,
+    focusUnit: 'day' as const,
+  };
+  expect(
+    timelineFocusGroups(
+      [item],
+      [{ entryId: item.id, date: '2026-10-01', focused: true }],
+      '2026-10-28',
+      partial,
+      options,
+    )[0],
+  ).toMatchObject({ dates: ['2026-10-01'], left: 14 });
+});

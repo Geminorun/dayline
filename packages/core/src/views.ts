@@ -367,42 +367,56 @@ export interface ViewFocus {
   date: string;
   focused: boolean;
 }
+export interface TimelineFocusGroup {
+  entryId: string;
+  key: string;
+  left: number;
+  dates: string[];
+}
+export function validFocusDays(
+  entries: readonly ViewEntry[],
+  focusDays: readonly ViewFocus[],
+  today: string,
+) {
+  const active = new Map(
+    entries.filter((e) => !e.deletedAt).map((e) => [e.id, e]),
+  );
+  return focusDays.filter((focus) => {
+    const entry = active.get(focus.entryId);
+    return (
+      entry &&
+      focus.focused &&
+      focus.date <= today &&
+      focus.date >= entry.startDate &&
+      (!entry.endDate || focus.date <= entry.endDate)
+    );
+  });
+}
 export function timelineFocusGroups(
   entries: readonly ViewEntry[],
   focusDays: readonly ViewFocus[],
   today: string,
   window: TimelineWindow,
+  options: {
+    minimumDistance?: number;
+    position?: 'period-start' | 'dates-center';
+  } = {},
 ) {
-  const active = new Map(
-    entries.filter((e) => !e.deletedAt).map((e) => [e.id, e]),
-  );
-  const groups = new Map<
-    string,
-    { entryId: string; key: string; left: number; dates: string[] }
-  >();
-  for (const focus of focusDays) {
-    const entry = active.get(focus.entryId);
-    if (
-      !entry ||
-      !focus.focused ||
-      focus.date > today ||
-      focus.date < entry.startDate ||
-      (entry.endDate && focus.date > entry.endDate)
-    )
-      continue;
+  const groups = new Map<string, TimelineFocusGroup>();
+  for (const focus of validFocusDays(entries, focusDays, today)) {
     const day = dateOrdinal(focus.date);
-    if (day < window.start || day >= window.endExclusive) continue;
+    if (day + 1 <= window.start || day >= window.endExclusive) continue;
     const grouped =
       window.focusUnit === 'day'
         ? day
         : window.focusUnit === 'week'
           ? day - ((day - 1) % 7)
           : dateOrdinal(focus.date.slice(0, 7) + '-01');
-    const key = `${entry.id}:${grouped}`;
+    const key = `${focus.entryId}:${grouped}`;
     let group = groups.get(key);
     if (!group) {
       group = {
-        entryId: entry.id,
+        entryId: focus.entryId,
         key,
         left:
           (Math.max(grouped, window.start) - window.start + 0.5) *
@@ -415,24 +429,43 @@ export function timelineFocusGroups(
   }
   // On very long all-time windows, several months can share a pixel. Merge their
   // exact date lists into a deterministic visible group, never choose a random day.
-  const visibleGroups: {
-    entryId: string;
-    key: string;
-    left: number;
-    dates: string[];
-  }[] = [];
+  const visibleGroups: TimelineFocusGroup[] = [];
+  const minimumDistance = Math.max(
+    options.minimumDistance ?? 44,
+    window.width / 80,
+  );
+  const centered = options.position === 'dates-center';
+  if (centered)
+    for (const group of groups.values()) {
+      // An aggregate represents all its exact dates; a single day stays at its date.
+      const day =
+        group.dates.reduce((sum, date) => sum + dateOrdinal(date) + 0.5, 0) /
+        group.dates.length;
+      const inset = Math.min(minimumDistance / 2, window.width / 2);
+      group.left = Math.max(
+        inset,
+        Math.min(
+          window.width - inset,
+          (day - window.start) * window.pixelsPerDay,
+        ),
+      );
+    }
   const ordered = [...groups.values()].sort(
     (a, b) => a.entryId.localeCompare(b.entryId) || a.left - b.left,
   );
-  const minimumDistance = Math.max(44, window.width / 80);
   for (const group of ordered) {
     const previous = visibleGroups.at(-1);
     if (
       previous?.entryId === group.entryId &&
       group.left - previous.left < minimumDistance
-    )
+    ) {
+      if (centered)
+        previous.left =
+          (previous.left * previous.dates.length +
+            group.left * group.dates.length) /
+          (previous.dates.length + group.dates.length);
       previous.dates.push(...group.dates);
-    else visibleGroups.push({ ...group, dates: [...group.dates] });
+    } else visibleGroups.push({ ...group, dates: [...group.dates] });
   }
   return visibleGroups.map((g) => ({ ...g, dates: g.dates.sort() }));
 }

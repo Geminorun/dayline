@@ -120,8 +120,10 @@ describe('routed auth and complete timeline accessibility', () => {
         scale: 'all',
         anchor: '2026-10-26',
       },
+      global: { stubs: { Teleport: true } },
     });
     wrappers.push(wrapper);
+    await flushPromises();
     expect(wrapper.findAll('.timeline-row').length).toBeLessThan(30);
     expect(wrapper.findAll('.timeline-tick').length).toBeLessThanOrEqual(80);
     const markers = wrapper.findAll('.focus-marker');
