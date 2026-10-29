@@ -52,6 +52,7 @@ import {
 } from '../adapters/local-repository';
 import { useAccount } from '../account';
 import { recordView } from './view-state';
+import { FOCUS_HEAT_STEPS } from './focus-heat';
 const route = useRoute(),
   router = useRouter();
 const {
@@ -773,9 +774,21 @@ const recent = computed(
           <footer class="timeline-footer">
             <span><i></i>未结束事项自动延伸到今天</span
             ><span class="focus-legend"
-              ><i class="focus-legend-dot" aria-hidden="true"></i>重点日
-              <b class="focus-legend-cluster" aria-hidden="true">3</b
-              >聚合天数</span
+              >重点天数 <span aria-hidden="true">少</span>
+              <span
+                class="focus-legend-ramp"
+                role="img"
+                aria-label="颜色由浅到深：1 天、2 至 3 天、4 至 7 天、8 天及以上"
+              >
+                <i
+                  v-for="step in FOCUS_HEAT_STEPS"
+                  :key="step.level"
+                  class="focus-heat-cell"
+                  :data-level="step.level"
+                  :title="step.label"
+                  aria-hidden="true"
+                ></i> </span
+              ><span aria-hidden="true">多</span></span
             ><span>{{ visible.length }} 件事项</span>
           </footer>
         </section>

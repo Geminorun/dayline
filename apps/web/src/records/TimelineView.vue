@@ -21,6 +21,7 @@ import {
   dateOrdinal,
 } from '@dayline/core';
 import { recordView } from './view-state';
+import { focusHeatLevel } from './focus-heat';
 import IconButton from '../components/IconButton.vue';
 import PlannerIcon from '../components/PlannerIcon.vue';
 import type {
@@ -61,6 +62,16 @@ const panelId = useId();
 const focusPanel = ref<HTMLElement | null>(null);
 const focusOpen = ref(false);
 const focusPosition = ref({ left: '0px', top: '0px' });
+const tipId = panelId + '-tip';
+const tipPanel = ref<HTMLElement | null>(null);
+const tipKey = ref<string | null>(null);
+const tipPosition = ref({ left: '0px', top: '0px' });
+const tipGroup = computed(() =>
+  groups.value.find((group) => group.key === tipKey.value),
+);
+let tipTimer: ReturnType<typeof setTimeout> | undefined;
+let tipHideTimer: ReturnType<typeof setTimeout> | undefined;
+let tipRequest = 0;
 let focusTrigger: HTMLButtonElement | null = null;
 const plotWidth = ref(900);
 const sourceWindow = computed(
@@ -330,6 +341,7 @@ function focusLabel(group: TimelineFocusGroup) {
 }
 async function openFocus(group: TimelineFocusGroup, event: MouseEvent) {
   if (!(event.currentTarget instanceof HTMLButtonElement)) return;
+  hideTip();
   focusTrigger = event.currentTarget;
   selection.value = group.key;
   detailOffset.value = 0;
@@ -346,11 +358,58 @@ async function openFocus(group: TimelineFocusGroup, event: MouseEvent) {
 }
 function placeFocus(rect: DOMRect, panelHeight: number) {
   const width = Math.min(320, globalThis.innerWidth - 24);
+  focusPosition.value = panelPosition(rect, width, panelHeight);
+}
+function panelPosition(rect: DOMRect, width: number, panelHeight: number) {
   const height = Math.min(panelHeight, globalThis.innerHeight - 24);
-  focusPosition.value = {
+  return {
     left: `${Math.max(12, Math.min(rect.left + rect.width / 2 - width / 2, globalThis.innerWidth - width - 12))}px`,
     top: `${Math.max(12, rect.bottom + height + 8 <= globalThis.innerHeight ? rect.bottom + 8 : Math.min(rect.top - height - 8, globalThis.innerHeight - height - 12))}px`,
   };
+}
+function hideTip() {
+  tipRequest++;
+  clearTimeout(tipTimer);
+  clearTimeout(tipHideTimer);
+  tipPanel.value?.hidePopover?.();
+  tipKey.value = null;
+}
+function scheduleTipHide() {
+  clearTimeout(tipHideTimer);
+  tipHideTimer = setTimeout(hideTip, 100);
+}
+function keepTip() {
+  clearTimeout(tipHideTimer);
+}
+function showTip(group: TimelineFocusGroup, event: Event, immediate = false) {
+  hideTip();
+  if (focusOpen.value || !(event.currentTarget instanceof HTMLButtonElement))
+    return;
+  const target = event.currentTarget,
+    request = tipRequest;
+  const reveal = async () => {
+    tipKey.value = group.key;
+    await nextTick();
+    if (request !== tipRequest || !target.isConnected) return;
+    const rect = target.getBoundingClientRect();
+    tipPosition.value = panelPosition(
+      rect,
+      Math.min(260, globalThis.innerWidth - 24),
+      100,
+    );
+    tipPanel.value?.showPopover?.();
+    const bounds = tipPanel.value?.getBoundingClientRect();
+    tipPosition.value = panelPosition(
+      rect,
+      bounds?.width || Math.min(260, globalThis.innerWidth - 24),
+      bounds?.height || 100,
+    );
+  };
+  if (immediate) void reveal();
+  else
+    tipTimer = setTimeout(() => {
+      void reveal();
+    }, 180);
 }
 function pageFocus(amount: number) {
   detailOffset.value += amount * 50;
@@ -358,6 +417,7 @@ function pageFocus(amount: number) {
   if (list instanceof HTMLElement) list.scrollTop = 0;
 }
 function closeFocus(returnFocus = false) {
+  hideTip();
   focusPanel.value?.hidePopover?.();
   focusOpen.value = false;
   selection.value = null;
@@ -394,6 +454,12 @@ watch(
   (value) => {
     detailOffset.value = 0;
     if (!value) closeFocus();
+  },
+);
+watch(
+  () => tipGroup.value?.dates.join('|'),
+  (value, previous) => {
+    if (previous !== undefined && value !== previous) hideTip();
   },
 );
 function color(entry: EntryDto) {
@@ -459,6 +525,7 @@ onMounted(() => {
   }
   viewport.value?.addEventListener('wheel', wheel, { passive: false });
   globalThis.addEventListener('resize', dismissFocus);
+  globalThis.addEventListener('keydown', dismissTipKey);
   globalThis.addEventListener('scroll', dismissFocus, true);
   if (viewport.value) {
     const top = Math.max(
@@ -490,8 +557,13 @@ function dismissFocus(event: Event) {
     return;
   closeFocus();
 }
+function dismissTipKey(event: KeyboardEvent) {
+  if (event.key === 'Escape') hideTip();
+}
 onBeforeUnmount(() => {
+  hideTip();
   globalThis.removeEventListener('resize', dismissFocus);
+  globalThis.removeEventListener('keydown', dismissTipKey);
   globalThis.removeEventListener('scroll', dismissFocus, true);
   observer?.disconnect();
   clearTimeout(wheelTimer);
@@ -677,24 +749,23 @@ defineExpose({ locateToday });
                 :key="group.key"
                 type="button"
                 class="focus-marker timeline-focus-marker"
-                :class="{
-                  'is-cluster': group.dates.length > 1,
-                  'is-large-count': group.dates.length > 999,
-                }"
                 :style="{ left: group.left - placement.left + 'px' }"
-                :title="focusLabel(group)"
                 :aria-label="focusLabel(group)"
+                :aria-describedby="tipKey === group.key ? tipId : undefined"
                 :aria-controls="panelId"
                 :aria-expanded="focusOpen && selection === group.key"
+                @pointerenter="showTip(group, $event)"
+                @pointerleave="scheduleTipHide"
+                @focus="showTip(group, $event, true)"
+                @blur="hideTip"
+                @keydown.esc="hideTip"
                 @click="openFocus(group, $event)"
               >
-                <span class="timeline-focus-dot" aria-hidden="true">{{
-                  group.dates.length > 1
-                    ? group.dates.length > 999
-                      ? '999+'
-                      : group.dates.length
-                    : ''
-                }}</span>
+                <span
+                  class="focus-heat-cell"
+                  :data-level="focusHeatLevel(group.dates.length)"
+                  aria-hidden="true"
+                ></span>
               </button>
             </div>
           </div>
@@ -704,6 +775,24 @@ defineExpose({ locateToday });
     </div>
   </div>
   <Teleport to="body">
+    <div
+      v-if="tipGroup"
+      :id="tipId"
+      ref="tipPanel"
+      popover="manual"
+      class="timeline-focus-tip"
+      role="tooltip"
+      :style="tipPosition"
+      @pointerenter="keepTip"
+      @pointerleave="hideTip"
+    >
+      <strong>{{ tipGroup.dates.length }} 个重点日</strong>
+      <span
+        >{{ tipGroup.dates.slice(0, 3).join('、')
+        }}{{ tipGroup.dates.length > 3 ? '…' : '' }}</span
+      >
+      <small>点击色块查看日期</small>
+    </div>
     <div
       :id="panelId"
       ref="focusPanel"

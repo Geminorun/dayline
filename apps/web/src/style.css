@@ -2121,7 +2121,7 @@ dd {
   }
 }
 
-/* Focus marks use one shape at every zoom level. Date counts stay explicit. */
+/* Focus days use uniform contribution cells; exact counts live in their tip. */
 .gantt-row-label {
   padding-top: 9px;
   padding-bottom: 7px;
@@ -2136,7 +2136,7 @@ dd {
   color: var(--muted);
 }
 .gantt-focus-total.has-focus {
-  color: var(--warning);
+  color: var(--accent-ink);
 }
 .gantt-row-plot .gantt-bar {
   top: 12px;
@@ -2149,64 +2149,86 @@ dd {
   height: 28px;
   padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: 4px;
   transform: translateX(-50%);
   display: grid;
   place-items: center;
   background: transparent;
   z-index: 3;
-  color: var(--warning);
+  color: var(--accent-ink);
 }
-.timeline-focus-dot {
-  display: grid;
-  place-items: center;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--warning);
-  box-shadow: 0 0 0 2px var(--surface);
+.focus-heat-cell {
+  display: inline-block;
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent-ink) 30%, var(--surface));
 }
-.timeline-focus-marker.is-cluster .timeline-focus-dot {
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--warning);
-  color: var(--warning);
-  background: var(--warning-soft);
-  font-size: 10px;
-  line-height: 1;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
+.focus-heat-cell[data-level='2'] {
+  background: color-mix(in srgb, var(--accent-ink) 50%, var(--surface));
 }
-.timeline-focus-marker.is-large-count .timeline-focus-dot {
-  font-size: 8px;
+.focus-heat-cell[data-level='3'] {
+  background: color-mix(in srgb, var(--accent-ink) 72%, var(--surface));
 }
-.timeline-focus-marker:hover .timeline-focus-dot,
-.timeline-focus-marker:focus-visible .timeline-focus-dot {
-  box-shadow: 0 0 0 3px var(--warning-soft);
+.focus-heat-cell[data-level='4'] {
+  background: var(--accent-ink);
+}
+.timeline-focus-marker:hover .focus-heat-cell,
+.timeline-focus-marker:focus-visible .focus-heat-cell {
+  outline: 1px solid var(--accent-ink);
+  outline-offset: 2px;
 }
 .timeline-footer .focus-legend {
-  gap: 7px;
+  gap: 6px;
+  color: var(--muted);
 }
-.timeline-footer .focus-legend-dot,
+.focus-legend-ramp {
+  display: inline-flex;
+  gap: 3px;
+}
 .focus-date-dot {
   width: 7px;
   height: 7px;
   flex: 0 0 7px;
   border: 0;
-  border-radius: 50%;
-  background: var(--warning);
+  border-radius: 2px;
+  background: var(--accent);
 }
-.focus-legend .focus-legend-cluster {
-  display: inline-grid;
-  place-items: center;
-  width: 17px;
-  height: 17px;
-  margin-left: 6px;
-  border-radius: 50%;
-  border: 1px solid var(--warning);
-  color: var(--warning);
-  background: var(--warning-soft);
-  font-size: 9px;
+.timeline-focus-tip {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(260px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  background: var(--surface-raised);
+  box-shadow: 0 4px 16px var(--shadow);
+  pointer-events: auto;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.timeline-focus-tip strong,
+.timeline-focus-tip span,
+.timeline-focus-tip small {
+  display: block;
+}
+.timeline-focus-tip strong {
+  font-weight: 550;
+}
+.timeline-focus-tip span {
+  font-size: 11px;
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.timeline-focus-tip small {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--muted);
 }
 .timeline-focus-popover {
   position: fixed;
