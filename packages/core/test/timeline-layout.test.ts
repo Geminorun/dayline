@@ -40,6 +40,26 @@ it('reuses tracks after inclusive end dates, but keeps same-day overlaps apart',
   expect(result[1]?.map((p) => p.entry.id)).toEqual(['c']);
 });
 
+it('keeps adjacent days on one track with fractional camera positions and pixel widths', () => {
+  const entries = Array.from({ length: 31 }, (_, i) =>
+    entry(
+      String(i),
+      ordinalDate(range.start + i),
+      ordinalDate(range.start + i),
+    ),
+  );
+  for (const width of [931, 947, 1001, 1025, 1100, 875.5]) {
+    const camera = {
+      ...range,
+      start: range.start + 0.12,
+      endExclusive: range.endExclusive + 0.12,
+      width,
+      pixelsPerDay: width / 31,
+    };
+    expect(packTimelineLanes(entries, '2026-10-31', camera)).toHaveLength(1);
+  }
+});
+
 it('gives simultaneous ongoing entries separate tracks and fills their earlier gaps', () => {
   const result = packTimelineLanes(
     [

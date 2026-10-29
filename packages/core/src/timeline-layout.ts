@@ -71,9 +71,10 @@ export function packTimelineLanes<T extends ViewEntry>(
   const lanes: TimelinePlacement<T>[][] = [];
   for (const placement of placements) {
     // End dates are inclusive in timelineBar; touching pixel edges may share a lane.
+    // Subpixel arithmetic can put mathematically touching edges a few ulps apart.
     while (
       !active.isEmpty() &&
-      (active.front()?.right ?? Infinity) <= placement.left
+      (active.front()?.right ?? Infinity) <= placement.left + 1e-7
     ) {
       const released = active.dequeue();
       if (released) {
