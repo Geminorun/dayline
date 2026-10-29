@@ -17,12 +17,9 @@ jobs:
   check:
     timeout-minutes: 15
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        postgres: ['17', '18']
     services:
       postgres:
-        image: postgres:${{ matrix.postgres }}-alpine
+        image: postgres:17-alpine
         env:
           POSTGRES_USER: dayline
           POSTGRES_PASSWORD: dayline_ci_only

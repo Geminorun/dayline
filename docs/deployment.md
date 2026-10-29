@@ -74,7 +74,7 @@ APP_ENV 必填字段：`POSTGRES_CONTAINER`、`POSTGRES_PASSWORD`、`BETTER_AUTH
 
 | Workflow | 触发方式 | 工作 |
 | --- | --- | --- |
-| Dayline checks（backend.yml） | 推送 main、PR、手动运行 | main 并行执行代码 / PG17 / 18 检查与镜像构建 / 本机 Nginx 演练，保存镜像 digest；整次 CI 全部成功后才允许发布 |
+| Dayline checks（backend.yml） | 推送 main、PR、手动运行 | main 并行执行代码 / PG17 检查与镜像构建 / 本机 Nginx 演练，保存镜像 digest；整次 CI 全部成功后才允许发布 |
 | Deploy Dayline（deploy.yml） | main 推送的 Dayline checks 成功后自动触发；也保留手动运行 | 自动发布绑定触发它的 CI 提交、运行 ID 和 attempt，手动发布查找同一提交成功 CI；复用镜像，SSH 备份、迁移、启动应用和验证公共 HTTPS |
 
 PR 和其他分支的手动 CI 只运行检查，不推送镜像或产生可发布清单。main 的 CI、演练均不读取生产 Secrets，不访问生产服务器；原生 Nginx 仅安装在临时 CI runner 中。
