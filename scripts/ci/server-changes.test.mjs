@@ -24,6 +24,8 @@ function repository(t) {
   const cwd = mkdtempSync(join(tmpdir(), 'dayline-server-scope-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   git(['init', '-q', '-b', 'main'], cwd);
+  git(['config', 'user.name', 'CI'], cwd);
+  git(['config', 'user.email', 'ci@example.test'], cwd);
   const commit = (files) => {
     for (const [path, content] of Object.entries(files)) {
       mkdirSync(dirname(join(cwd, path)), { recursive: true });

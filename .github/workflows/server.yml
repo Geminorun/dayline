@@ -100,7 +100,9 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
-      - run: pnpm --filter dayline --filter @dayline/miniapp... install --frozen-lockfile
+      # uni-app's existing locked Vue peer graph needs a complete workspace install.
+      # This compatibility job only runs for shared changes, not normal server edits.
+      - run: pnpm install --frozen-lockfile
       - run: pnpm build:shared
       - run: pnpm --filter @dayline/miniapp typecheck
       - run: pnpm --filter @dayline/miniapp test
@@ -243,7 +245,7 @@ jobs:
   deploy:
     name: Deploy server
     needs: [changes, release]
-    if: needs.changes.outputs.mode != 'verify'
+    if: always() && needs.changes.result == 'success' && needs.release.result == 'success' && needs.changes.outputs.mode != 'verify'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
