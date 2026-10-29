@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import {
   Controller,
   Get,
@@ -46,7 +47,11 @@ export class AuthController {
   ) {
     const result = await this.auth.signOut(fromNodeHeaders(request.headers));
     if (!result.ok)
-      throw new AppError(503, 'AUTH_UNAVAILABLE', '退出暂未完成，请重试。');
+      throw new AppError(
+        503,
+        'AUTH_UNAVAILABLE',
+        msg('errors.exitIsNotCompletedYetPleaseTry'),
+      );
     for (const cookie of result.headers.getSetCookie())
       response.append('set-cookie', cookie);
     return { success: true };

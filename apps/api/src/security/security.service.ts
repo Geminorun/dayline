@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Request, Response } from 'express';
@@ -29,7 +30,11 @@ export class SecurityService {
           if (v.until <= now) this.buckets.delete(k);
         if (this.buckets.size >= 20000) {
           response?.setHeader('Retry-After', '60');
-          throw new AppError(429, 'RATE_LIMITED', '请求较多，请稍后重试。');
+          throw new AppError(
+            429,
+            'RATE_LIMITED',
+            msg('errors.thereAreManyRequestsPleaseTryAgain'),
+          );
         }
       }
       bucket = { count: 0, until: now + window };
@@ -44,7 +49,7 @@ export class SecurityService {
       throw new AppError(
         429,
         'RATE_LIMITED',
-        '操作过于频繁，请按提示稍后重试。',
+        msg('errors.theOperationIsTooFrequentPleaseFollow'),
         { retryAfterSeconds },
       );
     }
@@ -94,7 +99,11 @@ export class SecurityService {
     this.pruneFailures(now);
     if (this.failed.size >= 20000) {
       response?.setHeader('Retry-After', '600');
-      throw new AppError(429, 'RATE_LIMITED', '验证请求较多，请稍后重试。');
+      throw new AppError(
+        429,
+        'RATE_LIMITED',
+        msg('errors.thereAreManyVerificationRequestsPleaseTry'),
+      );
     }
     if (
       keys.some((k, i) => {
@@ -103,7 +112,11 @@ export class SecurityService {
       })
     ) {
       response?.setHeader('Retry-After', '600');
-      throw new AppError(429, 'RATE_LIMITED', '验证失败次数过多，请稍后再试。');
+      throw new AppError(
+        429,
+        'RATE_LIMITED',
+        msg('errors.tooManyVerificationFailuresPleaseTryAgain'),
+      );
     }
   }
   failure(scope: string, ip: string, identity: string) {

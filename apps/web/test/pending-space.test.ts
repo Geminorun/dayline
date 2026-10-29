@@ -39,6 +39,7 @@ it('cold pending login skips ordinary snapshots and private cache, routes to del
       if (path === '/api/v1/me')
         return Response.json({
           data: {
+            locale: 'zh-CN',
             id,
             displayName: '待注销',
             profileVersion: 1,

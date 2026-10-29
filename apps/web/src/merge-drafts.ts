@@ -1,3 +1,5 @@
+import { msg } from '@dayline/locales';
+import { ClientError } from '@dayline/api-client';
 import { draftSchema } from '@dayline/contracts';
 import type { EntryDraft, MergeMappings } from '@dayline/contracts';
 /** Called only after server-authorized mappings, never on a normal account switch. */
@@ -22,7 +24,11 @@ export function recoverMergeDraft(
     entry && source.baseEntry && baseCategory && category,
   );
   const categoryId = category?.newId ?? selectedCategoryId;
-  if (!categoryId) throw new Error('请明确选择目标分类；旧草稿原文保留。');
+  if (!categoryId)
+    throw new ClientError(
+      'DRAFT_CATEGORY_REQUIRED',
+      msg('drafts.pleaseSelectTheTargetCategoryExplicitlyThe'),
+    );
   return draftSchema.parse({
     ...source,
     userId: mapping.targetUserId,

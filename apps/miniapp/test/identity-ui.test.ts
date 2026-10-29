@@ -49,6 +49,7 @@ afterEach(() => {
 it('preserves the same actor refresh, requires saved merge selections, retains failed review and clears private state on guest or another actor', async () => {
   const now = '2026-10-26T20:00:00.000Z';
   const actor: UserDto = {
+    locale: 'zh-CN',
     id: randomUUID(),
     displayName: '目标账号',
     email: null,

@@ -1,0 +1,17 @@
+{
+  "app.message": "{value0}-{value1}",
+  "app.editCategory": "Edit category {value0}",
+  "app.deleteCategory": "Delete category {value0}",
+  "app.makeRoomForYourDays": "Make room for your days.",
+  "app.aLittleSpaceForTheThingsThat": "A little space for the things that matter.",
+  "app.recordSavedInCurrentBrowser": "Record saved in current browser",
+  "app.accountRecordsCloudStorage": "Account records · Cloud storage",
+  "app.guestLoginRegister": "Guest · Sign in / Sign up",
+  "app.everyExperienceIsWorthRecording": "Every experience is worth recording",
+  "app.theUnsubmittedContentOfThisMachineCannot": "The unsubmitted content of this machine cannot be read temporarily.",
+  "app.theIdentityHasNotBeenConfirmedAnd": "The identity has not been confirmed and the private cache has been hidden; the original account draft is still retained.",
+  "app.theAccountIsBeingAccountDeletionNormal": "Your account is scheduled for deletion. You can still sign in, but changes are paused.",
+  "app.viewExpirationDateExplicitCancellation": "View deletion date or cancel deletion",
+  "app.dayline": "Dayline",
+  "app.oneDayAtATime": "One day at a time."
+}

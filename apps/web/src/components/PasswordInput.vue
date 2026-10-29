@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/index';
 import { ref, watch } from 'vue';
 import IconButton from './IconButton.vue';
 defineOptions({ inheritAttrs: false });
@@ -26,7 +27,7 @@ function input(event: Event) {
     />
     <IconButton
       :icon="visible ? 'eye-off' : 'eye'"
-      :label="visible ? '隐藏密码' : '显示密码'"
+      :label="visible ? tr('common.hidePassword') : tr('common.showPassword')"
       :disabled="$attrs.disabled !== undefined && $attrs.disabled !== false"
       :aria-pressed="visible"
       @click.prevent="visible = !visible"

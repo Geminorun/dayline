@@ -1,0 +1,12 @@
+{
+  "emails.verification.subject": "Verify your Dayline email",
+  "emails.verification.action": "Verify email",
+  "emails.verification.description": "Confirm your email address using this link. It expires in 24 hours.",
+  "emails.binding.subject": "Confirm your Dayline email address",
+  "emails.binding.action": "Verify email address",
+  "emails.binding.description": "This link only verifies your email address. It does not sign you in or move any account. Continue on the original device within 30 minutes.",
+  "emails.reset.subject": "Reset your Dayline password",
+  "emails.reset.action": "Reset password",
+  "emails.reset.description": "If you did not request a password reset, you can ignore this email. This link expires in 30 minutes.",
+  "emails.footer": "This link expires. Please do not forward it."
+}

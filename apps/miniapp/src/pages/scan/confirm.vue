@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { formatBeijingTime } from '@dayline/core';
+import { formatBeijingTime, tr, messageRef } from '../../i18n/index';
+
+import { msg } from '@dayline/locales';
+
 import { qrResolvedDtoSchema, qrStatusDtoSchema } from '@dayline/contracts';
 import { ref } from 'vue';
 import { onLoad, onUnload } from '@dcloudio/uni-app';
@@ -9,14 +12,14 @@ const purpose = ref('login');
 const requestId = ref('');
 const proof = ref('');
 const busy = ref(false);
-const error = ref('');
+const error = messageRef();
 const state = ref('loading');
 const expiresAt = ref('');
 let disposed = false;
 function message(cause: unknown) {
   return cause instanceof ClientError
     ? cause.message
-    : '扫码操作未完成，请回网页重新生成小程序码。';
+    : tr('confirm.theCodeScanningOperationIsNotCompleted');
 }
 async function load(scene: string) {
   busy.value = true;
@@ -78,8 +81,7 @@ async function cancel() {
     ) {
       state.value = 'ended';
       proof.value = '';
-      error.value =
-        '请求已被网页领取或已经结束，无法再取消。请在电脑检查当前账号。';
+      error.value = msg('confirm.theRequestHasBeenClaimedByThe');
     } else error.value = message(cause);
   } finally {
     busy.value = false;
@@ -96,7 +98,7 @@ onLoad((options) => {
   }
   if (!/^[A-Za-z0-9_-]{32}$/.test(scene)) {
     state.value = 'failed';
-    error.value = '扫码参数无效，请从网页重新扫码。';
+    error.value = msg('confirm.theScanCodeParametersAreInvalidPlease');
     return;
   }
   void load(scene);
@@ -109,49 +111,55 @@ onUnload(() => {
 <template>
   <view class="page"
     ><view class="card"
-      ><text class="subtitle">DAYLINE · 网页登录</text
+      ><text class="subtitle">{{ tr('confirm.daylineWebLogin') }}</text
       ><text class="title">{{
         purpose === 'login'
-          ? '确认登录网页'
+          ? tr('common.confirmLoginPage')
           : purpose === 'reauth'
-            ? '确认当前身份重新验证'
-            : '确认绑定微信'
+            ? tr('confirm.confirmCurrentIdentityReAuthentication')
+            : tr('common.confirmBindingToWechat')
       }}</text
-      ><text class="text"
-        >{{
-          purpose === 'login'
-            ? '本次操作将让发起扫码的网页进入此微信对应的账号。'
-            : purpose === 'reauth'
-              ? '本次仅为网页当前账号的指定操作重新验证，不会切换账号。'
-              : '将此微信添加到网页当前账号；已有独立账号时仅允许受验证预览合并，双方数据保留。'
-        }}请确认是你本人发起。</text
-      ><text v-if="state === 'loading'" class="text muted"
-        >正在验证本次扫码…</text
+      ><text class="text">{{
+        tr('confirm.pleaseConfirmThatItWasInitiatedBy', {
+          value0:
+            purpose === 'login'
+              ? tr('confirm.thisOperationWillAllowTheWebpageThat')
+              : purpose === 'reauth'
+                ? tr('confirm.thisTimeOnlyTheSpecifiedOperationsOf')
+                : tr('confirm.addThisWechatToTheCurrentAccount'),
+        })
+      }}</text
+      ><text v-if="state === 'loading'" class="text muted">{{
+        tr('confirm.verifyingThisScan')
+      }}</text
       ><text v-if="error" class="text error" role="alert">{{ error }}</text
       ><template v-if="state === 'scanned'"
-        ><text class="text muted"
-          >扫描尚未授权。请明确选择确认或取消。有效至
-          {{ formatBeijingTime(expiresAt) }}。</text
+        ><text class="text muted">{{
+          tr('confirm.scanNotAuthorizedYetPleaseExplicitlySelect', {
+            value0: formatBeijingTime(expiresAt),
+          })
+        }}</text
         ><button :disabled="busy" @click="confirm">
           {{
             purpose === 'login'
-              ? '确认登录网页'
+              ? tr('common.confirmLoginPage')
               : purpose === 'reauth'
-                ? '确认本次重新验证'
-                : '确认本次微信绑定'
+                ? tr('common.confirmThisReVerification')
+                : tr('common.confirmThisWechatBinding')
           }}</button
         ><button class="secondary" :disabled="busy" @click="cancel">
-          取消本次操作
+          {{ tr('common.cancelThisOperation') }}
         </button></template
       ><template v-if="state === 'confirmed'"
-        ><text class="text notice"
-          >已确认。请回到原网页领取本次操作结果；领取前仍可取消。</text
+        ><text class="text notice">{{
+          tr('confirm.confirmedPleaseReturnToTheOriginalWebpage')
+        }}</text
         ><button class="secondary" :disabled="busy" @click="cancel">
-          取消已确认的登录
+          {{ tr('common.cancelConfirmedLogin') }}
         </button></template
-      ><text v-if="state === 'cancelled'" class="text notice"
-        >本次操作已取消。</text
-      ></view
+      ><text v-if="state === 'cancelled'" class="text notice">{{
+        tr('common.thisOperationHasBeenCancelled')
+      }}</text></view
     ></view
   >
 </template>

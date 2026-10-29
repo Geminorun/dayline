@@ -1,0 +1,4 @@
+{
+  "syncStatus.recordsAreSavedOnThisDeviceClick": "Records are saved on this device, click to refresh",
+  "syncStatus.retryInSeconds": "Retry in {value0} seconds"
+}

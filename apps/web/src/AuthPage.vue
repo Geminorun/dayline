@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { formatBeijingTime, tr, messageRef } from './i18n/index';
+
+import { msg } from '@dayline/locales';
 import PasswordInput from './components/PasswordInput.vue';
-import { formatBeijingTime } from '@dayline/core';
+
 import {
   qrCreatedDtoSchema,
   qrStatusDtoSchema,
@@ -8,13 +11,14 @@ import {
   nativeStatusSchema,
   wechatLoginDtoSchema,
   nativeEmailFlowSchema,
+  displayNameSchema,
 } from '@dayline/contracts';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ClientError } from '@dayline/api-client';
-import { displayNameSchema } from '@dayline/contracts';
-import type { QrCreatedDto } from '@dayline/contracts';
-import type { EmailFlow } from '@dayline/contracts';
+
+import type { QrCreatedDto, EmailFlow } from '@dayline/contracts';
+
 import { api } from './api';
 import { useAccount } from './account';
 import { useWorkspace } from './records/workspace';
@@ -27,13 +31,27 @@ const mode = computed(() =>
   route.params.mode === 'verify-email' ? 'verify' : String(route.params.mode),
 );
 const titles: Record<string, string> = {
-  login: '登录日序',
-  register: '注册日序账号',
-  verify: '验证邮箱',
-  verified: '邮箱验证结果',
-  'forgot-password': '找回密码',
-  'reset-password': '设置新密码',
-  'change-password': '修改密码',
+  get login() {
+    return tr('common.signInToDayline');
+  },
+  get register() {
+    return tr('common.createADaylineAccount');
+  },
+  get verify() {
+    return tr('common.verifyEmail');
+  },
+  get verified() {
+    return tr('common.emailVerification');
+  },
+  get 'forgot-password'() {
+    return tr('common.resetYourPassword');
+  },
+  get 'reset-password'() {
+    return tr('common.setANewPassword');
+  },
+  get 'change-password'() {
+    return tr('common.changePassword');
+  },
 };
 const callback = takeAuthCallback(window.location, window.history);
 const savedEmail = readAuthEmail();
@@ -48,23 +66,22 @@ let resetToken: string | null = callback.token;
 const name = ref('');
 const email = ref(savedEmail.email);
 const flow = ref<EmailFlow | undefined>(savedEmail.flow);
-const registeredMessage =
-  '该邮箱已注册并完成验证，请使用原密码登录，或通过“忘记密码”重新设置。';
+const registeredMessage = msg('auth.thisEmailAddressHasBeenRegisteredAnd');
 const password = ref('');
 const currentPassword = ref('');
 const confirmPassword = ref('');
 const busy = ref(false);
-const message = ref(
+const message = messageRef(
   callback.error
-    ? '链接已失效或验证失败，请重新申请。'
+    ? msg('auth.theLinkHasExpiredOrVerificationFailed')
     : mode.value === 'verified'
-      ? '如已通过邮件链接验证，请使用邮箱和密码登录。登录时将由服务器确认验证状态。'
+      ? msg('auth.ifYouHavePassedTheEmailLink')
       : mode.value === 'login' &&
           savedEmail.flow?.accountStatus === 'registered'
         ? registeredMessage
         : '',
 );
-const error = ref('');
+const error = messageRef();
 const rateLimited = ref(false);
 const retrySeconds = ref(0);
 const retryForLogin = ref(false);
@@ -77,21 +94,36 @@ const retryApplies = computed(
 );
 const errorTip = computed(() =>
   rateLimited.value && retryApplies.value
-    ? `操作过于频繁，请等待 ${retrySeconds.value} 秒后再试。`
+    ? tr('errors.theOperationIsTooFrequentPleaseWait', {
+        value0: retrySeconds.value,
+      })
     : error.value,
 );
 const submitLabels: Record<string, string> = {
-  login: '邮箱登录',
-  register: '注册并发送验证邮件',
-  verify: '重发验证邮件',
-  'forgot-password': '发送密码重置邮件',
-  'reset-password': '重置密码',
-  'change-password': '修改密码',
+  get login() {
+    return tr('common.signInWithEmail');
+  },
+  get register() {
+    return tr('auth.signUpAndSendVerificationEmail');
+  },
+  get verify() {
+    return tr('common.resendVerificationEmail');
+  },
+  get 'forgot-password'() {
+    return tr('common.sendPasswordResetEmail');
+  },
+  get 'reset-password'() {
+    return tr('common.resetPassword');
+  },
+  get 'change-password'() {
+    return tr('common.changePassword');
+  },
 };
 const submitLabel = computed(() => {
-  if (busy.value) return '处理中…';
-  if (retryApplies.value) return `${retrySeconds.value} 秒后可重试`;
-  return submitLabels[mode.value] ?? '提交';
+  if (busy.value) return tr('common.working');
+  if (retryApplies.value)
+    return tr('auth.secondsToRetry', { value0: retrySeconds.value });
+  return submitLabels[mode.value] ?? tr('common.submit');
 });
 let retryTimer: ReturnType<typeof setInterval> | undefined;
 function stopRetry() {
@@ -127,14 +159,14 @@ function waitForRetry(
         : ['register', 'verify', 'forgot-password'].includes(mode.value);
       stopRetry();
       if (applicable && !message.value)
-        message.value = '等待已结束，可以重新提交。';
+        message.value = msg('auth.theWaitIsOverAndYouCan');
     }
   }, 1000);
 }
 const unsubscribeRetry = api.onIdentityChange(stopRetry);
 const qr = ref<QrCreatedDto | null>(null);
 const qrBusy = ref(false);
-const qrMessage = ref('');
+const qrMessage = messageRef();
 let timer: ReturnType<typeof setTimeout> | undefined;
 let disposed = false;
 let polling = false;
@@ -149,16 +181,16 @@ const isEmail = computed(() =>
 function mailFeedback(result: EmailFlow, startCooldown = true) {
   flow.value = result;
   if (result.mailStatus === 'accepted')
-    message.value = '邮件已提交发送，请查收收件箱或垃圾邮件。';
+    message.value = msg('auth.theEmailHasBeenSubmittedForSending');
   else if (result.mailStatus === 'failed')
-    error.value = '账号仍保留，验证邮件发送失败，请稍后重发，无需重新注册。';
+    error.value = msg('auth.theAccountIsStillRetainedAndThe');
   else if (result.mailStatus === 'unconfirmed')
-    error.value = '邮件发送结果尚未确认，请先检查邮箱，未收到可稍后重发。';
+    error.value = msg('auth.theEmailSendingResultHasNotBeen');
   else
     message.value =
       result.accountStatus === 'pending_verification'
-        ? '邮箱尚未验证，请查收之前的验证邮件，或点击下方重新发送。'
-        : '没有可发送的验证邮件，请注册账号或登录已有账号。';
+        ? msg('auth.theEmailAddressHasNotBeenVerified')
+        : msg('auth.thereIsNoVerificationEmailToSend');
   if (startCooldown) {
     writeAuthEmail({
       email: email.value.trim().toLowerCase(),
@@ -239,18 +271,18 @@ onMounted(() => {
       savedEmail.retryScope === 'login',
     );
     if (savedEmail.limited)
-      error.value = '操作过于频繁，请等待倒计时结束后再试。';
+      error.value = msg('auth.theOperationIsTooFrequentPleaseWait');
   }
   if (callback.error && ['login', 'verify'].includes(mode.value)) {
     message.value = '';
-    error.value = '链接已失效或验证失败，请重新申请验证邮件。';
+    error.value = msg('auth.theLinkHasExpiredOrVerificationFailed2');
   }
   if (mode.value === 'verified') {
     void router.replace('/login').then(() => {
       if (disposed) return;
       message.value = callback.error
-        ? '链接已失效，请重新申请验证邮件。'
-        : '验证链接已处理，请使用邮箱和密码登录。';
+        ? msg('auth.theLinkHasExpiredPleaseApplyFor')
+        : msg('auth.theVerificationLinkHasBeenProcessedPlease');
     });
   }
 });
@@ -263,8 +295,8 @@ watch(email, (next, previous) => {
 });
 function feedback(cause: unknown) {
   return cause instanceof ClientError
-    ? cause.message
-    : '操作未完成，请稍后重试。';
+    ? (cause.localized ?? cause.message)
+    : msg('auth.theOperationIsNotCompletedPleaseTry');
 }
 async function submit() {
   if (disposed || retryApplies.value) return;
@@ -277,14 +309,14 @@ async function submit() {
     mode.value === 'register' &&
     !displayNameSchema.safeParse(name.value).success
   ) {
-    error.value = '显示名须为 1–40 个字符。';
+    error.value = msg('errors.displayNameMustBe140Characters');
     return;
   }
   if (
     ['register', 'reset-password', 'change-password'].includes(mode.value) &&
     password.value !== confirmPassword.value
   ) {
-    error.value = '两次输入的新密码不一致。';
+    error.value = msg('auth.theNewPasswordsEnteredTwiceAreInconsistent');
     return;
   }
   busy.value = true;
@@ -355,7 +387,7 @@ async function submit() {
         submittedMode === mode.value &&
         generation === api.getGeneration()
       ) {
-        message.value = '如该邮箱已注册，重置邮件将发送到该邮箱。';
+        message.value = msg('auth.ifThisEmailAddressIsAlreadyRegistered');
         const retry = result.headers['retry-after'];
         if (retry && /^\d{1,5}$/.test(retry) && Number(retry) <= 86400)
           waitForRetry(Number(retry), false, false);
@@ -364,7 +396,7 @@ async function submit() {
       if (!resetToken)
         throw new ClientError(
           'TOKEN_REQUIRED',
-          '缺少有效重置链接，请重新申请。',
+          msg('auth.missingValidResetLinkPleaseApplyAgain'),
         );
       await api.request('/api/auth/reset-password', {
         decode: nativeStatusSchema.parse,
@@ -375,7 +407,7 @@ async function submit() {
       resetToken = null;
       account.clear();
       await router.replace('/login');
-      message.value = '密码已重置，请重新登录。';
+      message.value = msg('auth.passwordHasBeenResetPleaseLogIn');
     } else if (mode.value === 'change-password') {
       if (!api.getAccount()) await account.refresh();
       await api.request('/api/auth/change-password', {
@@ -390,7 +422,7 @@ async function submit() {
         },
       });
       await account.refresh();
-      message.value = '密码已修改，其他设备会话已退出。';
+      message.value = msg('auth.thePasswordHasBeenChangedAndThe');
     }
   } catch (cause) {
     if (
@@ -442,25 +474,29 @@ async function poll() {
     if (disposed || qr.value?.id !== id || !data) return;
     qr.value.status = data.status;
     if (data.status === 'confirmed') {
-      qrMessage.value = '微信已确认，请点击下方完成登录。';
+      qrMessage.value = msg('auth.wechatHasBeenConfirmedPleaseClickBelow');
       return;
     }
     if (['expired', 'cancelled', 'consumed'].includes(data.status)) {
       qrMessage.value =
         data.status === 'expired'
-          ? '二维码已过期，请重新生成。'
-          : '扫码请求已结束，请重新生成。';
+          ? msg('errors.theQrCodeHasExpiredPleaseRegenerate')
+          : msg('auth.theQrCodeScanningRequestHasEnded');
       return;
     }
     qrMessage.value =
       data.status === 'scanned'
-        ? '已扫描，等待在小程序中确认。'
-        : '请用微信扫描，并在小程序中确认登录网页。';
+        ? msg('auth.scannedWaitingForConfirmationInTheApplet')
+        : msg('auth.pleaseScanWithWechatAndConfirmThe');
     timer = setTimeout(() => {
       void poll();
     }, 2000);
   } catch (cause) {
-    if (!disposed) qrMessage.value = feedback(cause) + ' 可手动刷新状态。';
+    if (!disposed)
+      qrMessage.value = msg('common.joinMessages', {
+        value0: feedback(cause),
+        value1: msg('auth.statusCanBeRefreshedManually'),
+      });
   } finally {
     polling = false;
   }
@@ -473,7 +509,7 @@ async function cancelQr() {
     method: 'DELETE',
   });
   qr.value = null;
-  qrMessage.value = '扫码请求已取消。';
+  qrMessage.value = msg('common.scanCodeRequestCanceled');
 }
 async function createQr() {
   if (qrBusy.value) return;
@@ -518,8 +554,10 @@ async function consume() {
         : '/day',
     );
   } catch (cause) {
-    error.value =
-      feedback(cause) + ' 请先到当前账号页检查登录结果；未登录时重新扫码。';
+    error.value = msg('common.joinMessages', {
+      value0: feedback(cause),
+      value1: msg('auth.pleaseGoToTheCurrentAccountPage'),
+    });
   } finally {
     qrBusy.value = false;
   }
@@ -544,17 +582,17 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="card auth-card" :aria-busy="busy">
-    <h1>{{ titles[mode] ?? '账号' }}</h1>
+    <h1>{{ titles[mode] ?? tr('common.account') }}</h1>
     <p v-if="mode === 'login'" class="auth-description">
-      登录后，在不同设备上继续你的记录。
+      {{ tr('auth.onceLoggedInContinueYourRecordingOn') }}
     </p>
     <p v-else-if="mode === 'register'" class="auth-description">
-      创建账号，验证邮箱后开始同步。
+      {{ tr('auth.createAnAccountAndStartSynchronizationAfter') }}
     </p>
     <nav
       v-if="['login', 'register'].includes(mode)"
       class="auth-tabs"
-      aria-label="登录或注册"
+      :aria-label="tr('common.signInOrSignUp')"
     >
       <button
         class="auth-tab"
@@ -563,7 +601,7 @@ onBeforeUnmount(() => {
         :disabled="busy"
         @click="router.replace('/login')"
       >
-        登录
+        {{ tr('common.signIn') }}
       </button>
       <button
         class="auth-tab"
@@ -572,27 +610,28 @@ onBeforeUnmount(() => {
         :disabled="busy"
         @click="router.replace('/register')"
       >
-        注册
+        {{ tr('common.signUp') }}
       </button>
     </nav>
     <p v-if="mode === 'verify'" class="muted">
-      完成邮箱验证后，即可使用邮箱和密码登录，同步你的记录。
+      {{ tr('auth.afterCompletingTheEmailVerificationYouCan') }}
     </p>
     <p
       v-if="mode === 'verify' && flow?.accountStatus === 'pending_verification'"
       class="notice"
     >
-      该邮箱已有待验证账号，本次未修改原密码。继续验证即可；忘记原密码可以通过下方入口重新设置。
+      {{ tr('auth.thisEmailAddressAlreadyHasAnAccount') }}
     </p>
     <p v-if="message" role="status" class="notice">{{ message }}</p>
     <p v-if="errorTip" role="alert" class="error">{{ errorTip }}</p>
     <p v-if="retryApplies" class="muted">
-      请等待倒计时结束后手动重试，系统不会自动重复提交。
+      {{ tr('auth.pleaseWaitForTheCountdownToEnd') }}
     </p>
     <form v-if="mode !== 'verified'" @submit.prevent="submit">
       <fieldset class="auth-fields" :disabled="busy">
         <label v-if="mode === 'register'"
-          >显示名<input
+          >{{ tr('common.displayName')
+          }}<input
             v-model="name"
             name="name"
             autocomplete="nickname"
@@ -600,7 +639,8 @@ onBeforeUnmount(() => {
             required
         /></label>
         <label v-if="isEmail"
-          >邮箱<input
+          >{{ tr('common.email')
+          }}<input
             v-model="email"
             name="email"
             type="email"
@@ -608,13 +648,17 @@ onBeforeUnmount(() => {
             required
         /></label>
         <label v-if="mode === 'change-password'"
-          >当前密码<PasswordInput
+          >{{ tr('common.currentPassword')
+          }}<PasswordInput
             v-model="currentPassword"
             autocomplete="current-password"
             required
         /></label>
         <label v-if="isPassword"
-          >{{ mode === 'login' ? '密码' : '新密码（8–128 字符）'
+          >{{
+            mode === 'login'
+              ? tr('common.password2')
+              : tr('auth.newPassword8128Characters')
           }}<PasswordInput
             v-model="password"
             name="password"
@@ -629,7 +673,8 @@ onBeforeUnmount(() => {
           v-if="
             ['register', 'reset-password', 'change-password'].includes(mode)
           "
-          >再次输入新密码<PasswordInput
+          >{{ tr('common.confirmNewPassword')
+          }}<PasswordInput
             v-model="confirmPassword"
             autocomplete="new-password"
             minlength="8"
@@ -646,59 +691,75 @@ onBeforeUnmount(() => {
       </fieldset>
     </form>
     <div class="links">
-      <RouterLink v-if="mode === 'verify'" to="/login"
-        >我已验证，继续登录</RouterLink
+      <RouterLink v-if="mode === 'verify'" to="/login">{{
+        tr('auth.emailVerifiedSignIn')
+      }}</RouterLink>
+      <RouterLink
+        v-else-if="!['login', 'register'].includes(mode)"
+        to="/login"
+        >{{ tr('common.backToSignIn') }}</RouterLink
       >
-      <RouterLink v-else-if="!['login', 'register'].includes(mode)" to="/login"
-        >返回登录</RouterLink
-      >
-      <RouterLink v-if="mode === 'verify'" to="/register"
-        >修改邮箱 / 注册账号</RouterLink
-      >
-      <RouterLink v-if="mode === 'login'" to="/verify">继续邮箱验证</RouterLink>
-      <RouterLink v-if="mode !== 'forgot-password'" to="/forgot-password"
-        >忘记密码</RouterLink
-      >
+      <RouterLink v-if="mode === 'verify'" to="/register">{{
+        tr('auth.modifyEmailRegisterAccount')
+      }}</RouterLink>
+      <RouterLink v-if="mode === 'login'" to="/verify">{{
+        tr('common.continueEmailVerification')
+      }}</RouterLink>
+      <RouterLink v-if="mode !== 'forgot-password'" to="/forgot-password">{{
+        tr('common.forgotPassword')
+      }}</RouterLink>
     </div>
-    <section v-if="mode === 'login'" class="qr" aria-label="微信扫码登录">
-      <h2>微信扫码登录网页</h2>
-      <p>扫描后请在小程序中明确确认。已有账号将切换为扫码的微信账号。</p>
+    <section
+      v-if="mode === 'login'"
+      class="qr"
+      :aria-label="tr('common.signInWithWechat2')"
+    >
+      <h2>{{ tr('common.signInWithWechat') }}</h2>
+      <p>{{ tr('auth.pleaseConfirmClearlyInTheMiniProgram') }}</p>
       <button
         type="button"
         class="button subtle"
         :disabled="qrBusy"
         @click="createQr"
       >
-        {{ qrBusy ? '处理中…' : qr ? '重新生成小程序码' : '生成小程序码' }}
+        {{
+          qrBusy
+            ? tr('common.working')
+            : qr
+              ? tr('common.regenerateAppletCode')
+              : tr('common.generateAppletCode')
+        }}
       </button>
       <template v-if="qr"
         ><img
           :src="qr.miniappCode"
-          alt="用于确认本次网页登录的小程序码"
+          :alt="tr('auth.miniProgramCodeUsedToConfirmThis')"
           width="240"
           height="240"
         />
         <p role="status">{{ qrMessage }}</p>
-        <p>有效至 {{ formatBeijingTime(qr.expiresAt) }}</p>
+        <p>
+          {{ tr('auth.expires', { value0: formatBeijingTime(qr.expiresAt) }) }}
+        </p>
         <button
           class="button primary"
           v-if="qr.status === 'confirmed'"
           :disabled="qrBusy"
           @click="consume"
         >
-          完成本次网页登录</button
+          {{ tr('common.completeThisWebPageLogin') }}</button
         ><button
           v-else-if="['pending', 'scanned'].includes(qr.status)"
           class="button subtle"
           @click="poll"
         >
-          刷新状态</button
+          {{ tr('common.refreshStatus') }}</button
         ><button
           v-if="['pending', 'scanned', 'confirmed'].includes(qr.status)"
           class="button subtle"
           @click="cancelSafely"
         >
-          取消本次扫码
+          {{ tr('common.cancelThisQrCodeScan') }}
         </button></template
       >
     </section>

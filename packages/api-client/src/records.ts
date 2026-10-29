@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import {
   categoryResultSchema,
   categoryOrderResultSchema,
@@ -29,7 +30,7 @@ export function createRecordsClient(api: ApiClient) {
       if (!response.data || response.data.userId !== api.getAccount())
         throw new ClientError(
           'INVALID_RESPONSE',
-          '无法确认数据归属，请重新读取。',
+          msg('errors.unableToConfirmDataOwnershipPleaseRead'),
         );
       return { snapshot: response.data, serverTime: response.serverTime };
     },

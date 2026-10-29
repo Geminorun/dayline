@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { businessToday } from '@dayline/core';
 import {
   compareDataVersions,
@@ -151,7 +152,7 @@ export class SnapshotCoordinator {
           if (!this.value || !validator)
             throw new ClientError(
               'INVALID_RESPONSE',
-              '缺少完整数据，请重新读取。',
+              msg('errors.completeDataMissingPleaseReadAgain'),
             );
           const date = response.headers.date;
           if (date && Number.isFinite(Date.parse(date)))
@@ -160,7 +161,10 @@ export class SnapshotCoordinator {
         }
         const next = snapshotDtoSchema.parse(response.data);
         if (next.userId !== id)
-          throw new ClientError('INVALID_RESPONSE', '无法确认数据归属。');
+          throw new ClientError(
+            'INVALID_RESPONSE',
+            msg('errors.unableToConfirmDataOwnership'),
+          );
         if (
           (this.lowerBound &&
             compareDataVersions(next.dataVersion, this.lowerBound) < 0) ||
@@ -173,7 +177,10 @@ export class SnapshotCoordinator {
         }
         const time = response.serverTime;
         if (!time)
-          throw new ClientError('INVALID_RESPONSE', '缺少服务器时间。');
+          throw new ClientError(
+            'INVALID_RESPONSE',
+            msg('errors.missingServerTime'),
+          );
         this.sequence++;
         this.value = next;
         this.onlineBaseline = true;

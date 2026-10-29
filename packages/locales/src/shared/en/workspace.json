@@ -1,0 +1,12 @@
+{
+  "workspace.theLocalAccountCacheIsUnavailableAnd": "The local account cache is unavailable, and the cloud save status is not affected; draft is still retained independently.",
+  "workspace.identityOperationInProgress": "Identity operation in progress.",
+  "workspace.theAccountHasChangedPleaseVerifyAgain": "The account has changed, please verify again.",
+  "workspace.theSessionHasChangedPrivateContentHas": "The session has changed, private content has been hidden, and the original account draft remains. Please re-verify or continue guest explicitly.",
+  "workspace.currentlyOfflinePleaseSaveManuallyAfterConnecting": "Currently offline, please save manually after connecting to the Internet.",
+  "workspace.theAccountHasBeenChangedButThe": "The account has been changed, but the original input is still retained.",
+  "workspace.theLocalAccountCacheIsUnavailableAnd2": "The local account cache is unavailable, and the cloud data is still retained.",
+  "workspace.theSessionHasChangedAndPrivateContent": "The session has changed and private content has been hidden; please re-authenticate or continue guest explicitly.",
+  "workspace.savedToCloudRefreshFailed": "Saved to cloud, refresh failed: {value0}",
+  "workspace.exitedLocalCleanupOfLoginCredentialsFailed": "Exited, local cleanup of login credentials failed, please check the storage."
+}

@@ -1,0 +1,11 @@
+{
+  "drafts.pleaseClearlyEnterTheVerifiedAccountSpace": "Please clearly enter the verified account space before viewing the draft.",
+  "drafts.pleaseGoOnlineToReVerifyYour": "Please go online to re-verify your account and view the draft; the original draft is retained.",
+  "drafts.pleaseCheckOnlineToCheckThatThe": "Please check online to check that the merge has been completed.",
+  "drafts.theBackendIsAuthorizedToReadThe": "The backend is authorized to read the source draft. The original manuscript is retained; please copy it one by one as a draft to be verified, and then save it manually.",
+  "drafts.thisDeviceDoesNotHaveADraft": "This device does not have a draft for this source account.",
+  "drafts.unableToAuthorizeRecoveryPleaseReVerify": "Unable to authorize recovery; please re-verify the unified account. The original draft is retained.",
+  "drafts.copiedToTheTargetAccountDraftRetaining": "Copied to the target account draft, retaining the original baseline; read the latest record and check the version when continuing to edit. Not submitted to the cloud yet.",
+  "drafts.theReliableOriginalBaselineIsMissingAnd": "The reliable original baseline is missing and has been copied to a new draft to be verified; please select the field and save it manually. Originals retained.",
+  "drafts.copyIsNotAvailablePleaseDownloadDraft": "Copy is not available, please download draft."
+}

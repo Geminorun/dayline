@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { entryStatus, spanLabel } from '@dayline/core';
+import { spanLabel, tr } from '../i18n/index';
+
+import { entryStatus } from '@dayline/core';
 import type { EntryDto } from '@dayline/contracts';
 defineProps<{
   entry: EntryDto;
@@ -12,7 +14,14 @@ defineProps<{
   readonly: boolean;
 }>();
 const emit = defineEmits<{ edit: []; focus: []; finish: []; remove: [] }>();
-const statuses = { ongoing: '进行中', ended: '已结束' };
+const statuses = {
+  get ongoing() {
+    return tr('common.ongoing');
+  },
+  get ended() {
+    return tr('common.ended');
+  },
+};
 </script>
 <template>
   <view class="card entry-card"
@@ -22,11 +31,16 @@ const statuses = { ongoing: '进行中', ended: '已结束' };
       }}<text> · {{ statuses[entryStatus(entry, today)] }}</text></text
     ><text class="text"
       >{{ entry.startDate }} →
-      {{ entry.endDate ?? (entry.startDate > today ? '结束未定' : '至今') }} ·
-      {{ spanLabel(entry, today) }}</text
+      {{
+        entry.endDate ??
+        (entry.startDate > today
+          ? tr('common.endingPending')
+          : tr('common.present'))
+      }}
+      · {{ spanLabel(entry, today) }}</text
     ><view class="actions"
       ><button class="secondary" :disabled="busy" @click="emit('edit')">
-        详情 / 编辑</button
+        {{ tr('common.detailsEdit') }}</button
       ><template v-if="!readonly"
         ><button
           v-if="date"
@@ -39,7 +53,12 @@ const statuses = { ongoing: '进行中', ended: '已结束' };
           "
           @click="emit('focus')"
         >
-          {{ focused ? '取消' : '标记' }} {{ date }} 重点</button
+          {{
+            tr('entryCard.highlights', {
+              value0: focused ? tr('common.cancel') : tr('common.mark'),
+              value1: date,
+            })
+          }}</button
         ><button
           v-if="
             entry.startDate <= today && entryStatus(entry, today) === 'ongoing'
@@ -48,9 +67,9 @@ const statuses = { ongoing: '进行中', ended: '已结束' };
           :disabled="busy"
           @click="emit('finish')"
         >
-          今天结束</button
+          {{ tr('common.endToday') }}</button
         ><button class="secondary" :disabled="busy" @click="emit('remove')">
-          移入回收站
+          {{ tr('common.moveIntoTrash') }}
         </button></template
       ></view
     ></view

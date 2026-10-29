@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import {
   Body,
   Controller,
@@ -39,7 +40,8 @@ import { AppError } from '../common/app-error.js';
 import { dataResponseSchema, dtoSchema } from '../common/openapi.js';
 import { RecordsService } from './records.service.js';
 function actor(request: Request) {
-  if (!request.actor) throw new AppError(401, 'UNAUTHENTICATED', '请先登录。');
+  if (!request.actor)
+    throw new AppError(401, 'UNAUTHENTICATED', msg('errors.pleaseLogInFirst'));
   return request.actor;
 }
 function parse<T>(schema: z.ZodType<T>, value: unknown, path = false): T {
@@ -48,7 +50,7 @@ function parse<T>(schema: z.ZodType<T>, value: unknown, path = false): T {
     throw new AppError(
       path ? 400 : 422,
       path ? 'INVALID_INPUT' : 'VALIDATION_ERROR',
-      '输入格式不正确，请检查日期、长度和必填项。',
+      msg('errors.incorrectInputFormatPleaseCheckDateLength'),
       {
         issues: result.error.issues.map((issue) => ({
           path: issue.path,

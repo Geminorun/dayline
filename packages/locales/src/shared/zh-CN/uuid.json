@@ -1,0 +1,4 @@
+{
+  "uuid.theCurrentWechatVersionDoesNotSupport": "当前微信版本不支持安全随机数，请更新微信后重试。",
+  "uuid.unableToGenerateRecordIdPleaseTry": "无法生成记录标识，请重试。"
+}

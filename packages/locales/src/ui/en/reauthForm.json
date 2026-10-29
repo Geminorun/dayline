@@ -1,0 +1,7 @@
+{
+  "reauthForm.reAuthenticateForThisOperation": "Re-authenticate for this operation",
+  "reauthForm.theVerificationOnlyAuthorizesTheCurrentOperation": "The verification only authorizes the current operation and is valid for five minutes.",
+  "reauthForm.reVerifyUsingBoundWechatCodeScan": "Re-verify using bound WeChat code scan",
+  "reauthForm.thisIdentityReVerificationAppletCode": "This identity re-verification mini program code",
+  "reauthForm.pleaseUseTheWechatOfYourCurrent": "Please use the WeChat of your current account to scan and confirm clearly. Status: {value0}, valid until {value1}"
+}

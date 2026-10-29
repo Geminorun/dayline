@@ -1,25 +1,31 @@
 <script setup lang="ts">
+import { errorMessage } from './records/record-service';
+import { formatBeijingTime, tr, messageRef } from './i18n/index';
+
+import { ClientError, createIdentityClient } from '@dayline/api-client';
+
+import { msg } from '@dayline/locales';
 import IconButton from './components/IconButton.vue';
-import { formatBeijingTime } from '@dayline/core';
+
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import ReauthForm from './ReauthForm.vue';
-import { createIdentityClient } from '@dayline/api-client';
+
 import { recoverMergeDraft } from './merge-drafts';
-import type { MergeMappings } from '@dayline/contracts';
-import type { EntryDraft } from '@dayline/contracts';
+import type { MergeMappings, EntryDraft } from '@dayline/contracts';
+
 import { useAccount } from './account';
 import { useWorkspace } from './records/workspace';
 import { api } from './api';
 import { localEnvironment, localRepository } from './adapters/local-repository';
 const workspace = useWorkspace();
 const drafts = ref<EntryDraft[]>([]),
-  error = ref(''),
+  error = messageRef(),
   account = useAccount();
 async function load() {
   drafts.value = [];
   error.value = '';
   if (workspace.mode.value !== 'account') {
-    error.value = '请先明确进入已验证账号空间后查看草稿。';
+    error.value = msg('drafts.pleaseClearlyEnterTheVerifiedAccountSpace');
     return;
   }
   const space = workspace.generation(),
@@ -43,7 +49,7 @@ async function load() {
     )
       drafts.value = next;
   } catch {
-    error.value = '请联网重新验证所属账号后查看草稿；原草稿保留。';
+    error.value = msg('drafts.pleaseGoOnlineToReVerifyYour');
   }
 }
 const mergeClient = createIdentityClient(api);
@@ -55,7 +61,7 @@ const mergeJobs = ref<
   sourceDrafts = ref<EntryDraft[]>([]),
   mapping = ref<MergeMappings | null>(null),
   selectedCategory = ref(''),
-  recoveryNotice = ref('');
+  recoveryNotice = messageRef();
 function resetRecovery() {
   sourceDrafts.value = [];
   mapping.value = null;
@@ -72,7 +78,7 @@ async function listMerges() {
     if (generation === api.getGeneration() && space === workspace.generation())
       mergeJobs.value = (r.data ?? []).filter((j) => j.status === 'committed');
   } catch {
-    error.value = '请联网查询已完成合并。';
+    error.value = msg('drafts.pleaseCheckOnlineToCheckThatThe');
   }
 }
 async function authorizeRecovery(proof: string) {
@@ -104,8 +110,8 @@ async function authorizeRecovery(proof: string) {
     mapping.value = authorized;
     sourceDrafts.value = originals;
     recoveryNotice.value = originals.length
-      ? '已获后端授权读取来源草稿。原稿保留；请逐份复制为待核对草稿，之后手动保存。'
-      : '此设备没有该来源账号的草稿。';
+      ? msg('drafts.theBackendIsAuthorizedToReadThe')
+      : msg('drafts.thisDeviceDoesNotHaveADraft');
   } catch {
     if (
       generation !== api.getGeneration() ||
@@ -114,7 +120,7 @@ async function authorizeRecovery(proof: string) {
       operation !== mergeOperation.value
     )
       return;
-    error.value = '无法授权恢复；请重新验证统一账号。原草稿保留。';
+    error.value = msg('drafts.unableToAuthorizeRecoveryPleaseReVerify');
   }
 }
 async function recover(draft: EntryDraft) {
@@ -141,14 +147,14 @@ async function recover(draft: EntryDraft) {
     if (generation !== api.getGeneration() || space !== workspace.generation())
       return;
     recoveryNotice.value = copy.baseEntry
-      ? '已复制为目标账号草稿，保留原始基准；继续编辑时读取最新记录并核对版本。尚未提交云端。'
-      : '缺少可靠原始基准，已复制为待核对的新建草稿；请选择字段后手动另存。原稿保留。';
+      ? msg('drafts.copiedToTheTargetAccountDraftRetaining')
+      : msg('drafts.theReliableOriginalBaselineIsMissingAnd');
     await load();
   } catch (e) {
     error.value =
-      e instanceof Error && e.message === '请明确选择目标分类；旧草稿原文保留。'
-        ? e.message
-        : '本机复制失败，原草稿保留。请检查本机存储后重试。';
+      e instanceof ClientError && e.code === 'DRAFT_CATEGORY_REQUIRED'
+        ? errorMessage(e)
+        : msg('drafts.localCopyFailedTheOriginalDraftIs');
   }
 }
 const unsubscribe = api.onIdentityChange(() => {
@@ -178,7 +184,7 @@ function permitted(draft: EntryDraft) {
 }
 async function discard(draft: EntryDraft) {
   if (!permitted(draft)) return;
-  if (!window.confirm('放弃此本机草稿？云端事项保持不变。')) return;
+  if (!window.confirm(tr('drafts.abandonThisLocalDraftTheCloudEntry'))) return;
   await localRepository.removeDraft(
     draft.userId,
     draft.draftId,
@@ -202,7 +208,7 @@ async function copy(draft: EntryDraft) {
   try {
     await navigator.clipboard.writeText(JSON.stringify(draft.fields, null, 2));
   } catch {
-    error.value = '复制不可用，请下载草稿。';
+    error.value = msg('drafts.copyIsNotAvailablePleaseDownloadDraft');
   }
 }
 watch([() => workspace.mode.value, () => account.current.value?.id], () => {
@@ -214,32 +220,47 @@ watch([() => workspace.mode.value, () => account.current.value?.id], () => {
   selectedCategory.value = '';
   recoveryNotice.value = '';
   if (workspace.mode.value === 'account') void load();
-  else error.value = '请先明确进入已验证账号空间后查看草稿。';
+  else error.value = msg('drafts.pleaseClearlyEnterTheVerifiedAccountSpace');
 });
 onMounted(load);
 onBeforeUnmount(unsubscribe);
 </script>
 <template>
   <section class="records-page settings-subpage themed-form">
-    <h1>未提交修改</h1>
-    <p>这些内容只暂存在此设备。继续编辑并保存后，才会上传到账号。</p>
+    <h1>{{ tr('common.unsavedChanges') }}</h1>
+    <p>{{ tr('drafts.theseContentsAreOnlyTemporaryOnThis') }}</p>
     <p v-if="error" class="error">{{ error }}</p>
     <article v-for="draft in drafts" :key="draft.draftId" class="record-panel">
-      <h2>{{ draft.fields.title || '未命名草稿' }}</h2>
+      <h2>{{ draft.fields.title || tr('common.unnamedDraft') }}</h2>
       <p>
-        {{ draft.baseEntryVersion === null ? '新建' : '编辑' }} · 最后暂存
-        {{ formatBeijingTime(draft.savedLocallyAt) }}
+        {{
+          tr('drafts.lastBuffer', {
+            value0:
+              draft.baseEntryVersion === null
+                ? tr('common.new2')
+                : tr('common.edit'),
+            value1: formatBeijingTime(draft.savedLocallyAt),
+          })
+        }}
       </p>
       <RouterLink
         v-if="account.current.value?.status === 'active'"
         :to="{ path: '/entries/new', query: { draftId: draft.draftId } }"
         @click="resume(draft)"
-        >继续编辑</RouterLink
-      ><IconButton icon="copy" label="复制输入" @click="copy(draft)" />
-      <IconButton icon="download" label="下载副本" @click="download(draft)" />
+        >{{ tr('common.continueEditing') }}</RouterLink
+      ><IconButton
+        icon="copy"
+        :label="tr('common.copyInput')"
+        @click="copy(draft)"
+      />
+      <IconButton
+        icon="download"
+        :label="tr('common.downloadACopy')"
+        @click="download(draft)"
+      />
       <IconButton
         icon="trash"
-        label="放弃修改"
+        :label="tr('common.abandonModification')"
         danger
         @click="discard(draft)"
       />
@@ -251,16 +272,23 @@ onBeforeUnmount(unsubscribe);
       "
       class="record-panel"
     >
-      <h2>恢复合并前的修改</h2>
-      <p>
-        只有重新验证统一账号并取得后端映射后，才读取本机来源草稿。普通切换账号不会迁移草稿。
-      </p>
-      <IconButton icon="refresh" label="查询已完成合并" @click="listMerges" />
+      <h2>{{ tr('common.revertPreMergeChanges') }}</h2>
+      <p>{{ tr('drafts.onlyAfterTheUnifiedAccountIsRe') }}</p>
+      <IconButton
+        icon="refresh"
+        :label="tr('common.queryMergeCompleted')"
+        @click="listMerges"
+      />
       <label
-        >选择合并<select v-model="selectedMerge" @change="resetRecovery">
-          <option value="">请选择</option>
+        >{{ tr('common.selectMerge')
+        }}<select v-model="selectedMerge" @change="resetRecovery">
+          <option value="">{{ tr('common.pleaseSelect') }}</option>
           <option v-for="j in mergeJobs" :key="j.id" :value="j.id">
-            {{ formatBeijingTime(j.completedAt ?? j.createdAt) }} · 已完成合并
+            {{
+              tr('drafts.mergeCompleted', {
+                value0: formatBeijingTime(j.completedAt ?? j.createdAt),
+              })
+            }}
           </option>
         </select></label
       ><ReauthForm
@@ -274,8 +302,9 @@ onBeforeUnmount(unsubscribe);
       />
       <p v-if="recoveryNotice" role="status">{{ recoveryNotice }}</p>
       <label v-if="sourceDrafts.length"
-        >缺少分类映射时，明确选择另存分类<select v-model="selectedCategory">
-          <option value="">请选择</option>
+        >{{ tr('drafts.explicitlySelectSaveCategoryAsWhenCategory')
+        }}<select v-model="selectedCategory">
+          <option value="">{{ tr('common.pleaseSelect') }}</option>
           <option
             v-for="c in workspace.snapshot.value?.categories ?? []"
             :key="c.id"
@@ -286,18 +315,21 @@ onBeforeUnmount(unsubscribe);
         </select></label
       >
       <article v-for="draft in sourceDrafts" :key="draft.draftId">
-        <h3>{{ draft.fields.title || '未命名草稿' }}</h3>
+        <h3>{{ draft.fields.title || tr('common.unnamedDraft') }}</h3>
         <p>
-          {{ draft.fields.startDate }} —
-          {{ draft.fields.endDate ?? '未结束' }} · 原基准{{
-            draft.baseEntryVersion ?? '缺失'
+          {{
+            tr('drafts.originalDatum', {
+              value0: draft.fields.startDate,
+              value1: draft.fields.endDate ?? tr('common.notFinished'),
+              value2: draft.baseEntryVersion ?? tr('common.missing'),
+            })
           }}
         </p>
         <button class="button primary" @click="recover(draft)">
-          保留原稿，复制为待核对草稿
+          {{ tr('drafts.keepTheOriginalAndCopyItAs') }}
         </button>
       </article>
     </section>
-    <p v-if="!error && !drafts.length">没有未提交的修改。</p>
+    <p v-if="!error && !drafts.length">{{ tr('drafts.noUnsavedChanges') }}</p>
   </section>
 </template>

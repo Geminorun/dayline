@@ -1,0 +1,17 @@
+{
+  "identity.theOriginalBindingApplicationHasBeenRestored": "The original binding application has been restored; please re-verify the current account for this operation.",
+  "identity.pleaseReVerifyBothPartiesTheSame": "Please re-verify both parties; the same operation, the same parties and the unchanged plan will retain the saved verification.",
+  "identity.bothPartiesHaveBeenVerifiedByDefault": "Both parties have been verified. By default, it will be unified to the current account, and all entries will be retained; please check the category and information.",
+  "identity.bindingHasBeenCompletedPleaseLogIn": "Binding has been completed, please log in to the unified account again. The original local draft is retained.",
+  "identity.emailHasBeenRequestedAfterOpeningThe": "Email has been requested. After opening the verification link, return to the original device to continue; you can resend after one minute.",
+  "identity.thisOperationHasBeenCancelledAndThe": "This operation has been cancelled, and the accounts and data of both parties remain intact.",
+  "identity.mergeCompletedPleaseUseYourOriginalEmail": "Merge completed. Please use your original email or WeChat to log in to the unified account again, and then go to the draft page to check the old draft.",
+  "identity.invalidEmailVerificationParameters": "Invalid email verification parameters.",
+  "identity.emailHasBeenVerifiedThisPageWill": "Email has been verified; this page will not allow you to log in or change your identity. Please return to the original device and account to continue adding email addresses.",
+  "identity.theCurrentIdentityHasBeenReVerified2": "The current identity has been re-verified. This operation will continue within five minutes.",
+  "identity.bindingCompletedPleaseLogInAgainThe": "Binding completed, please log in again. The original guest record is still retained.",
+  "identity.theEmailHasBeenAppliedForOpen": "The email has been applied for; open the email for verification and return to the original account to continue.",
+  "identity.pleaseReVerifyBothPartiesTheSame2": "Please re-verify both parties; the same operation will restore the saved verification.",
+  "identity.theMergerHasBeenCompletedPleaseUse": "The merger has been completed, please use the original WeChat to log in to the unified account again.",
+  "identity.thisOperationHasBeenCancelledAndThe2": "This operation has been cancelled, and the accounts and data of both parties remain independent."
+}

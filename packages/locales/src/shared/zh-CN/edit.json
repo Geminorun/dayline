@@ -1,0 +1,10 @@
+{
+  "edit.theEntryDoesNotExistOrHas": "事项不存在或已进入回收站。",
+  "edit.theDataSpaceHasChangedPleaseEnter": "数据空间已变化，请重新进入事项。原输入不会提交到其他账号。",
+  "edit.theDataSpaceHasChangedPleaseRe": "数据空间已变化，请重新验证原账号。",
+  "edit.pleaseCheckTitle1100WordsLegal": "请检查标题（1–100 字）、合法日期与分类。",
+  "edit.theSameStableIdentifierAlreadyHasDifferent": "同一稳定标识已有不同云端内容，请核对后再保存。",
+  "edit.verifiedThatTheCloudSaveWasSuccessful": "已核对云端保存成功。",
+  "edit.theCurrentCloudHasBeenCheckedAnd": "已核对当前云端，输入仍保留，请手动核对后重试。",
+  "edit.theSavedResultStillNeedsToBe": "保存结果仍待确认，当前输入保留；联网后请先重新读取。"
+}

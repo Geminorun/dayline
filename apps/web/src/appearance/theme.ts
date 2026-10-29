@@ -1,3 +1,5 @@
+import { messageRef } from '../i18n/index';
+import { msg } from '@dayline/locales';
 import { computed, reactive, readonly, ref } from 'vue';
 import {
   mixColor,
@@ -21,7 +23,7 @@ const defaults: AppearancePreferences = {
 };
 const preferences = reactive<AppearancePreferences>({ ...defaults });
 const systemDark = ref(false),
-  storageError = ref('');
+  storageError = messageRef();
 const resolvedMode = computed<ColorMode>(() =>
   preferences.mode === 'system'
     ? systemDark.value
@@ -116,7 +118,7 @@ function persist() {
     localStorage.setItem(appearanceStorageKey, JSON.stringify(preferences));
     storageError.value = '';
   } catch {
-    storageError.value = '当前外观已应用，但此浏览器暂时无法保存选择。';
+    storageError.value = msg('theme.theCurrentSkinHasBeenAppliedBut');
   }
 }
 function systemChanged(event: MediaQueryListEvent) {

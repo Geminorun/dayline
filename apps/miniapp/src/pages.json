@@ -3,67 +3,67 @@
     {
       "path": "pages/day/index",
       "style": {
-        "navigationBarTitleText": "每日回看"
+        "navigationBarTitleText": "%native.day%"
       }
     },
     {
       "path": "pages/entries/index",
       "style": {
-        "navigationBarTitleText": "全部记录"
+        "navigationBarTitleText": "%native.entries%"
       }
     },
     {
       "path": "pages/timeline/index",
       "style": {
-        "navigationBarTitleText": "时间轴"
+        "navigationBarTitleText": "%native.timeline%"
       }
     },
     {
       "path": "pages/me/index",
       "style": {
-        "navigationBarTitleText": "我的"
+        "navigationBarTitleText": "%native.me%"
       }
     },
     {
       "path": "pages/entry/edit",
       "style": {
-        "navigationBarTitleText": "事项详情"
+        "navigationBarTitleText": "%native.entry.edit%"
       }
     },
     {
       "path": "pages/categories/index",
       "style": {
-        "navigationBarTitleText": "分类管理"
+        "navigationBarTitleText": "%native.categories%"
       }
     },
     {
       "path": "pages/trash/index",
       "style": {
-        "navigationBarTitleText": "回收站"
+        "navigationBarTitleText": "%native.trash%"
       }
     },
     {
       "path": "pages/account/index",
       "style": {
-        "navigationBarTitleText": "日序 · 账号"
+        "navigationBarTitleText": "%native.account.index%"
       }
     },
     {
       "path": "pages/scan/confirm",
       "style": {
-        "navigationBarTitleText": "确认登录网页"
+        "navigationBarTitleText": "%native.scan.confirm%"
       }
     },
     {
       "path": "pages/account/identity",
       "style": {
-        "navigationBarTitleText": "登录方式与合并"
+        "navigationBarTitleText": "%native.account.identity%"
       }
     },
     {
       "path": "pages/account/deletion",
       "style": {
-        "navigationBarTitleText": "账号注销与撤销"
+        "navigationBarTitleText": "%native.account.deletion%"
       }
     }
   ],
@@ -80,19 +80,19 @@
     "list": [
       {
         "pagePath": "pages/day/index",
-        "text": "回看"
+        "text": "%native.tabs.day%"
       },
       {
         "pagePath": "pages/entries/index",
-        "text": "记录"
+        "text": "%native.tabs.entries%"
       },
       {
         "pagePath": "pages/timeline/index",
-        "text": "时间轴"
+        "text": "%native.tabs.timeline%"
       },
       {
         "pagePath": "pages/me/index",
-        "text": "我的"
+        "text": "%native.tabs.me%"
       }
     ]
   }

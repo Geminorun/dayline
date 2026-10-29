@@ -91,6 +91,7 @@ describe('routed data management startup readiness', () => {
           await identity.promise;
           return Response.json({
             data: {
+              locale: 'zh-CN',
               id,
               displayName: '已验证账号',
               profileVersion: 1,

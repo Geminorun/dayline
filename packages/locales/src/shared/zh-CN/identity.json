@@ -1,0 +1,17 @@
+{
+  "identity.theOriginalBindingApplicationHasBeenRestored": "已恢复原绑定申请；请为此操作重新验证当前账号。",
+  "identity.pleaseReVerifyBothPartiesTheSame": "请重新验证双方；同一操作、同一双方和未变化的计划将保留已保存核对。",
+  "identity.bothPartiesHaveBeenVerifiedByDefault": "双方已验证。默认统一到当前账号，全部事项保留；请核对分类及资料。",
+  "identity.bindingHasBeenCompletedPleaseLogIn": "绑定已完成，请重新登录统一账号。原本机草稿保留。",
+  "identity.emailHasBeenRequestedAfterOpeningThe": "邮件已申请。打开验证链接后回原设备继续；一分钟后可重新发送。",
+  "identity.thisOperationHasBeenCancelledAndThe": "本次操作已取消，双方账号与数据保持原状。",
+  "identity.mergeCompletedPleaseUseYourOriginalEmail": "合并已完成。请用原邮箱或微信重新登录统一账号，之后到草稿页核对旧草稿。",
+  "identity.invalidEmailVerificationParameters": "邮件验证参数无效。",
+  "identity.emailHasBeenVerifiedThisPageWill": "邮箱已验证；此页面不会登录或变更身份。请回原设备、原账号继续添加邮箱。",
+  "identity.theCurrentIdentityHasBeenReVerified2": "当前身份已重新验证，五分钟内继续本次操作。",
+  "identity.bindingCompletedPleaseLogInAgainThe": "绑定已完成，请重新登录。原游客记录仍保留。",
+  "identity.theEmailHasBeenAppliedForOpen": "邮件已申请；打开邮件验证后回到原账号继续。",
+  "identity.pleaseReVerifyBothPartiesTheSame2": "请重新验证双方；同操作将恢复已保存核对。",
+  "identity.theMergerHasBeenCompletedPleaseUse": "合并已完成，请用原微信重新登录统一账号。",
+  "identity.thisOperationHasBeenCancelledAndThe2": "本次操作已取消，双方账号和数据保持独立。"
+}

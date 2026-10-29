@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { spanLabel, tr, messageRef } from '../../i18n/index';
+
+import { msg } from '@dayline/locales';
 import { computed, ref, watch } from 'vue';
 import { onLoad } from '@dcloudio/uni-app';
 import {
@@ -9,7 +12,7 @@ import {
 } from '@dayline/contracts';
 import type { EntryDto } from '@dayline/contracts';
 import { ClientError } from '@dayline/api-client';
-import { spanLabel } from '@dayline/core';
+
 import { useWorkspace, records, message } from '../../workspace';
 import { api } from '../../api';
 import { newId } from '../../adapters/uuid';
@@ -31,7 +34,7 @@ const id = ref(''),
   start = ref(''),
   end = ref(''),
   categoryId = ref(''),
-  error = ref(''),
+  error = messageRef(),
   saving = ref(false),
   ready = ref(false),
   leave = ref(false),
@@ -60,7 +63,7 @@ onLoad(async (query) => {
       ? snapshot.value.entries.find((e) => e.id === editing)
       : null;
     if (editing && !found) {
-      error.value = '事项不存在或已进入回收站。';
+      error.value = msg('edit.theEntryDoesNotExistOrHas');
       return;
     }
     entry.value = found ? { ...found } : null;
@@ -81,7 +84,7 @@ onLoad(async (query) => {
 watch(spaceRevision, () => {
   if (editorSpace >= 0 && editorSpace !== spaceRevision.value) {
     ready.value = false;
-    error.value = '数据空间已变化，请重新进入事项。原输入不会提交到其他账号。';
+    error.value = msg('edit.theDataSpaceHasChangedPleaseEnter');
   }
 });
 function matches(
@@ -102,7 +105,7 @@ async function save(confirm = false) {
     editorSpace !== spaceRevision.value ||
     editorActor !== api.getGeneration()
   ) {
-    error.value = '数据空间已变化，请重新验证原账号。';
+    error.value = msg('edit.theDataSpaceHasChangedPleaseRe');
     return;
   }
   error.value = '';
@@ -114,11 +117,11 @@ async function save(confirm = false) {
     categoryId: categoryId.value,
   });
   if (!parsed.success) {
-    error.value = '请检查标题（1–100 字）、合法日期与分类。';
+    error.value = msg('edit.pleaseCheckTitle1100WordsLegal');
     return;
   }
   if (parsed.data.endDate && parsed.data.endDate < parsed.data.startDate) {
-    error.value = '结束日期不能早于开始日期。';
+    error.value = msg('errors.endDateCannotBeEarlierThanStart');
     return;
   }
   const requestEntry = entry.value ? { ...entry.value } : null,
@@ -159,7 +162,7 @@ async function save(confirm = false) {
       result.data.alreadyExists &&
       !matches(result.data.entry, parsed.data)
     ) {
-      error.value = '同一稳定标识已有不同云端内容，请核对后再保存。';
+      error.value = msg('edit.theSameStableIdentifierAlreadyHasDifferent');
       return;
     }
     uni.navigateBack({
@@ -178,7 +181,7 @@ async function save(confirm = false) {
       ['NETWORK_ERROR', 'INVALID_RESPONSE'].includes(cause.code) &&
       mode.value === 'account'
     ) {
-      error.value = '保存结果待确认，正在读取云端核对。';
+      error.value = msg('entryEditor.theSavedResultsArePendingConfirmationAnd');
       try {
         const latest = await records.detail(requestId);
         if (
@@ -191,14 +194,14 @@ async function save(confirm = false) {
           matches(latest.data.entry, parsed.data) &&
           (!requestEntry || latest.data.entry.version > requestEntry.version)
         ) {
-          error.value = '已核对云端保存成功。';
+          error.value = msg('edit.verifiedThatTheCloudSaveWasSuccessful');
           entry.value = latest.data.entry;
           await useWorkspace().load();
           return;
         }
-        error.value = '已核对当前云端，输入仍保留，请手动核对后重试。';
+        error.value = msg('edit.theCurrentCloudHasBeenCheckedAnd');
       } catch {
-        error.value = '保存结果仍待确认，当前输入保留；联网后请先重新读取。';
+        error.value = msg('edit.theSavedResultStillNeedsToBe');
       }
     } else error.value = message(cause);
   } finally {
@@ -233,22 +236,26 @@ function back() {
 </script>
 <template>
   <view class="page"
-    ><text class="title">{{ entry ? '事项详情 / 编辑' : '新建事项' }}</text
+    ><text class="title">{{
+      entry ? tr('edit.entryDetailsEdit') : tr('common.newEntry2')
+    }}</text
     ><text class="text muted">{{
       mode === 'guest'
-        ? '游客 · 保存到本机成功后才算已保存。'
-        : '在线保存 · 当前输入仅留在内存，离开前请手动提交。'
+        ? tr('edit.guestItWillBeConsideredSavedOnly')
+        : tr('edit.onlineSavingTheCurrentInputIsOnly')
     }}</text
     ><text v-if="workspaceError" class="text error">{{ workspaceError }}</text
     ><view v-if="ready && snapshot" class="card"
-      ><text class="text">标题（{{ [...title].length }} / 100 字）</text
+      ><text class="text">{{
+        tr('entryEditor.title100Words', { value0: [...title].length })
+      }}</text
       ><input
         v-model="title"
         :maxlength="200"
-        aria-label="事项标题"
+        :aria-label="tr('common.entryTitle')"
         :disabled="saving || readonly"
-        placeholder="一段值得记录的经历"
-      /><text class="text">开始日期</text
+        :placeholder="tr('edit.anExperienceWorthRecording')"
+      /><text class="text">{{ tr('common.startDate') }}</text
       ><picker
         :disabled="saving || readonly"
         mode="date"
@@ -260,9 +267,11 @@ function back() {
       ><input
         v-model="start"
         :disabled="saving || readonly"
-        aria-label="开始日期 YYYY-MM-DD"
+        :aria-label="tr('edit.startDateYyyyMmDd')"
         placeholder="YYYY-MM-DD"
-      /><text class="text">结束日期（留空表示未结束）</text
+      /><text class="text">{{
+        tr('entryEditor.endDateLeaveBlankToIndicateNot')
+      }}</text
       ><picker
         :disabled="saving || readonly"
         mode="date"
@@ -270,15 +279,17 @@ function back() {
         start="0001-01-01"
         end="9999-12-31"
         @change="end = $event.detail.value"
-        ><view class="picker">{{ end || '未结束' }} ▾</view></picker
+        ><view class="picker"
+          >{{ end || tr('common.notFinished') }} ▾</view
+        ></picker
       ><input
         v-model="end"
         :disabled="saving || readonly"
-        aria-label="结束日期 YYYY-MM-DD"
-        placeholder="留空表示未结束"
+        :aria-label="tr('edit.endDateYyyyMmDd')"
+        :placeholder="tr('common.leaveBlankForOngoingEntries')"
       /><button class="secondary" :disabled="saving" @click="end = ''">
-        清空结束日期</button
-      ><text class="text">分类</text
+        {{ tr('common.clearEndDate') }}</button
+      ><text class="text">{{ tr('common.category') }}</text
       ><picker
         :disabled="saving || readonly"
         :value="categoryIndex"
@@ -289,15 +300,19 @@ function back() {
         "
         ><view class="picker"
           >{{
-            snapshot.categories[categoryIndex]?.name ?? '请选择有效分类'
+            snapshot.categories[categoryIndex]?.name ??
+            tr('common.pleaseSelectAValidCategory')
           }}
           ▾</view
         ></picker
-      ><text v-if="entry" class="text muted"
-        >原记录：{{ spanLabel(entry, today) }}</text
+      ><text v-if="entry" class="text muted">{{
+        tr('edit.originalRecord', { value0: spanLabel(entry, today) })
+      }}</text
       ><text v-if="error" class="text error" role="alert">{{ error }}</text
       ><view v-if="ack" class="notice"
-        ><text class="text">将取消 {{ ack.length }} 个重点日：</text
+        ><text class="text">{{
+          tr('edit.focusDaysWillBeCancelled', { value0: ack.length })
+        }}</text
         ><scroll-view scroll-y class="dates-scroll"
           ><text
             v-for="day in ack.slice(0, acknowledgementLimit)"
@@ -310,50 +325,59 @@ function back() {
           class="secondary"
           @click="acknowledgementLimit += 100"
         >
-          显示更多受影响日期</button
+          {{ tr('entryEditor.showMoreAffectedDates') }}</button
         ><button :disabled="saving || busy" @click="save(true)">
-          确认移除这些重点并保存</button
+          {{ tr('entryEditor.confirmToRemoveTheseHighlightsAndSave') }}</button
         ><button
           class="secondary"
           :disabled="saving || busy"
           @click="ack = null"
         >
-          取消确认
+          {{ tr('common.cancelConfirmation') }}
         </button></view
       ><button :disabled="saving || busy || readonly" @click="save()">
         {{
-          saving ? '正在保存…' : mode === 'guest' ? '保存到本机' : '保存到云端'
+          saving
+            ? tr('common.saving')
+            : mode === 'guest'
+              ? tr('common.saveToLocalMachine')
+              : tr('common.saveToCloud')
         }}</button
       ><button
         class="secondary"
         :disabled="saving || busy"
         @click="leave = true"
       >
-        返回
+        {{ tr('common.back') }}
       </button></view
     ><text v-if="error && !ready" class="text error">{{ error }}</text
     ><view v-if="entry" class="card"
-      ><text class="heading">累计重点 {{ focuses.length }} 天</text
+      ><text class="heading">{{
+        tr('timelineView.cumulativeFocusDays', { value0: focuses.length })
+      }}</text
       ><scroll-view scroll-y class="dates-scroll"
         ><text class="text">{{
-          focuses.join('、') || '尚无重点'
+          focuses.join('、') || tr('common.noFocusYet')
         }}</text></scroll-view
-      ><text class="text">指定重点日期（不随事项表单一起保存）</text
+      ><text class="text">{{
+        tr('edit.specifyFocusDatesNotSavedWithThe')
+      }}</text
       ><input
         v-model="focusDate"
-        aria-label="重点日期 YYYY-MM-DD"
+        :aria-label="tr('edit.focusDatesYyyyMmDd')"
         placeholder="YYYY-MM-DD"
       /><button
         class="secondary"
         :disabled="busy || saving || readonly"
         @click="focus"
       >
-        设置 / 取消该日重点
+        {{ tr('edit.setCancelHighlightsForTheDay') }}
       </button></view
     ><view v-if="leave" class="card confirmation"
-      ><text class="text">离开将放弃尚未保存的输入。</text
-      ><button class="secondary" @click="leave = false">继续编辑</button
-      ><button @click="back">放弃并返回</button></view
+      ><text class="text">{{ tr('edit.leavingWillDiscardUnsavedInput') }}</text
+      ><button class="secondary" @click="leave = false">
+        {{ tr('common.continueEditing') }}</button
+      ><button @click="back">{{ tr('common.discardAndGoBack') }}</button></view
     ></view
   >
 </template>

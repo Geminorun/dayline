@@ -1,5 +1,7 @@
+import { tr, messageRef } from './i18n/index';
+import { msg } from '@dayline/locales';
 import { monotonicNow } from './adapters/clock';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import {
   createRecordsClient,
   ClientError,
@@ -38,12 +40,13 @@ import {
   platformStorage,
 } from './adapters/guest-repository';
 import { uuidBatch, newId } from './adapters/uuid';
+import { applyAccountLanguage, clearAccountLanguage } from './i18n';
 export const records = createRecordsClient(api);
 export const requestedDay = ref('');
 export function message(cause: unknown) {
   return cause instanceof ClientError || cause instanceof GuestError
-    ? cause.message
-    : '操作未完成，请重试。';
+    ? (cause.localized ?? cause.message)
+    : msg('record-service.theOperationIsNotCompletedPleaseTry');
 }
 const mode = ref<'guest' | 'account'>('guest'),
   snapshot = ref<SnapshotDto | null>(null),
@@ -51,11 +54,15 @@ const mode = ref<'guest' | 'account'>('guest'),
   current = ref<UserDto | null>(null),
   busy = ref(false),
   loading = ref(false),
-  error = ref(''),
-  notice = ref(''),
+  error = messageRef(),
+  notice = messageRef(),
   serverTime = ref(''),
   identityState = ref<'unknown' | 'guest' | 'verified' | 'expired'>('unknown'),
   spaceRevision = ref(0);
+watch(current, (profile) => {
+  if (profile) applyAccountLanguage(profile.id, profile.locale);
+  else clearAccountLanguage();
+});
 const namespace = `dayline:${import.meta.env.MODE}:${encodeURIComponent(import.meta.env.VITE_API_BASE_URL ?? 'unconfigured')}:v1:guest`;
 async function localRepository() {
   const generation = await newId();
@@ -80,7 +87,7 @@ const coordinator = new SnapshotCoordinator(
     }
   },
   () => {
-    error.value = '本机账号缓存不可用，云端数据仍保留。';
+    error.value = msg('workspace.theLocalAccountCacheIsUnavailableAnd2');
   },
   monotonicNow,
 );
@@ -88,7 +95,10 @@ const profileProbes = new Set<Promise<unknown>>();
 function readProfile() {
   if (identityWritePending)
     return Promise.reject(
-      new ClientError('OPERATION_BUSY', '身份操作正在处理中。'),
+      new ClientError(
+        'OPERATION_BUSY',
+        msg('workspace.identityOperationInProgress'),
+      ),
     );
   const work = api.request('/api/v1/me', { decode: userDtoSchema.parse });
   profileProbes.add(work);
@@ -99,7 +109,10 @@ let identityWritePending = false;
 let pendingNavigation = false;
 async function identityWrite<T>(work: () => Promise<T>): Promise<T> {
   if (identityWritePending)
-    throw new ClientError('OPERATION_BUSY', '身份操作正在处理中。');
+    throw new ClientError(
+      'OPERATION_BUSY',
+      msg('workspace.identityOperationInProgress'),
+    );
   identityWritePending = true;
   stop();
   const generation = api.getGeneration();
@@ -107,7 +120,10 @@ async function identityWrite<T>(work: () => Promise<T>): Promise<T> {
     await Promise.allSettled([...profileProbes]);
     await loadWork?.catch(() => {});
     if (generation !== api.getGeneration())
-      throw new ClientError('STALE_RESPONSE', '账号已变化，请重新验证。');
+      throw new ClientError(
+        'STALE_RESPONSE',
+        msg('workspace.theAccountHasChangedPleaseVerifyAgain'),
+      );
     return await work();
   } finally {
     identityWritePending = false;
@@ -141,7 +157,7 @@ api.onIdentityChange(() => {
   initialized = false;
   busy.value = false;
   loading.value = false;
-  error.value = '会话已变化，私人内容已隐藏；请重新验证或明确继续游客。';
+  error.value = msg('workspace.theSessionHasChangedAndPrivateContent');
   snapshot.value = null;
   current.value = null;
   requestedDay.value = '';
@@ -260,14 +276,16 @@ export function useWorkspace() {
     mutation: GuestMutation,
     cloud: () => Promise<unknown>,
   ) {
-    if (busy.value || loading.value) throw new Error('操作正在进行');
+    if (busy.value || loading.value)
+      throw new Error(tr('common.operationInProgress'));
     const generation = scopeGeneration;
     busy.value = true;
     error.value = '';
     notice.value = '';
     try {
       if (mode.value === 'guest') {
-        if (!guest.value) throw new Error('未完整读取本机数据');
+        if (!guest.value)
+          throw new Error(tr('workspace.incompleteReadingOfLocalData'));
         const repository = await localRepository(),
           data = await commitGuestMutation(
             repository,
@@ -279,17 +297,22 @@ export function useWorkspace() {
         guest.value = data;
         snapshot.value = guestSnapshot(data, businessToday());
         serverTime.value = new Date().toISOString();
-        notice.value = '已保存到本机。';
+        notice.value = msg('common.savedToThisMachine');
       } else {
         const result = await cloud();
         if (generation !== scopeGeneration)
-          throw new ClientError('STALE_RESPONSE', '账号已变化。');
-        notice.value = '已保存到云端。';
+          throw new ClientError(
+            'STALE_RESPONSE',
+            msg('common.theAccountHasChanged'),
+          );
+        notice.value = msg('common.savedToTheCloud');
         try {
           await reload();
         } catch (cause) {
           if (generation === scopeGeneration)
-            error.value = `已保存到云端，刷新失败：${message(cause)}`;
+            error.value = msg('workspace.savedToCloudRefreshFailed', {
+              value0: message(cause),
+            });
         }
         return result;
       }
@@ -407,7 +430,9 @@ export function useWorkspace() {
       try {
         clearCredential();
       } catch {
-        notice.value = '已退出，登录凭据本机清理失败，请检查存储。';
+        notice.value = msg(
+          'workspace.exitedLocalCleanupOfLoginCredentialsFailed',
+        );
       }
       current.value = null;
       await switchMode('guest');

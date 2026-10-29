@@ -1,3 +1,6 @@
+import { errorMessageKeys, msg, normalizeLocale } from '@dayline/locales';
+
+import { serverText, requestLocale } from '../i18n/server-text.js';
 import { requestBudget } from '../common/request-budget.js';
 import { Logger } from '@nestjs/common';
 import { errorDiagnostics } from '../common/error-diagnostics.js';
@@ -76,7 +79,9 @@ export function createAuth(
             if (!result)
               throw new APIError('BAD_REQUEST', {
                 code: 'TOKEN_INVALID',
-                message: '验证链接已失效，请重新申请。',
+                message: serverText(
+                  msg('errors.theVerificationLinkHasExpiredPleaseApply'),
+                ),
               });
             return result;
           }
@@ -94,7 +99,15 @@ export function createAuth(
       resetPasswordTokenExpiresIn: 60 * 30,
       revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }) => {
-        await mail.sendPasswordReset(user.email, url);
+        const profile = await database.user.findUnique({
+          where: { id: user.id },
+          select: { locale: true },
+        });
+        await mail.sendPasswordReset(
+          user.email,
+          url,
+          normalizeLocale(profile?.locale),
+        );
       },
       onExistingUserSignUp: async ({ user }, request) =>
         emailFlow.resume(user, request),
@@ -148,7 +161,9 @@ export function createAuth(
           const scope = requestBudget.getStore();
           if (!scope)
             throw new APIError('BAD_REQUEST', {
-              message: '验证上下文不可用，请重新打开链接。',
+              message: serverText(
+                msg('errors.authenticationContextIsNotAvailablePleaseReopen'),
+              ),
             });
           const owner = record
             ? await database.user.findUnique({ where: { id: record.value } })
@@ -173,7 +188,9 @@ export function createAuth(
               }
             }
             throw new APIError('BAD_REQUEST', {
-              message: '验证链接已失效，请重新申请。',
+              message: serverText(
+                msg('errors.theVerificationLinkHasExpiredPleaseApply'),
+              ),
             });
           }
           scope.verificationUserId = owner.id;
@@ -212,7 +229,10 @@ export function createAuth(
               context.setHeader('Retry-After', retry);
               throw new APIError(
                 'TOO_MANY_REQUESTS',
-                { message: e.message, code: 'RATE_LIMITED' },
+                {
+                  message: serverText(e.localized ?? e.message),
+                  code: 'RATE_LIMITED',
+                },
                 {
                   'Retry-After': retry,
                 },
@@ -226,14 +246,14 @@ export function createAuth(
           email.trim().toLowerCase().endsWith('.invalid')
         ) {
           throw new APIError('BAD_REQUEST', {
-            message: '请使用可接收邮件的真实邮箱。',
+            message: serverText(msg('errors.pleaseUseARealEmailAddressThat')),
           });
         }
         if (context.path === '/sign-up/email') {
           const name = displayNameSchema.safeParse(context.body?.name);
           if (!name.success)
             throw new APIError('BAD_REQUEST', {
-              message: '显示名须为 1–40 个字符。',
+              message: serverText(msg('errors.displayNameMustBe140Characters')),
             });
           context.body.name = name.data;
         }
@@ -244,6 +264,15 @@ export function createAuth(
           await emailFlow.prepare(email.trim().toLowerCase());
       }),
       after: createAuthMiddleware(async (context) => {
+        const failure = context.context.returned;
+        if (
+          failure instanceof APIError &&
+          typeof failure.body?.code === 'string'
+        ) {
+          const key = errorMessageKeys[failure.body.code];
+          if (key) failure.body.message = serverText(msg(key));
+        }
+
         const scope = requestBudget.getStore();
         const remaining =
           scope?.mailRetryUntil === undefined
@@ -286,6 +315,16 @@ export function createAuth(
       }),
     },
     databaseHooks: {
+      user: {
+        create: {
+          before: async (user) => ({
+            data: {
+              ...user,
+              locale: requestLocale(),
+            },
+          }),
+        },
+      },
       session: {
         create: {
           before: async (session) => {

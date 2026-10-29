@@ -26,7 +26,8 @@
     "dev:miniapp": "pnpm build:shared && pnpm --filter @dayline/miniapp dev",
     "verify:capacity": "pnpm build && node scripts/verify-capacity.mjs",
     "verify:backup-restore": "pnpm build && node scripts/verify-backup-restore.mjs",
-    "verify:containers": "pnpm build && node scripts/verify-containers.mjs"
+    "verify:containers": "pnpm build && node scripts/verify-containers.mjs",
+    "check:i18n": "node scripts/check-i18n.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

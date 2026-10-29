@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { formatBeijingTime, tr, messageRef } from '../../i18n/index';
+
+import { msg } from '@dayline/locales';
 import { computed, ref, watch } from 'vue';
 import { onShow, onUnload } from '@dcloudio/uni-app';
 import { createIdentityClient } from '@dayline/api-client';
 import { deletionResultSchema } from '@dayline/contracts';
-import { formatBeijingTime } from '@dayline/core';
+
 import { api, wechatCode } from '../../api';
 import { newId } from '../../adapters/uuid';
 import { useWorkspace, message } from '../../workspace';
@@ -15,8 +18,8 @@ const confirmed = ref(false),
   password = ref(''),
   busy = ref(false),
   ready = ref(false),
-  error = ref(''),
-  notice = ref('');
+  error = messageRef(),
+  notice = messageRef();
 const pending = computed(() => w.current.value?.status === 'pending_deletion');
 let disposed = false,
   intent = 0,
@@ -100,7 +103,7 @@ async function verify(wechat: boolean) {
     if (!current()) return;
     password.value = '';
     proof.value = r.data?.proof ?? '';
-    notice.value = '本次身份已验证，五分钟内明确确认。';
+    notice.value = msg('deletion.thisIdentityHasBeenVerifiedAndWill');
   } catch (e) {
     if (current()) error.value = message(e);
   } finally {
@@ -123,7 +126,8 @@ async function submit() {
   error.value = '';
   try {
     const r = await w.identityWrite(() => {
-      if (!current()) throw new Error('账号或操作已变化。');
+      if (!current())
+        throw new Error(tr('deletion.theAccountOrOperationHasChanged'));
       return api.request('/api/v1/me/deletion', {
         method: cancel ? 'DELETE' : 'POST',
         account: true,
@@ -134,8 +138,10 @@ async function submit() {
     if (!current() || !r.data) return;
     const completion =
       r.data.status === 'pending_deletion'
-        ? `注销已申请，到期 ${formatBeijingTime(r.data.dueAt)}。普通登录不会撤销；请重新登录查询或撤销。`
-        : '注销已明确撤销，请重新登录后继续。原游客记录保留。';
+        ? tr('deletion.cancellationRequestedExpiredOrdinaryLoginWillNot2', {
+            value0: formatBeijingTime(r.data.dueAt),
+          })
+        : tr('deletion.accountDeletionHasBeenExplicitlyRevokedPlease2');
     if (r.data.reauthenticate) {
       api.invalidate();
       notice.value = completion;
@@ -146,7 +152,9 @@ async function submit() {
     }
   } catch (e) {
     if (current())
-      error.value = `${message(e)} 结果不明时，请以原微信重新登录并读取注销状态。`;
+      error.value = msg('deletion.whenTheResultIsUnknownPleaseLog', {
+        value0: message(e),
+      });
   } finally {
     if (current()) busy.value = false;
   }
@@ -166,7 +174,9 @@ onUnload(() => {
 <template>
   <view class="page"
     ><text class="title">{{
-      pending ? '注销状态与撤销' : '注销统一账号'
+      pending
+        ? tr('common.accountDeletionStatusAndRevocation')
+        : tr('common.cancelUnifiedAccount')
     }}</text>
     <text v-if="error" class="text error">{{ error }}</text
     ><text v-if="notice" class="text notice">{{ notice }}</text>
@@ -174,19 +184,17 @@ onUnload(() => {
       v-if="ready && w.current.value && w.mode.value === 'account'"
       class="card"
     >
-      <text v-if="pending" class="text"
-        >到期：{{
-          formatBeijingTime(w.current.value.deletionDueAt)
-        }}。普通登录不会撤销申请。</text
-      >
-      <text class="text"
-        >注销涵盖这个统一账号的全部事项、重点、分类、回收站及关联邮箱 /
-        微信和合并来源。服务器确认后连续七天内可重新验证并明确撤销，到期清理不能恢复。</text
-      >
-      <text class="text"
-        >申请和撤销均撤销全部旧会话，需重新登录。请先在网页导出记录，并复制 /
-        下载原账号本机草稿；新账号不会解锁旧账号草稿。</text
-      >
+      <text v-if="pending" class="text">{{
+        tr('deletion.expiredOrdinaryLoginWillNotCancelThe', {
+          value0: formatBeijingTime(w.current.value.deletionDueAt),
+        })
+      }}</text>
+      <text class="text">{{
+        tr('deletion.accountDeletionCoversAllEntriesKeyPoints')
+      }}</text>
+      <text class="text">{{
+        tr('deletion.bothApplicationAndCancellationCancelAllOld')
+      }}</text>
       <button
         class="secondary"
         :disabled="busy"
@@ -194,10 +202,10 @@ onUnload(() => {
       >
         {{
           confirmed
-            ? '已明确了解，点此取消确认'
+            ? tr('deletion.clearlyUnderstoodClickHereToCancelConfirmation')
             : pending
-              ? '我明确撤销本次注销'
-              : '我已了解，继续申请七天后注销'
+              ? tr('deletion.iExplicitlyCancelThisCancellation')
+              : tr('deletion.iUnderstandContinueToApplyAndCancel')
         }}
       </button>
       <template v-if="confirmed"
@@ -206,39 +214,42 @@ onUnload(() => {
           v-model="password"
           password
           :maxlength="128"
-          placeholder="当前账号密码"
-          aria-label="当前账号密码"
+          :placeholder="tr('common.currentAccountPassword')"
+          :aria-label="tr('common.currentAccountPassword')"
         /><button
           v-if="w.current.value.passwordEnabled"
           :disabled="busy"
           @click="verify(false)"
         >
-          验证当前密码</button
+          {{ tr('common.verifyCurrentPassword') }}</button
         ><button
           v-if="w.current.value.wechatBound"
           :disabled="busy"
           @click="verify(true)"
         >
-          使用当前微信重新验证
+          {{ tr('deletion.reVerifyUsingCurrentWechat') }}
         </button></template
       >
       <button :disabled="busy || !confirmed || !proof" @click="submit">
         {{
           busy
-            ? '正在等待服务器确认…'
+            ? tr('deletion.waitingForServerConfirmation')
             : pending
-              ? '明确撤销注销'
-              : '确认申请七天后注销'
+              ? tr('common.explicitCancellationOfCancellation')
+              : tr('deletion.cancellationAfterSevenDaysAfterConfirmationOf')
         }}
       </button>
       <button class="secondary" :disabled="busy" @click="load">
-        读取服务器注销状态
+        {{ tr('deletion.checkAccountDeletionStatus') }}
       </button>
     </view>
     <view v-else class="card"
-      ><text class="text"
-        >请在“我的”用原微信重新登录，再回来查询注销状态。普通登录不会自动撤销。</text
-      ><button @click="back">返回我的并重新登录</button></view
+      ><text class="text">{{
+        tr('deletion.pleaseLogInAgainUsingTheOriginal2')
+      }}</text
+      ><button @click="back">
+        {{ tr('deletion.goBackToMineAndLogIn') }}
+      </button></view
     >
   </view>
 </template>

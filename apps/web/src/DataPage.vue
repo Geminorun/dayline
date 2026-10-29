@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { tr, messageRef, renderMessage } from './i18n/index';
+import { msg } from '@dayline/locales';
 import AccountExports from './AccountExports.vue';
 import IconButton from './components/IconButton.vue';
 import PlannerIcon from './components/PlannerIcon.vue';
@@ -49,8 +51,8 @@ const space = useWorkspace(),
   recovering = ref(false),
   readyScope = ref<string | null>(null),
   identityRevision = ref(0),
-  error = ref(''),
-  notice = ref(''),
+  error = messageRef(),
+  notice = messageRef(),
   page = ref(0),
   draftWarning = ref(false),
   downloadFormat = ref<'csv' | 'json'>('json');
@@ -224,6 +226,7 @@ function show(p: ImportJobDto) {
   }));
   categoryReviewBaseline.value = reviewSelectionKey(categories.value);
 }
+let commitInFlight = false;
 async function run(work: (c: ReturnType<typeof capture>) => Promise<void>) {
   if (blocked.value) return;
   const c = capture();
@@ -235,32 +238,35 @@ async function run(work: (c: ReturnType<typeof capture>) => Promise<void>) {
   } catch (e) {
     if (valid(c)) {
       const uncertain =
-        notice.value === '正在整体保存，结果可查询。' &&
+        commitInFlight &&
         e instanceof ClientError &&
         (e.code === 'NETWORK_ERROR' ||
           e.code === 'INVALID_RESPONSE' ||
           e.status >= 500);
       notice.value = '';
       error.value = uncertain
-        ? '保存结果尚未确认，请查询或恢复原任务后继续，原文件已保留。'
+        ? msg('data.theSavingResultHasNotBeenConfirmed')
         : e instanceof FileError
-          ? `${e.message} ${
+          ? `${renderMessage(e.localized ?? e.message)} ${
               e.issues
                 .slice(0, 100)
-                .map((i) => `${i.path}：${i.message}`)
+                .map((i) => `${i.path}：${renderMessage(i.message)}`)
                 .join('；') +
               (e.issues.length > 100
-                ? `；另有 ${e.issues.length - 100} 个问题，请修正文件后重试。`
+                ? tr('data.thereAreProblemsPleaseCorrectTheFile', {
+                    value0: e.issues.length - 100,
+                  })
                 : '')
             }`
           : operation.value?.scope === 'guest' &&
               plan.value?.status === 'preview' &&
               !(e instanceof ClientError) &&
               !(e instanceof GuestError)
-            ? '本机导入未保存，原记录与文件已保留。请检查存储权限与空间后重试。'
+            ? msg('data.theLocalImportWasNotSavedAnd')
             : errorMessage(e);
     }
   } finally {
+    commitInFlight = false;
     if (valid(c)) busy.value = false;
   }
 }
@@ -315,7 +321,7 @@ async function recoverFor(
 async function recover() {
   await run(async (c) => {
     plan.value = null;
-    notice.value = '正在查询原文件任务，请稍候。';
+    notice.value = msg('data.queryingTheOriginalFileTaskPleaseWait');
     const restored = await recoverFor(c);
     if (valid(c)) {
       notice.value = '';
@@ -327,7 +333,10 @@ async function prepare(c: ReturnType<typeof capture>, op: FileOperation) {
   if (op.scope === 'guest') {
     const current = await guestRepository.read();
     if (!current || current.guestDatasetId !== op.ownerId)
-      throw new FileError('IMPORT_INVALID', '本机空间尚未准备完成。');
+      throw new FileError(
+        'IMPORT_INVALID',
+        tr('data.theLocalSpaceIsNotReadyYet'),
+      );
     const source = await parseWebFile(
       op.text,
       op.format,
@@ -387,7 +396,7 @@ async function loadFile(file: File) {
     fileName.value = file.name;
     view.value = 'summary';
     if (file.size > MAX_FILE_BYTES)
-      throw new FileError('IMPORT_INVALID', '文件不能超过 10 MiB。');
+      throw new FileError('IMPORT_INVALID', tr('data.fileCannotExceed10Mib'));
     const format = file.name.toLowerCase().endsWith('.csv')
       ? 'csv'
       : file.name.toLowerCase().endsWith('.json')
@@ -396,7 +405,7 @@ async function loadFile(file: File) {
     if (!format)
       throw new FileError(
         'IMPORT_INVALID',
-        '请选择 CSV 或 JSON 文件，不支持压缩包。',
+        tr('data.pleaseSelectACsvOrJsonFile'),
       );
     let text: string;
     try {
@@ -404,11 +413,15 @@ async function loadFile(file: File) {
         await file.arrayBuffer(),
       );
     } catch {
-      throw new FileError('IMPORT_INVALID', '文件必须是有效 UTF-8。');
+      throw new FileError('IMPORT_INVALID', tr('errors.fileMustBeValidUtf8'));
     }
     if (!valid(c)) return;
     const id = owner();
-    if (!id) throw new FileError('IMPORT_INVALID', '请先读取当前数据空间。');
+    if (!id)
+      throw new FileError(
+        'IMPORT_INVALID',
+        tr('data.pleaseReadTheCurrentDataSpaceFirst'),
+      );
     const op: FileOperation = {
       environment: localEnvironment,
       scope: space.mode.value,
@@ -472,7 +485,11 @@ async function review() {
     if (op.scope === 'account') next = (await client.review(p.id, input)).data;
     else {
       const cloud = await guestRepository.read();
-      if (!cloud) throw new FileError('IMPORT_INVALID', '无法读取本机记录。');
+      if (!cloud)
+        throw new FileError(
+          'IMPORT_INVALID',
+          tr('data.unableToReadLocalRecord'),
+        );
       next = reviewLocalFilePlan(
         p,
         cloud,
@@ -486,8 +503,8 @@ async function review() {
       show(next);
       if (op.scope === 'guest') operation.value = { ...op, localPlan: next };
       notice.value = next.canCommit
-        ? '已保存处理结果，可以导入。'
-        : '处理结果已保存，请继续解决剩余问题。';
+        ? msg('data.theProcessingResultsHaveBeenSavedAnd')
+        : msg('data.theProcessingResultsHaveBeenSavedPlease');
       if (next.canCommit) view.value = 'summary';
     }
   });
@@ -497,7 +514,8 @@ async function commit() {
     const p = plan.value,
       op = operation.value;
     if (!p || !op || !p.canCommit || unreviewedSelections.value) return;
-    notice.value = '正在整体保存，结果可查询。';
+    notice.value = msg('data.savingAsAWholeTheResultsCan');
+    commitInFlight = true;
     const next =
       op.scope === 'account'
         ? (
@@ -509,7 +527,10 @@ async function commit() {
         : await guestRepository.commitFile(op, p, new Date().toISOString());
     if (!valid(c) || !next) return;
     if (next.status !== 'committed')
-      throw new FileError('IMPORT_INVALID', '尚未确认完成，请查询原任务。');
+      throw new FileError(
+        'IMPORT_INVALID',
+        tr('data.notConfirmedAsCompletedPleaseCheckThe'),
+      );
     show(next);
     operation.value = {
       ...op,
@@ -526,12 +547,17 @@ async function commit() {
     if (next.result && op.scope === 'account')
       api.acknowledgeWrite(next, next.result.dataVersion);
     const result = next.result;
-    const message = `导入成功：新增 ${result?.created ?? 0} 条，更新 ${result?.updated ?? 0} 条${result?.skipped ? `，跳过 ${result.skipped} 条` : ''}。`;
+    const message = msg('data.importSuccessfulAddedItemsUpdatedItems', {
+      value0: result?.created ?? 0,
+      value1: result?.updated ?? 0,
+      value2: result?.skipped
+        ? tr('data.itemsSkipped', { value0: result.skipped })
+        : '',
+    });
     notice.value = message;
     space.notice.value = message;
     if (receiptWarning)
-      space.error.value =
-        '记录已导入，本机任务状态未能保存；原文件仍在，请刷新后核对。';
+      space.error.value = msg('data.theRecordHasBeenImportedAndThe');
     const generation = space.generation(),
       accountGeneration = api.getGeneration();
     emit('imported');
@@ -542,7 +568,7 @@ async function commit() {
         generation === space.generation() &&
         accountGeneration === api.getGeneration()
       )
-        space.error.value = '导入已成功，记录刷新失败，请点击刷新重试。';
+        space.error.value = msg('data.theImportWasSuccessfulButTheRecord');
     }
   });
 }
@@ -621,7 +647,10 @@ async function exportFile(format: 'csv' | 'json', confirmed = false) {
     if (space.mode.value === 'guest') {
       const cloud = await guestRepository.read();
       if (!cloud)
-        throw new FileError('IMPORT_INVALID', '无法读取已保存的本机记录。');
+        throw new FileError(
+          'IMPORT_INVALID',
+          tr('data.unableToReadSavedLocalRecord'),
+        );
       text =
         format === 'csv'
           ? exportCsv(cloud)
@@ -637,12 +666,15 @@ async function exportFile(format: 'csv' | 'json', confirmed = false) {
         },
       });
       if (!result.data)
-        throw new ClientError('INVALID_RESPONSE', '文件未生成。');
+        throw new ClientError(
+          'INVALID_RESPONSE',
+          msg('common.fileNotGenerated2'),
+        );
       text = result.data;
     }
     if (valid(c)) {
       download(text, format);
-      notice.value = '文件已生成，请在下载位置妥善保存。';
+      notice.value = msg('data.theFileHasBeenGeneratedPleaseSave');
     }
   });
 }
@@ -652,12 +684,12 @@ onMounted(() => {
 });
 const actionLabel = (r: ImportRow) =>
   ({
-    create_copy: '新增记录',
-    skip: '跳过',
-    needs_review: '等待核对',
-    apply_update: '更新',
-    restore: '恢复并更新',
-    unchanged: '无变化',
+    create_copy: tr('common.newEntry'),
+    skip: tr('common.skip'),
+    needs_review: tr('common.awaitingVerification'),
+    apply_update: tr('common.update'),
+    restore: tr('common.restoreAndUpdate'),
+    unchanged: tr('common.unchanged'),
   })[r.action];
 const focusPages = ref<Record<string, number>>({});
 function currentCategory(row: ImportRow) {
@@ -703,11 +735,21 @@ function focusMove(row: ImportRow, side: 'current' | 'desired', delta: number) {
   focusPages.value[key] = Math.max(0, (focusPages.value[key] ?? 0) + delta);
 }
 const fieldLabel: Record<string, string> = {
-  title: '名称',
-  startDate: '开始日期',
-  endDate: '结束日期',
-  categoryId: '分类',
-  focusDays: '重点日期',
+  get title() {
+    return tr('common.name');
+  },
+  get startDate() {
+    return tr('common.startDate');
+  },
+  get endDate() {
+    return tr('common.endDate');
+  },
+  get categoryId() {
+    return tr('common.category');
+  },
+  get focusDays() {
+    return tr('common.focusDates');
+  },
 };
 </script>
 <template>
@@ -722,7 +764,7 @@ const fieldLabel: Record<string, string> = {
       <IconButton
         v-if="view === 'details'"
         icon="back"
-        label="返回导入摘要"
+        :label="tr('common.backToSummary')"
         :disabled="busy"
         @click="view = 'summary'"
       />
@@ -730,26 +772,34 @@ const fieldLabel: Record<string, string> = {
         <h1>
           {{
             view === 'details'
-              ? '导入详情'
+              ? tr('common.importDetails')
               : action === 'export'
-                ? '导出记录'
+                ? tr('common.exportRecords')
                 : action === 'import'
-                  ? '导入记录'
-                  : '导入与导出'
+                  ? tr('common.importRecords')
+                  : tr('common.importAndExport')
           }}
         </h1>
         <p class="muted">
-          {{ space.mode.value === 'guest' ? '保存到此设备' : '保存到当前账号' }}
+          {{
+            space.mode.value === 'guest'
+              ? tr('common.saveToThisDevice')
+              : tr('common.saveToCurrentAccount')
+          }}
         </p>
       </div>
     </div>
     <p v-if="initializing || recovering" role="status" class="notice">
-      {{ initializing ? '正在确认数据空间…' : '正在恢复上次导入…' }}
+      {{
+        initializing
+          ? tr('data.confirmingDataSpace')
+          : tr('data.restoringLastImport')
+      }}
     </p>
     <div v-else-if="!scopeKey" role="status" class="notice">
-      <p>当前数据空间尚未准备完成。</p>
+      <p>{{ tr('data.theCurrentDataSpaceHasNotBeen') }}</p>
       <button type="button" class="button subtle" @click="initialize">
-        重新读取
+        {{ tr('common.reload') }}
       </button>
     </div>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
@@ -759,8 +809,8 @@ const fieldLabel: Record<string, string> = {
         v-if="action !== 'import'"
         class="record-panel data-file-actions"
       >
-        <h2 v-if="!action">导出记录</h2>
-        <p>CSV 便于查看与编辑；完整 JSON 同时保留分类、重点和回收站。</p>
+        <h2 v-if="!action">{{ tr('common.exportRecords') }}</h2>
+        <p>{{ tr('data.csvIsEasyToViewAndEdit') }}</p>
         <div class="action-bar">
           <button
             type="button"
@@ -768,31 +818,35 @@ const fieldLabel: Record<string, string> = {
             :disabled="blocked"
             @click="exportFile('csv')"
           >
-            <PlannerIcon name="download" />导出 CSV</button
+            <PlannerIcon name="download" />{{ tr('common.exportCsv') }}</button
           ><button
             type="button"
             class="button subtle"
             :disabled="blocked"
             @click="exportFile('json')"
           >
-            <PlannerIcon name="download" />导出完整 JSON
+            <PlannerIcon name="download" />{{
+              tr('accountExports.exportFullJson')
+            }}
           </button>
         </div>
         <div v-if="draftWarning" role="status" class="notice">
-          <p>有尚未提交的本机修改，可先继续编辑，或只导出云端已保存记录。</p>
-          <RouterLink to="/drafts">查看未提交修改</RouterLink
+          <p>{{ tr('data.thereAreLocalModificationsThatHaveNot') }}</p>
+          <RouterLink to="/drafts">{{
+            tr('common.viewUncommittedChanges')
+          }}</RouterLink
           ><button
             type="button"
             class="button subtle"
             :disabled="blocked"
             @click="exportFile(downloadFormat, true)"
           >
-            继续只导出云端记录
+            {{ tr('accountExports.continueToExportCloudRecordsOnly') }}
           </button>
         </div>
       </section>
       <section v-if="action !== 'export'" class="import-summary">
-        <h2 v-if="!action">导入记录</h2>
+        <h2 v-if="!action">{{ tr('common.importRecords') }}</h2>
         <label
           class="file-drop"
           :class="{
@@ -806,7 +860,7 @@ const fieldLabel: Record<string, string> = {
             class="file-input"
             type="file"
             accept=".csv,.json,text/csv,application/json"
-            aria-label="选择 CSV / JSON 文件"
+            :aria-label="tr('data.selectCsvJsonFile')"
             :disabled="blocked || space.readonly.value"
             @change="select"
           />
@@ -814,14 +868,20 @@ const fieldLabel: Record<string, string> = {
           <strong>{{
             busy
               ? plan?.status === 'preview'
-                ? '正在导入…'
-                : '正在分析文件…'
+                ? tr('common.importing')
+                : tr('common.parsingFile')
               : fileName ||
                 (plan
-                  ? `上次选择的 ${plan.kind.toUpperCase()} 文件`
-                  : '选择 CSV 或 JSON 文件')
+                  ? tr('data.lastSelectedFile', {
+                      value0: plan.kind.toUpperCase(),
+                    })
+                  : tr('data.selectCsvOrJsonFile'))
           }}</strong>
-          <span>{{ plan ? '点击更换文件' : 'CSV 或 JSON，最大 10 MiB' }}</span>
+          <span>{{
+            plan
+              ? tr('common.clickToReplaceFile')
+              : tr('data.csvOrJsonMax10Mib')
+          }}</span>
         </label>
         <template v-if="plan">
           <div
@@ -835,33 +895,45 @@ const fieldLabel: Record<string, string> = {
             <h2>
               {{
                 plan.status === 'preview'
-                  ? `${plan.sourceSummary.entries} 条记录待导入`
+                  ? tr('data.recordsToBeImported', {
+                      value0: plan.sourceSummary.entries,
+                    })
                   : plan.status === 'committed'
-                    ? '导入完成'
+                    ? tr('common.importCompleted')
                     : plan.status === 'expired'
-                      ? '预览已过期'
-                      : '导入已取消'
+                      ? tr('common.previewExpired')
+                      : tr('common.importCanceled')
               }}
             </h2>
             <div class="import-counts">
               <span
-                >新增 <strong>{{ plan.counts?.create ?? 0 }}</strong></span
+                >{{ tr('common.new')
+                }}<strong>{{ plan.counts?.create ?? 0 }}</strong></span
               ><span
-                >更新 <strong>{{ plan.counts?.update ?? 0 }}</strong></span
+                >{{ tr('common.update')
+                }}<strong>{{ plan.counts?.update ?? 0 }}</strong></span
               ><span
-                >不变 <strong>{{ plan.counts?.unchanged ?? 0 }}</strong></span
+                >{{ tr('common.unchanged2')
+                }}<strong>{{ plan.counts?.unchanged ?? 0 }}</strong></span
               ><span
-                >跳过 <strong>{{ plan.counts?.skip ?? 0 }}</strong></span
+                >{{ tr('common.skip')
+                }}<strong>{{ plan.counts?.skip ?? 0 }}</strong></span
               ><span v-if="plan.counts?.needsReview"
-                >待处理 <strong>{{ plan.counts.needsReview }}</strong></span
+                >{{ tr('common.pending')
+                }}<strong>{{ plan.counts.needsReview }}</strong></span
               ><span v-if="plan.counts?.errors"
-                >错误 <strong>{{ plan.counts.errors }}</strong></span
+                >{{ tr('common.error')
+                }}<strong>{{ plan.counts.errors }}</strong></span
               >
             </div>
             <p v-if="plan.result" role="status">
-              已新增 {{ plan.result.created }} 条，更新
-              {{ plan.result.updated ?? 0 }} 条，跳过
-              {{ plan.result.skipped }} 条。
+              {{
+                tr('data.itemsHaveBeenAddedItemsHaveBeen', {
+                  value0: plan.result.created,
+                  value1: plan.result.updated ?? 0,
+                  value2: plan.result.skipped,
+                })
+              }}
             </p>
             <p
               v-if="
@@ -872,8 +944,8 @@ const fieldLabel: Record<string, string> = {
             >
               {{
                 unreviewedSelections
-                  ? '请到详情保存处理结果后导入。'
-                  : '请在详情中处理分类、记录冲突或文件错误后继续。'
+                  ? tr('data.pleaseGoToTheDetailsToSave')
+                  : tr('data.pleaseResolveCategoryRecordConflictsOrFile')
               }}
             </p>
           </div>
@@ -885,20 +957,20 @@ const fieldLabel: Record<string, string> = {
           >
             <PlannerIcon name="list" />{{
               plan.status === 'preview' && !plan.canCommit
-                ? '处理待确认内容'
-                : '查看详情'
+                ? tr('common.processPendingContent')
+                : tr('common.viewDetails')
             }}<PlannerIcon name="chevron" />
           </button>
         </template>
         <p v-else class="muted import-help">
-          自动匹配已有分类，为新分类分配颜色。已有记录会保留。
+          {{ tr('data.automaticallyMatchExistingCategoriesAndAssignColors') }}
         </p>
         <div v-if="operation && !plan" class="notice">
-          <p>可以查询上次文件任务，或使用原文件重试。</p>
+          <p>{{ tr('data.youCanQueryTheLastFileTask') }}</p>
           <div class="action-bar">
             <IconButton
               icon="refresh"
-              label="查询或恢复原任务"
+              :label="tr('common.queryOrRestoreOriginalTask')"
               :disabled="blocked"
               @click="recover"
             /><button
@@ -907,14 +979,14 @@ const fieldLabel: Record<string, string> = {
               :disabled="blocked"
               @click="retry"
             >
-              用原文件重试准备</button
+              {{ tr('common.retryPreparationWithOriginalFile') }}</button
             ><button
               type="button"
               class="button subtle"
               :disabled="blocked"
               @click="repreview"
             >
-              保留原文件，重新建立预览
+              {{ tr('data.keepOriginalFileAndReCreatePreview') }}
             </button>
           </div>
         </div>
@@ -925,7 +997,7 @@ const fieldLabel: Record<string, string> = {
             :disabled="blocked"
             @click="details"
           >
-            <PlannerIcon name="list" />模板与说明
+            <PlannerIcon name="list" />{{ tr('common.templatesAndFormat') }}
           </button>
           <button
             v-if="plan?.status === 'preview'"
@@ -941,10 +1013,10 @@ const fieldLabel: Record<string, string> = {
           >
             {{
               busy
-                ? '正在导入…'
+                ? tr('common.importing')
                 : importCount
-                  ? `导入 ${importCount} 条`
-                  : '完成导入'
+                  ? tr('data.importingItems', { value0: importCount })
+                  : tr('common.importCompleted2')
             }}
           </button>
           <button
@@ -954,7 +1026,7 @@ const fieldLabel: Record<string, string> = {
             :disabled="blocked"
             @click="repreview"
           >
-            重新分析文件
+            {{ tr('common.reparseFile') }}
           </button>
         </footer>
       </section>
@@ -963,58 +1035,55 @@ const fieldLabel: Record<string, string> = {
       <div class="import-detail-tools">
         <IconButton
           icon="download"
-          label="下载 CSV 模板"
+          :label="tr('data.downloadCsvTemplate')"
           @click="download(csvTemplate(), 'csv', true)"
         /><IconButton
           v-if="operation"
           icon="download"
-          label="下载本次原文件"
+          :label="tr('common.downloadTheOriginalFileOfThisTime')"
           :disabled="blocked"
           @click="download(operation.text, operation.format)"
         /><IconButton
           v-if="operation || hasHistory"
           icon="refresh"
-          label="查询或恢复原任务"
+          :label="tr('common.queryOrRestoreOriginalTask')"
           :disabled="blocked"
           @click="recover"
         /><IconButton
           v-if="plan?.status === 'preview'"
           icon="close"
-          label="取消本次导入"
+          :label="tr('common.cancelImport')"
           :disabled="blocked"
           @click="cancel"
         />
       </div>
       <details class="import-format" :open="!plan">
-        <summary>文件格式说明</summary>
-        <p>
-          CSV 使用 UTF-8 编码，至少包含 title、start_date。日期填写
-          YYYY-MM-DD，多个重点日用分号隔开。新记录需提供分类名称；未提供颜色时自动分配。JSON
-          使用日序完整备份文件。
-        </p>
+        <summary>{{ tr('common.fileFormat') }}</summary>
+        <p>{{ tr('data.csvUsesUtf8EncodingAndContains') }}</p>
         <button
           type="button"
           class="button subtle"
           @click="download(csvTemplate(), 'csv', true)"
         >
-          <PlannerIcon name="download" />下载 CSV 模板
+          <PlannerIcon name="download" />{{ tr('data.downloadCsvTemplate') }}
         </button>
       </details>
       <section v-if="plan" class="record-panel import-details">
         <template v-if="plan.status === 'preview'">
-          <h3>分类映射</h3>
+          <h3>{{ tr('common.categoryMapping2') }}</h3>
           <div
             v-for="(c, index) in categories"
             :key="c.sourceId"
             class="file-category"
           >
             <label
-              >目标分类<select
+              >{{ tr('common.targetCategory')
+              }}<select
                 :value="c.targetId ?? ''"
                 :disabled="blocked"
                 @change="mapCategory(index, $event)"
               >
-                <option value="">新增分类</option>
+                <option value="">{{ tr('common.addNewCategory') }}</option>
                 <option
                   v-for="t in space.snapshot.value?.categories ?? []"
                   :key="t.id"
@@ -1024,9 +1093,8 @@ const fieldLabel: Record<string, string> = {
                 </option>
               </select></label
             ><label
-              >分类名称<input
-                v-model="c.name"
-                :disabled="blocked || !!c.targetId"
+              >{{ tr('common.categoryName')
+              }}<input v-model="c.name" :disabled="blocked || !!c.targetId"
             /></label>
             <div class="file-category-color">
               <span
@@ -1035,41 +1103,44 @@ const fieldLabel: Record<string, string> = {
               ></span
               ><ColorPicker
                 v-model="c.color"
-                :label="`更改${c.name}颜色`"
+                :label="tr('data.changeColor', { value0: c.name })"
                 :used="categories.map((category) => category.color)"
                 :disabled="blocked || !!c.targetId"
               />
             </div>
             <p v-if="plan.categoryMappings[index]?.restoreDefault">
-              空白空间的默认分类将按备份恢复：{{
-                plan.categoryMappings[index]?.restoreDefault?.name
+              {{
+                tr('data.theDefaultCategoryOfEmptySpaceWill', {
+                  value0: plan.categoryMappings[index]?.restoreDefault?.name,
+                  value1: plan.categoryMappings[index]?.restoreDefault?.color,
+                  value2: c.name,
+                  value3: c.color,
+                })
               }}
-              / {{ plan.categoryMappings[index]?.restoreDefault?.color }} →
-              {{ c.name }} / {{ c.color }}。默认分类身份保留。
             </p>
             <p v-if="plan.categoryMappings[index]?.action === 'skip'">
-              本次保持已处理的分类，不重建或覆盖当前分类。
+              {{ tr('data.keepTheProcessedCategoryThisTimeAnd') }}
             </p>
             <label v-if="!c.targetId && plan.categoryMappings[index]?.seedKey"
               ><input
                 v-model="c.asCustom"
                 type="checkbox"
                 :disabled="blocked"
-              />明确作为自定义分类保留名称与颜色（不迁移默认分类身份）</label
+              />{{ tr('data.explicitlyRetainNameAndColorAsA') }}</label
             >
-            <span v-if="plan.categoryMappings[index]?.needsReview"
-              >需要明确核对</span
-            >
+            <span v-if="plan.categoryMappings[index]?.needsReview">{{
+              tr('common.requiresExplicitVerification')
+            }}</span>
           </div>
           <div class="detail-section-heading">
-            <h3>记录详情</h3>
+            <h3>{{ tr('common.recordDetails') }}</h3>
             <label v-if="problemRows.length" class="inline-check"
               ><input
                 v-model="rowFilter"
                 type="checkbox"
                 true-value="all"
                 false-value="problems"
-              />显示全部记录</label
+              />{{ tr('common.showAllRecords') }}</label
             >
           </div>
           <article v-for="row in rows" :key="row.sourceKey" class="file-row">
@@ -1078,122 +1149,164 @@ const fieldLabel: Record<string, string> = {
               {{ actionLabel(row) }}
             </h4>
             <p>
-              文件：{{ row.source.startDate }} 至
               {{
-                row.file?.endPresent
-                  ? (row.source.endDate ?? '未结束')
-                  : row.file?.current
-                    ? '保持当前结束日期'
-                    : '未结束'
-              }}；重点
-              {{
-                row.file?.focusPresent
-                  ? row.focusDays
-                      .filter((f) => f.focused)
-                      .map((f) => f.date)
-                      .join('、') || '清空'
-                  : row.file?.current
-                    ? '保持当前重点'
-                    : '无'
+                tr('data.fileToEmphasis', {
+                  value0: row.source.startDate,
+                  value1: row.file?.endPresent
+                    ? (row.source.endDate ?? tr('common.notFinished'))
+                    : row.file?.current
+                      ? tr('common.keepCurrentEndDate')
+                      : tr('common.notFinished'),
+                  value2: row.file?.focusPresent
+                    ? row.focusDays
+                        .filter((f) => f.focused)
+                        .map((f) => f.date)
+                        .join('、') || tr('common.clear')
+                    : row.file?.current
+                      ? tr('common.maintainCurrentFocus')
+                      : tr('common.none'),
+                })
               }}
             </p>
             <table v-if="row.file?.current" class="file-diff">
               <caption>
-                核对当前记录与拟应用内容
+                {{
+                  tr('data.checkCurrentRecordsWithProposedApplicationContent')
+                }}
               </caption>
               <thead>
                 <tr>
-                  <th>字段</th>
-                  <th>当前已保存</th>
-                  <th>拟应用文件内容</th>
+                  <th>{{ tr('common.field') }}</th>
+                  <th>{{ tr('common.savedValue') }}</th>
+                  <th>{{ tr('common.importedValue') }}</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <th>名称</th>
+                  <th>{{ tr('common.name') }}</th>
                   <td>{{ row.file.current.title }}</td>
                   <td>{{ row.source.title }}</td>
                 </tr>
                 <tr>
-                  <th>开始日期</th>
+                  <th>{{ tr('common.startDate') }}</th>
                   <td>{{ row.file.current.startDate }}</td>
                   <td>{{ row.source.startDate }}</td>
                 </tr>
                 <tr>
-                  <th>结束日期</th>
-                  <td>{{ row.file.current.endDate ?? '未结束' }}</td>
+                  <th>{{ tr('common.endDate') }}</th>
+                  <td>
+                    {{ row.file.current.endDate ?? tr('common.notFinished') }}
+                  </td>
                   <td>
                     {{
                       (row.file.endPresent
                         ? row.source.endDate
-                        : row.file.current.endDate) ?? '未结束'
-                    }}{{ !row.file.endPresent ? '（保持当前）' : '' }}
+                        : row.file.current.endDate) ?? tr('common.notFinished')
+                    }}{{
+                      !row.file.endPresent ? tr('common.remainCurrent') : ''
+                    }}
                   </td>
                 </tr>
                 <tr>
-                  <th>分类</th>
+                  <th>{{ tr('common.category') }}</th>
                   <td>
                     <span
                       class="category-dot"
                       :style="{ backgroundColor: currentCategory(row)?.color }"
                     ></span
-                    >{{ currentCategory(row)?.name ?? '请重新读取分类' }}
+                    >{{
+                      currentCategory(row)?.name ??
+                      tr('common.pleaseReadTheCategoryAgain')
+                    }}
                   </td>
                   <td>
                     <span
                       class="category-dot"
                       :style="{ backgroundColor: desiredCategory(row)?.color }"
                     ></span
-                    >{{ desiredCategory(row)?.name ?? '需要选择映射'
-                    }}{{ !row.file.categoryPresent ? '（保持当前）' : '' }}
-                  </td>
-                </tr>
-                <tr>
-                  <th>记录状态</th>
-                  <td>
-                    {{ row.file.current.deletedAt ? '在回收站' : '活动记录' }}
-                  </td>
-                  <td>
-                    {{
-                      row.action === 'restore'
-                        ? '明确恢复为活动记录'
-                        : row.source.deletedAt
-                          ? '来源在回收站'
-                          : '活动内容；不会自动恢复'
+                    >{{
+                      desiredCategory(row)?.name ??
+                      tr('common.needToSelectMapping')
+                    }}{{
+                      !row.file.categoryPresent
+                        ? tr('common.remainCurrent')
+                        : ''
                     }}
                   </td>
                 </tr>
                 <tr>
-                  <th>重点日期</th>
-                  <td>{{ focusDates(row, 'current').length }} 天</td>
+                  <th>{{ tr('common.recordStatus') }}</th>
                   <td>
-                    {{ focusDates(row, 'desired').length }} 天{{
-                      !row.file.focusPresent ? '（保持当前）' : ''
+                    {{
+                      row.file.current.deletedAt
+                        ? tr('common.inTrash')
+                        : tr('common.activityRecord')
+                    }}
+                  </td>
+                  <td>
+                    {{
+                      row.action === 'restore'
+                        ? tr('data.explicitlyRevertToActiveRecord')
+                        : row.source.deletedAt
+                          ? tr('common.sourceInTrash')
+                          : tr('data.activeContentWillNotAutomaticallyRestore')
+                    }}
+                  </td>
+                </tr>
+                <tr>
+                  <th>{{ tr('common.focusDates') }}</th>
+                  <td>
+                    {{
+                      tr('data.days', {
+                        value0: focusDates(row, 'current').length,
+                      })
+                    }}
+                  </td>
+                  <td>
+                    {{
+                      tr('data.days2', {
+                        value0: focusDates(row, 'desired').length,
+                        value1: !row.file.focusPresent
+                          ? tr('common.remainCurrent')
+                          : '',
+                      })
                     }}
                   </td>
                 </tr>
               </tbody>
             </table>
             <details v-if="row.file?.current">
-              <summary>查看当前与拟应用的具体重点日期</summary>
+              <summary>
+                {{ tr('data.viewSpecificFocusDatesCurrentlyAndTo') }}
+              </summary>
               <div v-for="side in ['current', 'desired'] as const" :key="side">
                 <p>
-                  {{ side === 'current' ? '当前已保存' : '拟应用' }}：{{
-                    focusDates(row, side).length
+                  {{
+                    tr('data.focusDays', {
+                      value0:
+                        side === 'current'
+                          ? tr('common.savedValue')
+                          : tr('common.intendedApplication'),
+                      value1: focusDates(row, side).length,
+                    })
                   }}
-                  个重点日
                 </p>
-                <p>{{ focusSlice(row, side).join('、') || '无重点日期' }}</p>
+                <p>
+                  {{
+                    focusSlice(row, side).join('、') ||
+                    tr('common.noFocusDates')
+                  }}
+                </p>
                 <IconButton
                   icon="chevron"
-                  label="前 50 个日期"
+                  :label="tr('common.first50Dates')"
                   class="chevron-back"
                   :disabled="!(focusPages[row.sourceKey + side] ?? 0)"
                   @click="focusMove(row, side, -1)"
                 />
                 <IconButton
                   icon="chevron"
-                  label="后 50 个日期"
+                  :label="tr('common.next50Dates')"
                   :disabled="
                     ((focusPages[row.sourceKey + side] ?? 0) + 1) * 50 >=
                     focusDates(row, side).length
@@ -1203,24 +1316,28 @@ const fieldLabel: Record<string, string> = {
               </div>
             </details>
             <p v-if="row.file?.differences.length">
-              差异：{{
-                row.file.differences.map((f) => fieldLabel[f] ?? f).join('、')
+              {{
+                tr('data.difference', {
+                  value0: row.file.differences
+                    .map((f) => fieldLabel[f] ?? f)
+                    .join('、'),
+                })
               }}
             </p>
-            <p v-if="row.reason">{{ row.reason }}</p>
+            <p v-if="row.reason">{{ renderMessage(row.reason) }}</p>
             <p v-for="e in row.file?.errors ?? []" :key="e" class="error">
-              {{ e }}
+              {{ renderMessage(e) }}
             </p>
             <template v-if="!row.file?.errors.length"
               ><IconButton
                 icon="skip"
-                label="跳过此项"
+                :label="tr('common.skipThis')"
                 :disabled="blocked"
                 @click="choose(row, 'skip')"
               />
               <IconButton
                 icon="copy"
-                label="保留为新副本"
+                :label="tr('common.keepAsNewCopy')"
                 :disabled="blocked"
                 @click="choose(row, 'create_copy')"
               />
@@ -1237,18 +1354,18 @@ const fieldLabel: Record<string, string> = {
               >
                 {{
                   row.file.current.deletedAt
-                    ? '已核对当前内容，恢复并更新'
-                    : '已核对当前内容，更新此项'
+                    ? tr('data.currentContentCheckedRestoredAndUpdated')
+                    : tr('data.currentContentHasBeenCheckedUpdateThis')
                 }}</button
-              ><span v-if="choices[row.sourceKey]"
-                >已选择，需保存核对</span
-              ></template
+              ><span v-if="choices[row.sourceKey]">{{
+                tr('data.selectedNeedToSaveAndCheck')
+              }}</span></template
             >
           </article>
           <div class="toolbar">
             <IconButton
               icon="chevron"
-              label="上一页"
+              :label="tr('common.previousPage')"
               class="chevron-back"
               :disabled="page === 0"
               @click="page--"
@@ -1258,7 +1375,7 @@ const fieldLabel: Record<string, string> = {
               {{ Math.max(1, Math.ceil(visibleRows.length / 50)) }}</span
             ><IconButton
               icon="chevron"
-              label="下一页"
+              :label="tr('common.nextPage')"
               :disabled="(page + 1) * 50 >= visibleRows.length"
               @click="page++"
             />
@@ -1267,8 +1384,8 @@ const fieldLabel: Record<string, string> = {
         <p v-else>
           {{
             plan.status === 'committed'
-              ? '本次导入已完成。'
-              : '本次预览已结束，可用原文件重新分析。'
+              ? tr('common.thisImportHasBeenCompleted')
+              : tr('data.thisPreviewHasEndedAndTheOriginal')
           }}
         </p>
         <button
@@ -1278,7 +1395,7 @@ const fieldLabel: Record<string, string> = {
           :disabled="blocked"
           @click="repreview"
         >
-          保留原文件，重新建立预览
+          {{ tr('data.keepOriginalFileAndReCreatePreview') }}
         </button>
       </section>
       <footer class="import-footer">
@@ -1288,7 +1405,7 @@ const fieldLabel: Record<string, string> = {
           :disabled="blocked"
           @click="view = 'summary'"
         >
-          返回摘要
+          {{ tr('common.backToSummary2') }}
         </button>
         <button
           v-if="plan?.status === 'preview'"
@@ -1297,11 +1414,11 @@ const fieldLabel: Record<string, string> = {
           :disabled="blocked || space.readonly.value"
           @click="review"
         >
-          保存处理结果
+          {{ tr('common.saveProcessingResults') }}
         </button>
       </footer>
       <p v-if="unreviewedSelections" role="status" class="muted">
-        选择尚未保存，保存核对后再导入。
+        {{ tr('data.theSelectionHasNotBeenSavedSave') }}
       </p>
     </template>
   </section>

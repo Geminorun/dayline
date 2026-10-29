@@ -5,6 +5,7 @@ import { useAccount } from '../src/account';
 import { useWorkspace } from '../src/records/workspace';
 import { api } from '../src/api';
 const user = {
+  locale: 'zh-CN',
   id: randomUUID(),
   displayName: '当前身份',
   profileVersion: 1,

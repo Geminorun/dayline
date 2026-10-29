@@ -1,0 +1,20 @@
+{
+  "guest-repository.unableToReadLocalRecordTheOriginal": "Unable to read local record. The original data remains unchanged, please check your browser storage permissions.",
+  "guest-repository.theLocalFileTaskOwnershipIsInvalid": "The local file task ownership is invalid, the original text has been retained.",
+  "guest-repository.fileTaskOwnershipIsInvalid": "File task ownership is invalid.",
+  "guest-repository.fileTaskDataSetDoesNotMatch": "File task data set does not match.",
+  "guest-repository.theOriginalTaskFileCannotBeReplaced": "The original task file cannot be replaced.",
+  "guest-repository.theFileReceiptOwnershipIsInvalidAnd": "The file receipt ownership is invalid and the original data has been retained.",
+  "guest-repository.theFilePlanHasChangedPleaseRead": "The file plan has changed, please read again.",
+  "guest-repository.theFilePlanHasChanged": "The file plan has changed.",
+  "guest-repository.thisSourceHasBeenCompletedByAnother": "This source has been completed by another task, please preview again.",
+  "guest-repository.anotherTabHasModifiedTheLocalRecord": "Another tab has modified the local record. Please read again and check your input.",
+  "guest-repository.localSaveFailedOriginalRecordAndCurrent": "Local save failed, original record and current input retained. Please check the remaining space and try again.",
+  "guest-repository.theLocalRecordDirectoryIsDamagedOr": "The local record directory is damaged or the version is incompatible. The original shards have been retained, please restore and try again.",
+  "guest-repository.uncommittedOrMissingNativeShardForDirectory": "Uncommitted or missing native shard for directory found. The original data has been retained and empty packet initialization is stopped.",
+  "guest-repository.theLocalRecordCannotBeReadCompletely": "The local record cannot be read completely. The original data has been retained. Please restore and try again.",
+  "guest-repository.anotherLocalSaveIsInProgress": "Another local save is in progress.",
+  "guest-repository.theLocalRecordHasBeenUpdatedPlease": "The local record has been updated, please read again and check the input.",
+  "guest-repository.theLocalComputerHasInsufficientSpaceAnd": "The local computer has insufficient space and was not saved. The original record is still retained, please free up space and try again.",
+  "guest-repository.theLocalSaveIsNotCompletedAnd": "The local save is not completed and the last complete record has been retained. The current input is still there, please try again."
+}

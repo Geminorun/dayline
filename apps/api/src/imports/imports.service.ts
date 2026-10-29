@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import {
   categoryOrder,
   nextCategoryPosition,
@@ -47,7 +48,7 @@ const hash = (value: unknown) =>
 const json = (value: unknown): Prisma.InputJsonValue =>
   JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const conflict = (code = 'PREVIEW_STALE') =>
-  new AppError(409, code, '接入依据已变化，请重新核对预览。');
+  new AppError(409, code, msg('errors.theAccessBasisHasChangedPleaseCheck'));
 @Injectable()
 export class ImportsService {
   constructor(
@@ -58,11 +59,23 @@ export class ImportsService {
     await tx.$queryRaw`SELECT id FROM users WHERE id=${actor.userId}::uuid FOR UPDATE`;
     const user = await tx.user.findUnique({ where: { id: actor.userId } });
     if (!user || user.authEpoch !== actor.authEpoch || user.status === 'merged')
-      throw new AppError(401, 'SESSION_REVOKED', '请重新登录。');
+      throw new AppError(
+        401,
+        'SESSION_REVOKED',
+        msg('errors.pleaseLogInAgain'),
+      );
     if (user.status !== 'active')
-      throw new AppError(403, 'ACCOUNT_PENDING_DELETION', '账号正在注销。');
+      throw new AppError(
+        403,
+        'ACCOUNT_PENDING_DELETION',
+        msg('errors.accountDeletionIsPending2'),
+      );
     if (!user.initializedAt)
-      throw new AppError(503, 'ACCOUNT_NOT_INITIALIZED', '账号尚未准备完成。');
+      throw new AppError(
+        503,
+        'ACCOUNT_NOT_INITIALIZED',
+        msg('errors.theAccountIsNotReadyYet'),
+      );
     return user;
   }
   private async receiptOwners(tx: Tx, userId: string) {
@@ -101,7 +114,12 @@ export class ImportsService {
     const row = await tx.importJob.findFirst({
       where: { id, userId: actor.userId },
     });
-    if (!row) throw new AppError(404, 'RESOURCE_NOT_FOUND', '接入任务不存在。');
+    if (!row)
+      throw new AppError(
+        404,
+        'RESOURCE_NOT_FOUND',
+        msg('errors.theAccessTaskDoesNotExist'),
+      );
     if (row.status !== 'committed' && row.authEpoch !== actor.authEpoch)
       throw conflict();
     const plan = importJobSchema.parse(row.plan);
@@ -160,7 +178,11 @@ export class ImportsService {
   ) {
     const validation = normalizedImportSourceSchema.safeParse(rawSource);
     if (!validation.success)
-      throw new AppError(422, 'IMPORT_INVALID', '归一化导入来源无效。');
+      throw new AppError(
+        422,
+        'IMPORT_INVALID',
+        msg('errors.invalidNormalizedImportSource'),
+      );
     const source = validation.data;
     // Device timestamps are provenance only. Invalid clocks require an explicit repair rather than restoring deleted data.
     const now = this.clock.now(),
@@ -181,7 +203,7 @@ export class ImportsService {
       throw new AppError(
         422,
         'IMPORT_INVALID',
-        '本机时间或回收站期限不可信，请校准时间后核对原包。',
+        msg('errors.theLocalTimeOrTrashPeriodCannot'),
       );
     const inputDigest = source.file?.digest ?? hash({ kind, source });
     const focusByEntry = new Map<string, typeof source.focusDays>();
@@ -362,7 +384,7 @@ export class ImportsService {
         throw new AppError(
           404,
           'RESOURCE_NOT_FOUND',
-          '任务尚未建立，可用原包重试。',
+          msg('errors.theTaskHasNotBeenCreatedYet'),
         );
       return (await this.lockedJob(tx, actor, row?.id ?? id)).plan;
     });
@@ -382,7 +404,11 @@ export class ImportsService {
           input.categories.length ||
         new Set(input.rows.map((r) => r.sourceKey)).size !== input.rows.length
       )
-        throw new AppError(422, 'IMPORT_INVALID', '预览选择重复。');
+        throw new AppError(
+          422,
+          'IMPORT_INVALID',
+          msg('errors.duplicatePreviewSelection'),
+        );
       for (const choice of input.categories) {
         const mapping = plan.categoryMappings.find(
           (c) => c.sourceId === choice.sourceId,
@@ -411,7 +437,7 @@ export class ImportsService {
           throw new AppError(
             409,
             'CATEGORY_NAME_EXISTS',
-            '请区分类名或明确选择已有分类。',
+            msg('errors.pleaseDistinguishTheCategoryNameOrExplicitly'),
           );
         Object.assign(mapping, {
           targetId: choice.targetId,
@@ -440,9 +466,17 @@ export class ImportsService {
           Date.parse(row.source.purgeAfter) <= this.clock.now().getTime() &&
           choice.action !== 'skip'
         )
-          throw new AppError(410, 'TRASH_EXPIRED', '不能延长已到期回收站。');
+          throw new AppError(
+            410,
+            'TRASH_EXPIRED',
+            msg('errors.expiredTrashCannotBeExtended'),
+          );
         if (row.file?.errors.length)
-          throw new AppError(422, 'IMPORT_INVALID', '请修正错误行后重新上传。');
+          throw new AppError(
+            422,
+            'IMPORT_INVALID',
+            msg('errors.pleaseCorrectTheErrorLineAndUpload'),
+          );
         if (choice.action === 'apply_update' || choice.action === 'restore') {
           if (!row.file || plan.kind === 'guest') throw conflict();
           const current = currentById.get(row.file.requestedId ?? '');
@@ -600,7 +634,11 @@ export class ImportsService {
       const e = row.source,
         categoryId = categoryIds.get(e.categoryId);
       if (!categoryId)
-        throw new AppError(422, 'IMPORT_INVALID', '分类映射缺失。');
+        throw new AppError(
+          422,
+          'IMPORT_INVALID',
+          msg('errors.categoryMapMissing'),
+        );
       if (e.purgeAfter && Date.parse(e.purgeAfter) <= now.getTime())
         throw conflict();
       newEntries.push({

@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@dayline/contracts": "workspace:*",
-    "@dayline/core": "workspace:*"
+    "@dayline/core": "workspace:*",
+    "@dayline/locales": "workspace:*"
   }
 }

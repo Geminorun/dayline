@@ -1,0 +1,21 @@
+{
+  "entryEditor.thisMachineHasBeenStagedAndHas": "Saved on this device. Select Save to submit your changes.",
+  "entryEditor.theCurrentInputHasNotBeenSaved": "The current input has not been saved. Are you sure you want to give up and leave?",
+  "entryEditor.theOriginalCategoryHasBeenDeletedPlease": "The original category has been deleted, please select again.",
+  "entryEditor.savedToTheCloudThereAreStill": "Saved to the cloud, there are still uncommitted modifications.",
+  "entryEditor.abandonThisDraftModificationAndUseServer": "Abandon this draft modification and use server content?",
+  "entryEditor.serverFieldsCheckedWillMyChangesBe": "Server fields checked, will my changes be saved as current version?",
+  "entryEditor.saveTheCurrentEntryAsANew": "Save the current entry as a new entry and keep the original entry?",
+  "entryEditor.theLastUncommittedModificationHasBeenRestored": "The last uncommitted modification has been restored and will not be uploaded until saved.",
+  "entryEditor.theOriginalEntryIsInTrashRecovery": "The original entry is in trash, recovery must be done separately; automatic recovery will not occur.",
+  "entryEditor.abandonDraftAndUseServerContent": "Abandon draft and use server content",
+  "entryEditor.afterVerificationSaveAccordingToTheCurrent": "After verification, save according to the current version.",
+  "entryEditor.theOriginalDraftIsStillRetainedAfter": "The original draft is still retained; after submitting the current input, you can check it in the draft list and explicitly abandon the original draft.",
+  "entryEditor.title100Words": "Title ({value0} / 100 characters)",
+  "entryEditor.forExamplePlayingCivilizationViReadingInside": "For example: playing Civilization VI, reading \"Inside the Matter\"",
+  "entryEditor.endDateLeaveBlankToIndicateNot": "End date (leave blank to indicate not ended)",
+  "entryEditor.highlightsWillBeRemovedFromTheFollowing": "Highlights will be removed from the following dates:",
+  "entryEditor.totalFocusDays": "Total {value0} focus days.",
+  "entryEditor.showMoreAffectedDates": "Show more affected dates",
+  "entryEditor.confirmToRemoveTheseHighlightsAndSave": "Confirm to remove these highlights and save"
+}

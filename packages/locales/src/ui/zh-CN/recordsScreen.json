@@ -1,0 +1,19 @@
+{
+  "recordsScreen.guestSaveLocallyOnly": "游客 · 仅本机保存",
+  "recordsScreen.readingCompleteRecord": "正在完整读取记录…",
+  "recordsScreen.onlySavedOnThisDeviceCanBe": "仅保存在此设备，登录后可同步。",
+  "recordsScreen.saveOnlineUnsavedInputOnlyRemainsOn": "在线保存，未保存输入仅保留在当前页面。",
+  "recordsScreen.beijingTime": "{value0} 北京时间 {value1}",
+  "recordsScreen.dateYyyyMmDd": "日期 YYYY-MM-DD",
+  "recordsScreen.pleaseEnterAValidYyyyMmDd": "请输入合法 YYYY-MM-DD 日期。",
+  "recordsScreen.week": "周{value0}",
+  "recordsScreen.futureDatesCanOnlyBeViewedWithin": "未来日期仅浏览计划范围，不可标记重点。",
+  "recordsScreen.stillInProgressTodayRelatingToCategory": "{value0} {value1} · 今天仍在进行 {value2} · 涉及分类 {value3}",
+  "recordsScreen.selectedDayFocus": "选定日重点 {value0}",
+  "recordsScreen.categoryDistributionByNumberOfEntries": "分类分布 · 按事项数量",
+  "recordsScreen.noResultsAfterFilteringPleaseAdjustOr": "筛选后无结果，请调整或清除筛选。",
+  "recordsScreen.thereIsNoEntryInTheCurrent": "当前空间还没有事项，开始记录自己的经历。",
+  "recordsScreen.thereAreNoCoveredEntriesOnThis": "这一天没有覆盖的事项。",
+  "recordsScreen.showMore": "显示更多（{value0} / {value1}）",
+  "recordsScreen.moveAndEmphasisToTrashAndKeep": "将“{value0}”及重点移入回收站，保留 30 天？"
+}

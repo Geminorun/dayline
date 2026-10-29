@@ -1,0 +1,14 @@
+{
+  "edit.entryDetailsEdit": "entry details / edit",
+  "edit.guestItWillBeConsideredSavedOnly": "guest · It will be considered saved only after it is successfully saved to the local machine.",
+  "edit.onlineSavingTheCurrentInputIsOnly": "Online saving · The current input is only left in the memory, please submit it manually before leaving.",
+  "edit.anExperienceWorthRecording": "An experience worth recording",
+  "edit.startDateYyyyMmDd": "Start date YYYY-MM-DD",
+  "edit.endDateYyyyMmDd": "End date YYYY-MM-DD",
+  "edit.originalRecord": "Original record: {value0}",
+  "edit.focusDaysWillBeCancelled": "{value0} focus days will be cancelled:",
+  "edit.specifyFocusDatesNotSavedWithThe": "Specify focus dates (not saved with the entry form)",
+  "edit.focusDatesYyyyMmDd": "focus dates YYYY-MM-DD",
+  "edit.setCancelHighlightsForTheDay": "Set/Cancel Highlights for the Day",
+  "edit.leavingWillDiscardUnsavedInput": "Leaving will discard unsaved input."
+}

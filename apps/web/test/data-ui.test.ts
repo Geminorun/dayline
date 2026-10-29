@@ -18,14 +18,15 @@ import {
 import { api, cookieTransport } from '../src/api';
 vi.mock('../src/records/workspace', async () => {
   const { ref } = await import('vue');
+  const { messageRef } = await import('../src/i18n');
   const state = {
     mode: ref('guest'),
     identityState: ref('guest'),
     snapshot: ref(null),
     guest: ref(null),
     readonly: ref(false),
-    notice: ref(''),
-    error: ref(''),
+    notice: messageRef(),
+    error: messageRef(),
     generation: () => 0,
     ensure: async () => {},
     reload: vi.fn(),

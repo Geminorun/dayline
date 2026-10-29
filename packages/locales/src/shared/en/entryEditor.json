@@ -1,0 +1,12 @@
+{
+  "entryEditor.theLocalDraftTemporaryStorageFailedThe": "The local draft temporary storage failed, the input is still there. Please try again, or leave your entries manually before leaving.",
+  "entryEditor.theOriginalEntryHasBeenPermanentlyCleared": "The original entry has been permanently cleared; you can keep the draft or explicitly save a copy.",
+  "entryEditor.itHasBeenSavedToTheCloud": "It has been saved to the cloud, but the local draft cleanup failed. You can check it later and give up.",
+  "entryEditor.theAccountHasChangedPleaseReVerify": "The account has changed, please re-verify the original account; the current input will remain.",
+  "entryEditor.pleaseCheckTheTitle1100Words": "Please check the title (1–100 characters), validity date, and category.",
+  "entryEditor.currentlyOfflineDraftIsRetainedPleaseSave": "Currently offline, draft is retained; please save manually after connecting to the Internet.",
+  "entryEditor.theAccountHasBeenChangedAndThe": "The account has been changed and the draft has been retained in the original account.",
+  "entryEditor.thisStableRecordIdentifierAlreadyHasDifferent": "This stable record identifier already has different content, please check for conflicts.",
+  "entryEditor.theSavedResultsArePendingConfirmationAnd": "The saved results are pending confirmation and are being read from the cloud for verification.",
+  "entryEditor.theSavingResultNeedsToBeConfirmed": "The saving result needs to be confirmed; the available current content has been read, please check and try again manually."
+}

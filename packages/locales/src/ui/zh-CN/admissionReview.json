@@ -1,0 +1,21 @@
+{
+  "admissionReview.keepTheOriginalFrozenPackagesAndTasks": "保留原冻结包和任务；请先核对云端。将当前本机修订创建为新的接入预览？",
+  "admissionReview.cloudConfirmedItemsAddedItemsSkippedThe": "云端已确认：新增 {value0} 条，跳过 {value1} 条。确认只对应这次冻结修订，原本机包仍保留。",
+  "admissionReview.localItemsClassCloudItemsClassBy": "本机 {value0} 条 / {value1} 类；云端 {value2} 条 / {value3} 类。默认保留双方，同名事项不合并。过期 {value4}",
+  "admissionReview.multiplexing": "复用 {value0} {value1}",
+  "admissionReview.focusDay": "{value0} — {value1} · {value2} · {value3} 重点日",
+  "admissionReview.pageOfItems": "第 {value0} / {value1} 页，共 {value2} 条",
+  "admissionReview.theCategoryOrSourceSelectionHasNot": "分类或来源选择尚未保存核对，请先更新并核对计划。",
+  "admissionReview.pleaseUpdateThePlanAfterProcessingThe": "请处理分类名称、20 类上限及需要核对的记录后更新计划。",
+  "admissionReview.thisPlanHasBeenCanceledOrExpired": "本次计划已取消或过期，原本机记录保留，可重新准备。",
+  "admissionReview.freezeLocalRevision": "冻结本机修订 {value0} · {value1}",
+  "admissionReview.explicitlyRePreviewCurrentNativeRevision": "明确重新预览当前本机修订",
+  "admissionReview.rePrepareLocalRecordAccess": "重新准备本机记录接入",
+  "admissionReview.keepAllOriginalFrozenPackagesAndTasks": "保留所有原冻结包和任务。将当前本机修订创建为新的预览，请先核对云端记录。",
+  "admissionReview.cloudConfirmedAddedSkippedTheOriginalPackage": "云端已确认：新增 {value0} 条、跳过 {value1} 条。原包保留，确认只对应被冻结修订。",
+  "admissionReview.localItemsClassCloudItemsClassBoth": "本机 {value0} 条 / {value1} 类；云端 {value2} 条 / {value3} 类。默认保留双方。",
+  "admissionReview.clickHereToSelectMapping": "{value0} · 点此选择映射",
+  "admissionReview.keepIndependentCopiesAndDoNotDeduplicate": "保留独立副本，不按同名去重",
+  "admissionReview.pleaseDealWithTheDuplicateNamesOf": "请处理分类重名、20 类上限及需要核对的来源后更新计划。",
+  "admissionReview.thePlanHasBeenCanceledOrExpired": "计划已取消或过期，原游客记录保留。"
+}

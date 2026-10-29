@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { spanLabel, tr } from '../i18n/index';
+
 import { computed } from 'vue';
 import {
-  spanLabel,
   entryStatus,
   durationDays,
   dateOrdinal,
@@ -21,7 +22,14 @@ const props = defineProps<{
   readonly: boolean;
 }>();
 const emit = defineEmits<{ edit: []; finish: []; remove: []; focus: [] }>();
-const statuses = { ongoing: '进行中', ended: '已结束' };
+const statuses = {
+  get ongoing() {
+    return tr('common.ongoing');
+  },
+  get ended() {
+    return tr('common.ended');
+  },
+};
 const status = computed(() => entryStatus(props.entry, props.today));
 const dayNumber = computed(() =>
   isCalendarDate(props.date)
@@ -41,7 +49,9 @@ const dayNumber = computed(() =>
     <div class="time-rail">
       {{ entry.startDate.slice(5).replace('-', '.')
       }}<small>{{ entry.startDate.slice(0, 4) }}</small
-      ><span class="rail-day">第{{ dayNumber }}天</span>
+      ><span class="rail-day">{{
+        tr('entryRow.day', { value0: dayNumber })
+      }}</span>
     </div>
     <div class="event-card">
       <div class="event-top">
@@ -60,8 +70,21 @@ const dayNumber = computed(() =>
               (!!entry.endDate && date > entry.endDate)
             "
             :aria-pressed="focused"
-            :title="`${focused ? '取消当天重点' : '设为当天重点'} · 累计 ${focusCount ?? 0} 个重点日`"
-            :aria-label="`${date} ${entry.title} ${focused ? '取消' : '设为'}当天重点`"
+            :title="
+              tr('entryRow.cumulativeFocusDays', {
+                value0: focused
+                  ? tr('common.cancelTheHighlightOfTheDay')
+                  : tr('common.setAsTheHighlightOfTheDay'),
+                value1: focusCount ?? 0,
+              })
+            "
+            :aria-label="
+              tr('entryRow.highlightsOfTheDay', {
+                value0: date,
+                value1: entry.title,
+                value2: focused ? tr('common.cancel') : tr('common.setTo'),
+              })
+            "
             @click="emit('focus')"
           >
             <PlannerIcon name="star" />
@@ -80,12 +103,18 @@ const dayNumber = computed(() =>
           ><span class="range-dash">—</span
           ><span :class="{ 'ongoing-date': !entry.endDate }">{{
             entry.endDate?.replaceAll('-', '.') ??
-            (entry.startDate > today ? '结束未定' : '至今')
+            (entry.startDate > today
+              ? tr('common.endingPending')
+              : tr('common.present'))
           }}</span
-          ><span class="duration-pill"
-            >{{ entry.endDate ? '共' : '已持续' }}
-            {{ durationDays(entry, today) }} 天</span
-          >
+          ><span class="duration-pill">{{
+            tr('entryRow.days', {
+              value0: entry.endDate
+                ? tr('common.total')
+                : tr('common.duration2'),
+              value1: durationDays(entry, today),
+            })
+          }}</span>
         </div>
 
         <span class="sr-only">{{ spanLabel(entry, today) }}</span>
@@ -96,23 +125,27 @@ const dayNumber = computed(() =>
             :disabled="busy"
             @click="emit('finish')"
           >
-            <PlannerIcon name="check" />结束</button
+            <PlannerIcon name="check" />{{ tr('common.end') }}</button
           ><button
             class="icon-btn"
             :disabled="busy"
-            :aria-label="`编辑${entry.title}`"
-            title="编辑"
+            :aria-label="tr('entryRow.edit', { value0: entry.title })"
+            :title="tr('common.edit')"
             @click="emit('edit')"
           >
-            <PlannerIcon name="edit" /><span class="sr-only">编辑</span></button
+            <PlannerIcon name="edit" /><span class="sr-only">{{
+              tr('common.edit')
+            }}</span></button
           ><button
             class="icon-btn"
             :disabled="busy"
-            :aria-label="`删除${entry.title}`"
-            title="移入回收站"
+            :aria-label="tr('entryRow.delete', { value0: entry.title })"
+            :title="tr('common.moveIntoTrash')"
             @click="emit('remove')"
           >
-            <PlannerIcon name="trash" /><span class="sr-only">移入回收站</span>
+            <PlannerIcon name="trash" /><span class="sr-only">{{
+              tr('common.moveIntoTrash')
+            }}</span>
           </button>
         </div>
       </div>

@@ -1,3 +1,6 @@
+import type { Locale } from '@dayline/locales';
+import { serverText } from '../i18n/server-text.js';
+import { msg } from '@dayline/locales';
 import { AppError } from '../common/app-error.js';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { MAIL_TRANSPORT } from './mail-transport.js';
@@ -12,60 +15,51 @@ export class MailService {
     @Inject(MAIL_TRANSPORT) private readonly transport: MailTransport,
   ) {}
 
-  async sendVerification(to: string, url: string): Promise<void> {
-    await this.sendLink(
-      to,
-      url,
-      '验证日序邮箱',
-      '验证邮箱',
-      '此链接用于确认你的邮箱地址，24 小时内有效。',
-    );
+  async sendVerification(
+    to: string,
+    url: string,
+    locale?: Locale,
+  ): Promise<void> {
+    await this.sendLink(to, url, 'email_verification', 'verification', locale);
   }
-
-  async sendEmailBinding(to: string, url: string): Promise<void> {
-    await this.sendLink(
-      to,
-      url,
-      '确认添加日序邮箱',
-      '验证待绑定邮箱',
-      '此链接仅验证邮箱，不会登录或移动任何账号。请在原设备继续，30 分钟内有效。',
-    );
+  async sendEmailBinding(
+    to: string,
+    url: string,
+    locale?: Locale,
+  ): Promise<void> {
+    await this.sendLink(to, url, 'email_binding', 'binding', locale);
   }
-
-  async sendPasswordReset(to: string, url: string): Promise<void> {
-    await this.sendLink(
-      to,
-      url,
-      '重置日序密码',
-      '重置密码',
-      '如果你没有申请重置密码，可忽略此邮件。链接在 30 分钟内有效。',
-    );
+  async sendPasswordReset(
+    to: string,
+    url: string,
+    locale?: Locale,
+  ): Promise<void> {
+    await this.sendLink(to, url, 'password_reset', 'reset', locale);
   }
-
   private async sendLink(
     to: string,
     url: string,
-    subject: string,
-    action: string,
-    description: string,
+    purpose: 'email_verification' | 'email_binding' | 'password_reset',
+    template: 'verification' | 'binding' | 'reset',
+    locale?: Locale,
   ) {
-    if (to.toLowerCase().endsWith('.invalid')) {
+    if (to.toLowerCase().endsWith('.invalid'))
       throw new Error(
         'Internal identity addresses cannot receive transactional mail.',
       );
-    }
-    const purpose =
-      action === '重置密码'
-        ? 'password_reset'
-        : action === '验证待绑定邮箱'
-          ? 'email_binding'
-          : 'email_verification';
+    const subject = serverText(msg(`emails.${template}.subject`), locale);
+    const action = serverText(msg(`emails.${template}.action`), locale);
+    const description = serverText(
+      msg(`emails.${template}.description`),
+      locale,
+    );
+    const footer = serverText(msg('emails.footer'), locale);
     try {
       const receipt = await this.transport.send({
         to,
         subject,
-        text: `${description}\n\n${action}：${url}\n\n链接有时效，请勿转发。`,
-        html: `<p>${description}</p><p><a href="${escapeHtml(url)}">${action}</a></p><p>链接有时效，请勿转发。</p>`,
+        text: `${description}\n\n${action}: ${url}\n\n${footer}`,
+        html: `<p>${escapeHtml(description)}</p><p><a href="${escapeHtml(url)}">${escapeHtml(action)}</a></p><p>${escapeHtml(footer)}</p>`,
       });
       this.logger.log({
         code: 'MAIL_ACCEPTED',
@@ -88,7 +82,7 @@ export class MailService {
       throw new AppError(
         503,
         'MAIL_UNAVAILABLE',
-        '邮件暂时无法发送，请稍后重新申请。',
+        msg('errors.theEmailCannotBeSentTemporarilyPlease'),
         undefined,
         cause,
       );

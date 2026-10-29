@@ -1,0 +1,4 @@
+{
+  "confirm.theRequestHasBeenClaimedByThe": "请求已被网页领取或已经结束，无法再取消。请在电脑检查当前账号。",
+  "confirm.theScanCodeParametersAreInvalidPlease": "扫码参数无效，请从网页重新扫码。"
+}

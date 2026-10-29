@@ -1,0 +1,21 @@
+{
+  "admissionReview.keepTheOriginalFrozenPackagesAndTasks": "Keep the original frozen packages and tasks; please check the cloud first. Create current native revision as new access preview?",
+  "admissionReview.cloudConfirmedItemsAddedItemsSkippedThe": "Cloud import confirmed. Added: {value0}; skipped: {value1}. This applies only to the reviewed snapshot. Your original local records are retained.",
+  "admissionReview.localItemsClassCloudItemsClassBy": "Local records: {value0}; categories: {value1}. Cloud records: {value2}; categories: {value3}. Both sets are kept and matching titles stay separate. Expires {value4}.",
+  "admissionReview.multiplexing": "Multiplexing {value0} {value1}",
+  "admissionReview.focusDay": "{value0} — {value1} · {value2} · {value3} focus day",
+  "admissionReview.pageOfItems": "Page {value0} / {value1} of {value2} items",
+  "admissionReview.theCategoryOrSourceSelectionHasNot": "The category or source selection has not been saved for verification. Please update and verify the plan first.",
+  "admissionReview.pleaseUpdateThePlanAfterProcessingThe": "Please update the plan after processing the category name, upper limit of 20 categories and records that need to be checked.",
+  "admissionReview.thisPlanHasBeenCanceledOrExpired": "This plan has been canceled or expired. The original machine record is retained and can be prepared again.",
+  "admissionReview.freezeLocalRevision": "Freeze local revision {value0} · {value1}",
+  "admissionReview.explicitlyRePreviewCurrentNativeRevision": "Explicitly re-preview current native revision",
+  "admissionReview.rePrepareLocalRecordAccess": "Re-prepare local record access",
+  "admissionReview.keepAllOriginalFrozenPackagesAndTasks": "Keep all original frozen packages and tasks. To create the current native revision as a new preview, please check the cloud record first.",
+  "admissionReview.cloudConfirmedAddedSkippedTheOriginalPackage": "Cloud confirmed: {value0} added, {value1} skipped. The original package is retained, and confirmation only corresponds to frozen revisions.",
+  "admissionReview.localItemsClassCloudItemsClassBoth": "Local records: {value0}; categories: {value1}. Cloud records: {value2}; categories: {value3}. Both sets are kept.",
+  "admissionReview.clickHereToSelectMapping": "{value0} · Click here to select mapping",
+  "admissionReview.keepIndependentCopiesAndDoNotDeduplicate": "Keep independent copies and do not deduplicate them by the same name.",
+  "admissionReview.pleaseDealWithTheDuplicateNamesOf": "Please deal with the duplicate names of categories, the upper limit of 20 categories, and the sources that need to be checked before updating the plan.",
+  "admissionReview.thePlanHasBeenCanceledOrExpired": "The plan has been canceled or expired, and the original guest record is retained."
+}

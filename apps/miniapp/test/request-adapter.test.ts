@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { userDtoSchema } from '@dayline/contracts';
 const user = {
+  locale: 'zh-CN',
   id: '63a561bd-2302-485d-8d89-cea248ffbdf1',
   displayName: '微信用户',
   profileVersion: 1,

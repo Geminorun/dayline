@@ -1,0 +1,4 @@
+{
+  "file-parser.fileParsingIsNotCompletedPleaseKeep": "文件解析未完成，请保留原文件后重试。",
+  "file-parser.invalidFileParsingResponse": "文件解析响应无效。"
+}

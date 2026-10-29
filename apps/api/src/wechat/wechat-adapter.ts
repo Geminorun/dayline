@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { APP_CONFIG } from '../config/environment.js';
@@ -23,7 +24,11 @@ export class ProductionWechatAdapter implements WechatAdapter {
   private credentials() {
     const { wechatAppId: appId, wechatAppSecret: secret } = this.config;
     if (!appId?.trim() || !secret?.trim())
-      throw new AppError(503, 'WECHAT_NOT_CONFIGURED', '微信登录暂未配置。');
+      throw new AppError(
+        503,
+        'WECHAT_NOT_CONFIGURED',
+        msg('errors.wechatLoginHasNotBeenConfiguredYet2'),
+      );
     return { appId, secret };
   }
 
@@ -39,7 +44,7 @@ export class ProductionWechatAdapter implements WechatAdapter {
       throw new AppError(
         503,
         'WECHAT_UNAVAILABLE',
-        '微信服务暂不可用，请重新获取登录凭据后重试。',
+        msg('errors.wechatServiceIsTemporarilyUnavailablePleaseObtain'),
         undefined,
         cause,
       );
@@ -63,12 +68,12 @@ export class ProductionWechatAdapter implements WechatAdapter {
           throw new AppError(
             401,
             'WECHAT_CODE_INVALID',
-            '微信凭据失效，请重新登录。',
+            msg('errors.wechatCredentialsAreInvalidPleaseLogIn'),
           );
         throw new AppError(
           503,
           'WECHAT_UNAVAILABLE',
-          '微信服务暂不可用，请稍后重试。',
+          msg('errors.wechatServiceIsTemporarilyUnavailablePleaseTry'),
         );
       }
       const result = z
@@ -79,7 +84,11 @@ export class ProductionWechatAdapter implements WechatAdapter {
         })
         .safeParse(body);
       if (!result.success)
-        throw new AppError(502, 'WECHAT_UNAVAILABLE', '微信返回了无效响应。');
+        throw new AppError(
+          502,
+          'WECHAT_UNAVAILABLE',
+          msg('errors.wechatReturnedAnInvalidResponse'),
+        );
       return {
         appId,
         openid: result.data.openid,
@@ -87,7 +96,11 @@ export class ProductionWechatAdapter implements WechatAdapter {
       };
     } catch (error) {
       if (error instanceof AppError) throw error;
-      throw new AppError(502, 'WECHAT_UNAVAILABLE', '微信返回了无效响应。');
+      throw new AppError(
+        502,
+        'WECHAT_UNAVAILABLE',
+        msg('errors.wechatReturnedAnInvalidResponse'),
+      );
     }
   }
 
@@ -118,7 +131,11 @@ export class ProductionWechatAdapter implements WechatAdapter {
       return this.accessToken.value;
     } catch (error) {
       if (error instanceof AppError) throw error;
-      throw new AppError(502, 'WECHAT_UNAVAILABLE', '无法取得小程序码。');
+      throw new AppError(
+        502,
+        'WECHAT_UNAVAILABLE',
+        msg('errors.unableToObtainAppletCode'),
+      );
     }
   }
 
@@ -143,7 +160,7 @@ export class ProductionWechatAdapter implements WechatAdapter {
       throw new AppError(
         503,
         'WECHAT_UNAVAILABLE',
-        '小程序码下载失败，请稍后重试。',
+        msg('errors.miniProgramCodeDownloadFailedPleaseTry'),
       );
     }
     const png =
@@ -154,7 +171,7 @@ export class ProductionWechatAdapter implements WechatAdapter {
       throw new AppError(
         502,
         'WECHAT_CODE_UNAVAILABLE',
-        '小程序码生成失败，请稍后重试。',
+        msg('errors.miniProgramCodeGenerationFailedPleaseTry'),
       );
     }
     return `data:image/${png ? 'png' : 'jpeg'};base64,${Buffer.from(bytes).toString('base64')}`;

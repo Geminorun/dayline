@@ -1,0 +1,12 @@
+{
+  "confirm.theCodeScanningOperationIsNotCompleted": "扫码操作未完成，请回网页重新生成小程序码。",
+  "confirm.daylineWebLogin": "DAYLINE · 网页登录",
+  "confirm.confirmCurrentIdentityReAuthentication": "确认当前身份重新验证",
+  "confirm.thisOperationWillAllowTheWebpageThat": "本次操作将让发起扫码的网页进入此微信对应的账号。",
+  "confirm.thisTimeOnlyTheSpecifiedOperationsOf": "本次仅为网页当前账号的指定操作重新验证，不会切换账号。",
+  "confirm.addThisWechatToTheCurrentAccount": "将此微信添加到网页当前账号；已有独立账号时仅允许受验证预览合并，双方数据保留。",
+  "confirm.pleaseConfirmThatItWasInitiatedBy": "{value0}请确认是你本人发起。",
+  "confirm.verifyingThisScan": "正在验证本次扫码…",
+  "confirm.scanNotAuthorizedYetPleaseExplicitlySelect": "扫描尚未授权。请明确选择确认或取消。有效至 {value0}。",
+  "confirm.confirmedPleaseReturnToTheOriginalWebpage": "已确认。请回到原网页领取本次操作结果；领取前仍可取消。"
+}

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { formatBeijingTime } from '@dayline/core';
+import { formatBeijingTime, spanLabel, tr } from '../../i18n/index';
+
 import { ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import type { EntryDto } from '@dayline/contracts';
-import { spanLabel } from '@dayline/core';
+
 import { useWorkspace, records, message } from '../../workspace';
 const {
   snapshot,
@@ -51,21 +52,22 @@ async function purge() {
 </script>
 <template>
   <view class="page"
-    ><text class="title">回收站 · 30 天</text
-    ><text v-if="loading" class="text">正在完整读取…</text
+    ><text class="title">{{ tr('mini.trash30Days') }}</text
+    ><text v-if="loading" class="text">{{ tr('common.loadingRecords2') }}</text
     ><text v-if="error" class="text error">{{ error }}</text
     ><text v-if="notice" class="text notice">{{ notice }}</text
     ><button class="secondary" :disabled="busy || loading" @click="load">
-      重新完整读取</button
+      {{ tr('common.completeReadAgain') }}</button
     ><template v-if="snapshot"
       ><button
         v-if="snapshot.trashEntries.length && !readonly"
         :disabled="busy"
         @click="confirm = { kind: 'clear', dataVersion: snapshot.dataVersion }"
       >
-        永久清空回收站</button
-      ><text v-if="!snapshot.trashEntries.length" class="text empty"
-        >回收站为空。</text
+        {{ tr('common.clearTrashPermanently') }}</button
+      ><text v-if="!snapshot.trashEntries.length" class="text empty">{{
+        tr('common.trashIsEmpty')
+      }}</text
       ><view v-for="entry in snapshot.trashEntries" :key="entry.id" class="card"
         ><text class="heading">{{ entry.title }}</text
         ><text class="text"
@@ -75,19 +77,26 @@ async function purge() {
           · {{ entry.startDate }} →
           {{
             entry.endDate ??
-            (entry.startDate > snapshot.businessToday ? '结束未定' : '至今')
+            (entry.startDate > snapshot.businessToday
+              ? tr('common.endingPending')
+              : tr('common.present'))
           }}
           · {{ spanLabel(entry, snapshot.businessToday) }}</text
-        ><text class="text">删除：{{ formatBeijingTime(entry.deletedAt) }}</text
-        ><text class="text"
-          >到期：{{ formatBeijingTime(entry.purgeAfter) }}</text
-        ><text class="text"
-          >重点：{{
-            snapshot.focusDays
-              .filter((f) => f.entryId === entry.id && f.focused)
-              .map((f) => f.date)
-              .join('、') || '无'
-          }}</text
+        ><text class="text">{{
+          tr('records.delete', { value0: formatBeijingTime(entry.deletedAt) })
+        }}</text
+        ><text class="text">{{
+          tr('records.expired', { value0: formatBeijingTime(entry.purgeAfter) })
+        }}</text
+        ><text class="text">{{
+          tr('records.focus', {
+            value0:
+              snapshot.focusDays
+                .filter((f) => f.entryId === entry.id && f.focused)
+                .map((f) => f.date)
+                .join('、') || tr('common.none'),
+          })
+        }}</text
         ><view v-if="!readonly" class="actions"
           ><button
             :disabled="
@@ -95,27 +104,31 @@ async function purge() {
             "
             @click="restore(entry)"
           >
-            恢复事项</button
+            {{ tr('common.restoreEntry') }}</button
           ><button
             class="secondary"
             :disabled="busy"
             @click="confirm = { kind: 'purge', entry: { ...entry } }"
           >
-            永久删除此项
+            {{ tr('common.deleteThisItemPermanently') }}
           </button></view
         ></view
       ></template
     ><view v-if="confirm" class="card confirmation"
-      ><text class="text"
-        >{{
-          confirm.kind === 'clear'
-            ? `永久清空当前看到的 ${snapshot?.trashEntries.length} 条事项？期间有修改会要求重新确认。`
-            : `永久删除“${confirm.entry.title}”？`
-        }}
-        无法从回收站恢复。</text
-      ><button :disabled="busy" @click="purge">确认永久删除</button
+      ><text class="text">{{
+        tr('mini.cannotRecoverFromTrash', {
+          value0:
+            confirm.kind === 'clear'
+              ? tr('mini.permanentlyClearTheCurrentlySeenEntriesIf', {
+                  value0: snapshot?.trashEntries.length,
+                })
+              : tr('mini.permanentlyDelete', { value0: confirm.entry.title }),
+        })
+      }}</text
+      ><button :disabled="busy" @click="purge">
+        {{ tr('common.deletePermanently2') }}</button
       ><button class="secondary" :disabled="busy" @click="confirm = null">
-        取消
+        {{ tr('common.cancel') }}
       </button></view
     ></view
   >

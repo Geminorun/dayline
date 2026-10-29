@@ -1,0 +1,11 @@
+{
+  "api.theDownloadFileEncodingIsInvalidPlease": "下载文件编码无效，请重试。",
+  "api.theDownloadResponseFormatIsInvalidPlease": "下载响应格式无效，请重试。",
+  "api.unableToReadLoginCredentialsPleaseCheck": "无法读取登录凭据，请检查本机存储。",
+  "api.loginCredentialCleanupFailedPleaseCheckLocal": "登录凭据清理失败，请检查本机存储。",
+  "api.theServiceAddressMustUseHttps": "服务地址须使用 HTTPS。",
+  "api.theServiceAddressHasNotBeenConfigured": "服务地址尚未配置，请联系服务维护者。",
+  "api.theCloudRequestWasConfirmedButThe": "云端请求已确认，但登录凭据未能持久保存；当前会话仅在内存，请检查空间后重新登录。",
+  "api.wechatCredentialsNotObtainedPleaseTryAgain": "未取得微信凭据，请重试。",
+  "api.unableToObtainWechatLoginCredentialsPlease": "无法取得微信登录凭据，请重试。"
+}

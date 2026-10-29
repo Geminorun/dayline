@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { Inject, Injectable } from '@nestjs/common';
 import { businessToday, nextCategoryColor } from '@dayline/core';
 import type {
@@ -28,13 +29,14 @@ import {
   focusDto,
 } from './record-dto.js';
 type Transaction = Prisma.TransactionClient;
-const notFound = () => new AppError(404, 'RESOURCE_NOT_FOUND', '记录不存在。');
+const notFound = () =>
+  new AppError(404, 'RESOURCE_NOT_FOUND', msg('errors.recordDoesNotExist'));
 function checkVersion(expectedVersion: number, currentVersion: number) {
   if (expectedVersion !== currentVersion)
     throw new AppError(
       409,
       'VERSION_CONFLICT',
-      '记录已有更新，请核对后再次保存。',
+      msg('errors.theRecordHasBeenUpdatedPleaseCheck'),
       { expectedVersion, currentVersion },
     );
 }
@@ -46,12 +48,17 @@ export class RecordsService {
   ) {}
   private async readyUser(tx: Transaction, userId: string) {
     const user = await tx.user.findUnique({ where: { id: userId } });
-    if (!user) throw new AppError(401, 'SESSION_REVOKED', '登录状态已失效。');
+    if (!user)
+      throw new AppError(
+        401,
+        'SESSION_REVOKED',
+        msg('errors.theLoginStatusHasExpired'),
+      );
     if (!user.initializedAt)
       throw new AppError(
         503,
         'ACCOUNT_NOT_INITIALIZED',
-        '账号业务数据尚未初始化，请稍后重试。',
+        msg('errors.theAccountBusinessDataHasNotBeen'),
       );
     return user;
   }
@@ -68,12 +75,16 @@ export class RecordsService {
           user.status === 'merged' ||
           user.authEpoch !== actor.authEpoch
         )
-          throw new AppError(401, 'SESSION_REVOKED', '登录状态已失效。');
+          throw new AppError(
+            401,
+            'SESSION_REVOKED',
+            msg('errors.theLoginStatusHasExpired'),
+          );
         if (user.status !== 'active')
           throw new AppError(
             403,
             'ACCOUNT_PENDING_DELETION',
-            '账号正在注销中。',
+            msg('errors.accountDeletionIsPending'),
           );
         const result = await action(tx);
         const version = result.changed
@@ -94,7 +105,7 @@ export class RecordsService {
         throw new AppError(
           409,
           'IDEMPOTENCY_KEY_REUSED',
-          '分类名称或记录 ID 已被使用。',
+          msg('errors.categoryNameOrRecordIdIsAlready'),
         );
       throw error;
     }
@@ -113,7 +124,7 @@ export class RecordsService {
     const entry = await tx.entry.findFirst({ where: { id, userId } });
     if (!entry) throw notFound();
     if (active && entry.deletedAt)
-      throw new AppError(409, 'ENTRY_DELETED', '事项已在回收站。');
+      throw new AppError(409, 'ENTRY_DELETED', msg('errors.entryIsInTrash'));
     return entry;
   }
   private async entryResult(tx: Transaction, entry: Entry) {
@@ -143,12 +154,16 @@ export class RecordsService {
       });
       if (existing) {
         if (existing.userId !== actor.userId)
-          throw new AppError(409, 'IDEMPOTENCY_KEY_REUSED', '记录 ID 不可用。');
+          throw new AppError(
+            409,
+            'IDEMPOTENCY_KEY_REUSED',
+            msg('errors.recordIdNotAvailable'),
+          );
         if (existing.name !== input.name || existing.color !== input.color)
           throw new AppError(
             409,
             'IDEMPOTENCY_KEY_REUSED',
-            '此 ID 已保存不同内容。',
+            msg('errors.differentContentHasBeenSavedForThis'),
           );
         return {
           data: { category: categoryDto(existing), alreadyExists: true },
@@ -159,14 +174,18 @@ export class RecordsService {
         throw new AppError(
           422,
           'CATEGORY_LIMIT_EXCEEDED',
-          '最多保留 20 个分类。',
+          msg('errors.keepUpTo20Categories'),
         );
       if (
         await tx.category.findUnique({
           where: { userId_name: { userId: actor.userId, name: input.name } },
         })
       )
-        throw new AppError(409, 'CATEGORY_NAME_EXISTS', '分类名称已存在。');
+        throw new AppError(
+          409,
+          'CATEGORY_NAME_EXISTS',
+          msg('errors.categoryNameAlreadyExists'),
+        );
       const category = await tx.category.create({
         data: {
           ...input,
@@ -191,7 +210,11 @@ export class RecordsService {
           where: { userId_name: { userId: actor.userId, name: input.name } },
         }))
       )
-        throw new AppError(409, 'CATEGORY_NAME_EXISTS', '分类名称已存在。');
+        throw new AppError(
+          409,
+          'CATEGORY_NAME_EXISTS',
+          msg('errors.categoryNameAlreadyExists'),
+        );
       const changed =
         (input.name !== undefined && input.name !== category.name) ||
         (input.color !== undefined && input.color !== category.color);
@@ -215,7 +238,7 @@ export class RecordsService {
         throw new AppError(
           409,
           'DATA_VERSION_CONFLICT',
-          '分类已有变化，请刷新后重新排序。',
+          msg('errors.theCategoryHasChangedPleaseRefreshAnd'),
         );
       const current = await tx.category.findMany({
         where: { userId: actor.userId },
@@ -229,7 +252,7 @@ export class RecordsService {
         throw new AppError(
           422,
           'VALIDATION_ERROR',
-          '请提交当前账号的全部分类。',
+          msg('errors.pleaseSubmitAllCategoriesOfTheCurrent'),
         );
       const changed = input.categoryIds.some(
         (id, index) => current[index]?.id !== id,
@@ -260,14 +283,18 @@ export class RecordsService {
     return this.write<DeleteCategoryResult>(actor, async (tx) => {
       const source = await this.category(tx, actor.userId, id);
       if ((await tx.category.count({ where: { userId: actor.userId } })) <= 1)
-        throw new AppError(409, 'LAST_CATEGORY', '至少保留一个分类。');
+        throw new AppError(
+          409,
+          'LAST_CATEGORY',
+          msg('errors.keepAtLeastOneCategory'),
+        );
       if ('mode' in input) {
         const currentUser = await this.readyUser(tx, actor.userId);
         if (input.expectedDataVersion !== currentUser.dataVersion.toString())
           throw new AppError(
             409,
             'DATA_VERSION_CONFLICT',
-            '记录已有变化，请重新确认删除。',
+            msg('errors.theRecordHasChangedPleaseReconfirmThe'),
           );
         checkVersion(input.expectedVersion, source.version);
         const entries = await tx.entry.findMany({
@@ -287,7 +314,7 @@ export class RecordsService {
             throw new AppError(
               409,
               'IDEMPOTENCY_KEY_REUSED',
-              '备用分类标识已被使用。',
+              msg('errors.alternateCategoryIdentifierIsAlreadyInUse'),
             );
           const categories = await tx.category.findMany({
             where: { userId: actor.userId },
@@ -353,7 +380,11 @@ export class RecordsService {
       checkVersion(input.expectedVersion, source.version);
       checkVersion(input.expectedTargetVersion, target.version);
       if (source.id === target.id)
-        throw new AppError(422, 'VALIDATION_ERROR', '请选择另一个分类。');
+        throw new AppError(
+          422,
+          'VALIDATION_ERROR',
+          msg('errors.pleaseSelectAnotherCategory'),
+        );
       const moved = await tx.entry.updateMany({
         where: { userId: actor.userId, categoryId: id },
         data: { categoryId: target.id, version: { increment: 1 } },
@@ -370,12 +401,16 @@ export class RecordsService {
       const existing = await tx.entry.findUnique({ where: { id: input.id } });
       if (existing) {
         if (existing.userId !== actor.userId)
-          throw new AppError(409, 'IDEMPOTENCY_KEY_REUSED', '记录 ID 不可用。');
+          throw new AppError(
+            409,
+            'IDEMPOTENCY_KEY_REUSED',
+            msg('errors.recordIdNotAvailable'),
+          );
         if (existing.deletedAt)
           throw new AppError(
             409,
             'ENTRY_DELETED',
-            '事项已在回收站，请使用恢复操作。',
+            msg('errors.theEntryHasBeenInTrashPlease'),
           );
         const current = entryDto(existing);
         if (
@@ -387,7 +422,7 @@ export class RecordsService {
           throw new AppError(
             409,
             'IDEMPOTENCY_KEY_REUSED',
-            '此 ID 已保存不同内容。',
+            msg('errors.differentContentHasBeenSavedForThis'),
           );
         return {
           data: {
@@ -415,7 +450,11 @@ export class RecordsService {
   }
   private validateRange(start: string, end: string | null) {
     if (end !== null && end < start)
-      throw new AppError(422, 'VALIDATION_ERROR', '结束日期不能早于开始日期。');
+      throw new AppError(
+        422,
+        'VALIDATION_ERROR',
+        msg('errors.endDateCannotBeEarlierThanStart'),
+      );
   }
   readEntry(userId: string, id: string) {
     return this.database.transaction(
@@ -471,7 +510,7 @@ export class RecordsService {
           throw new AppError(
             409,
             'FOCUS_REMOVAL_CONFIRMATION_REQUIRED',
-            '日期范围变化将移除重点，请确认具体日期。',
+            msg('errors.dateRangeChangesWillRemoveEmphasisPlease'),
             { currentVersion: current.version, affectedFocusDays: list },
           );
       }
@@ -513,12 +552,16 @@ export class RecordsService {
       checkVersion(expectedVersion, entry.version);
       const today = businessToday(this.clock.now());
       if (calendarDate(entry.startDate) > today)
-        throw new AppError(422, 'VALIDATION_ERROR', '未来事项尚未开始。');
+        throw new AppError(
+          422,
+          'VALIDATION_ERROR',
+          msg('errors.theFutureEntryHasNotYetStarted'),
+        );
       if (entry.endDate && calendarDate(entry.endDate) < today)
         throw new AppError(
           409,
           'ENTRY_ALREADY_ENDED',
-          '事项已在历史日期结束。',
+          msg('errors.entryHasEndedAtTheHistoricalDate'),
         );
       const changed = !entry.endDate || calendarDate(entry.endDate) !== today;
       const updated = changed
@@ -541,7 +584,7 @@ export class RecordsService {
         throw new AppError(
           409,
           'FOCUS_VERSION_CONFLICT',
-          '当天重点已有更新。',
+          msg('errors.theFocusOfTheDayHasBeen'),
           {
             entryId: id,
             date,
@@ -561,7 +604,7 @@ export class RecordsService {
         throw new AppError(
           422,
           'VALIDATION_ERROR',
-          '重点须在事项区间内且不晚于今天。',
+          msg('errors.theKeyPointMustBeWithinThe'),
         );
       if (input.focused === (current?.focused ?? false))
         return {
@@ -630,9 +673,17 @@ export class RecordsService {
       const entry = await this.entry(tx, actor.userId, id);
       checkVersion(expectedVersion, entry.version);
       if (!entry.deletedAt || !entry.purgeAfter)
-        throw new AppError(409, 'ENTRY_NOT_DELETED', '事项不在回收站。');
+        throw new AppError(
+          409,
+          'ENTRY_NOT_DELETED',
+          msg('errors.entryIsNotInTrash'),
+        );
       if (this.clock.now() >= entry.purgeAfter)
-        throw new AppError(410, 'TRASH_EXPIRED', '事项已超过恢复期限。');
+        throw new AppError(
+          410,
+          'TRASH_EXPIRED',
+          msg('errors.theEntryHasExceededTheRecoveryPeriod'),
+        );
       const updated = await tx.entry.update({
         where: { id },
         data: { deletedAt: null, purgeAfter: null, version: { increment: 1 } },
@@ -651,7 +702,7 @@ export class RecordsService {
           throw new AppError(
             409,
             'DATA_VERSION_CONFLICT',
-            '回收站已有变化，请重新确认。',
+            msg('errors.trashHasChangedPleaseReconfirm'),
             { currentDataVersion: user.dataVersion.toString() },
           );
         ids = (
@@ -665,7 +716,11 @@ export class RecordsService {
           new Set(input.entries.map((entry) => entry.id)).size !==
           input.entries.length
         )
-          throw new AppError(422, 'VALIDATION_ERROR', '清理目标不能重复。');
+          throw new AppError(
+            422,
+            'VALIDATION_ERROR',
+            msg('errors.cleanupTargetCannotBeRepeated'),
+          );
         ids = input.entries.map((entry) => entry.id);
         const entries = await tx.entry.findMany({
           where: { userId: actor.userId, id: { in: ids } },
@@ -677,7 +732,11 @@ export class RecordsService {
           if (!entry) throw notFound();
           checkVersion(target.expectedVersion, entry.version);
           if (!entry.deletedAt)
-            throw new AppError(409, 'ENTRY_NOT_DELETED', '事项不在回收站。');
+            throw new AppError(
+              409,
+              'ENTRY_NOT_DELETED',
+              msg('errors.entryIsNotInTrash'),
+            );
         }
       }
       await tx.entry.deleteMany({
@@ -702,7 +761,11 @@ export class RecordsService {
           user.status === 'merged' ||
           user.authEpoch !== actor.authEpoch
         )
-          throw new AppError(401, 'SESSION_REVOKED', '登录状态已失效。');
+          throw new AppError(
+            401,
+            'SESSION_REVOKED',
+            msg('errors.theLoginStatusHasExpired'),
+          );
         const today = businessToday(this.clock.now());
         const etag = `"dayline-1-${user.id}-${user.dataVersion}-${today}"`;
         if (

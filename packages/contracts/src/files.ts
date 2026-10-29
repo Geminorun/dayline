@@ -1,3 +1,5 @@
+import type { Message, UiText } from '@dayline/locales';
+import { sharedMessages, msg, fallbackText } from '@dayline/locales';
 import { importSourceReceipt } from './imports.js';
 import Papa from 'papaparse';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -49,12 +51,18 @@ const stableId = (value: unknown) => {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
 };
 export class FileError extends Error {
+  readonly localized?: Message;
   constructor(
     public readonly code: string,
-    message: string,
+    message: UiText,
     public readonly issues: { path: string; message: string }[] = [],
   ) {
-    super(message);
+    const localized =
+      typeof message === 'string' && sharedMessages['zh-CN'][message]
+        ? msg(message)
+        : message;
+    super(fallbackText(localized));
+    if (typeof localized !== 'string') this.localized = localized;
   }
 }
 export const backupSchema = z
@@ -88,8 +96,8 @@ function fail(message: string, issues: FileError['issues'] = []): never {
 }
 function boundedText(text: string) {
   if (utf8ToBytes(text).length > MAX_FILE_BYTES)
-    throw new FileError('FILE_TOO_LARGE', '文件不能超过 10 MiB。');
-  if (text.includes('\u0000')) fail('文件必须是有效 UTF-8 文本。');
+    throw new FileError('FILE_TOO_LARGE', 'data.fileCannotExceed10Mib');
+  if (text.includes('\u0000')) fail('files.fileMustBeValidUtf8Text');
 }
 function checkDepth(text: string) {
   let depth = 0,
@@ -102,7 +110,7 @@ function checkDepth(text: string) {
       else if (ch === '"') quoted = false;
     } else if (ch === '"') quoted = true;
     else if (ch === '{' || ch === '[') {
-      if (++depth > 12) fail('JSON 嵌套过深。');
+      if (++depth > 12) fail('files.jsonIsNestedTooDeeply');
     } else if (ch === '}' || ch === ']') depth--;
   }
 }
@@ -140,7 +148,7 @@ function validateSource(source: NormalizedImportSource, now: string) {
   });
   if (!graph.success)
     fail(
-      '文件引用、重复标识、日期范围或重点无效。',
+      'files.invalidFileReferenceDuplicateIdentifierDateRange',
       graph.error.issues.map((i) => ({
         path: i.path.join('.'),
         message: i.message,
@@ -150,21 +158,24 @@ function validateSource(source: NormalizedImportSource, now: string) {
     c.seedKey ? [c.seedKey] : [],
   );
   if (new Set(seeds).size !== seeds.length)
-    fail('默认分类标识重复。', [
-      { path: 'categories', message: '重复默认分类标识' },
+    fail('files.duplicateDefaultCategoryIdentifiers', [
+      {
+        path: 'categories',
+        message: 'errors.duplicateDefaultCategoryIdentifier',
+      },
     ]);
   const today = businessToday(new Date(now));
   if (Date.parse(source.savedAt) > Date.parse(now) + 300_000)
-    fail('导出时间晚于当前时间，请校准后核对原文件。', [
-      { path: 'exportedAt', message: '导出时间无效' },
+    fail('files.theExportTimeIsLaterThanThe', [
+      { path: 'exportedAt', message: 'errors.invalidExportTime' },
     ]);
   for (const [i, e] of source.entries.entries()) {
     if (
       Date.parse(e.createdAt) > Date.parse(now) + 300_000 ||
       Date.parse(e.updatedAt) > Date.parse(now) + 300_000
     )
-      fail('来源时间晚于当前时间，请核对原文件。', [
-        { path: `entries.${i}.updatedAt`, message: '来源时间无效' },
+      fail('files.theSourceTimeIsLaterThanThe', [
+        { path: `entries.${i}.updatedAt`, message: 'errors.invalidSourceTime' },
       ]);
     if (
       e.deletedAt &&
@@ -172,12 +183,15 @@ function validateSource(source: NormalizedImportSource, now: string) {
         30 * 86400000 ||
         Date.parse(e.deletedAt) > Date.parse(now) + 300_000)
     )
-      fail('回收站期限必须保留原连续 30 天。', [
-        { path: `entries.${i}.purgeAfter`, message: '删除时间或到期时间无效' },
+      fail('files.trashPeriodMustRemainOriginalFor30', [
+        {
+          path: `entries.${i}.purgeAfter`,
+          message: 'errors.invalidDeleteTimeOrExpirationTime',
+        },
       ]);
   }
   if (source.focusDays.some((f) => f.focused && f.date > today))
-    fail('重点不能晚于今天。');
+    fail('files.theFocusCannotBeLaterThanToday');
 }
 export function parseImportFile(
   text: string,
@@ -193,7 +207,7 @@ export function parseImportFile(
     try {
       raw = JSON.parse(text);
     } catch {
-      fail('JSON 语法无效。');
+      fail('files.invalidJsonSyntax');
     }
     if (
       typeof raw === 'object' &&
@@ -205,12 +219,12 @@ export function parseImportFile(
     )
       throw new FileError(
         'FORMAT_VERSION_UNSUPPORTED',
-        '仅支持 Dayline 完整备份 v1。',
+        'files.onlyDaylineFullBackupV1IsSupported',
       );
     const checked = backupSchema.safeParse(raw);
     if (!checked.success)
       fail(
-        'JSON 备份格式无效。',
+        'files.invalidJsonBackupFormat',
         checked.error.issues.map((i) => ({
           path: i.path.join('.'),
           message: i.message,
@@ -249,7 +263,7 @@ export function parseImportFile(
   const parsed = Papa.parse<string[]>(text, { skipEmptyLines: 'greedy' });
   if (parsed.errors.length)
     fail(
-      'CSV 引号或行格式无效。',
+      'files.invalidCsvQuotesOrRowFormat',
       parsed.errors.map((e) => ({
         path: `行 ${(e.row ?? 0) + 1}`,
         message: e.message,
@@ -257,19 +271,19 @@ export function parseImportFile(
     );
   const header = parsed.data[0];
   if (!header?.length || new Set(header).size !== header.length)
-    fail('CSV 表头缺失或重复。');
+    fail('files.missingOrDuplicateCsvHeader');
   const unknown = header.filter(
     (h) => !CSV_COLUMNS.includes(h as (typeof CSV_COLUMNS)[number]),
   );
   if (unknown.length)
     fail(
-      'CSV 包含未知列。',
+      'files.csvContainsUnknownColumns',
       unknown.map((h) => ({ path: '表头', message: h })),
     );
   if (!header.includes('title') || !header.includes('start_date'))
-    fail('CSV 必须包含 title 和 start_date。');
+    fail('files.csvMustContainTitleAndStartDate');
   if (parsed.data.length - 1 > 10_000)
-    throw new FileError('FILE_TOO_LARGE', '一次最多导入 10,000 条事项。');
+    throw new FileError('FILE_TOO_LARGE', 'files.upTo10000EntriesCanBe');
   const categories: CategoryDto[] = [],
     entries: EntryDto[] = [],
     focusDays: FocusDayDto[] = [],
@@ -281,11 +295,12 @@ export function parseImportFile(
       header.map((h, i) => [h, cells[i] ?? '']),
     );
     const meta = info(`行 ${index + 2}`, row.entry_id?.trim() || null);
-    if (cells.length !== header.length) meta.errors.push('列数与表头不一致');
+    if (cells.length !== header.length)
+      meta.errors.push('common.theNumberOfColumnsIsInconsistentWith');
     if (row.schema_version && row.schema_version !== '1')
-      meta.errors.push('不支持的 schema_version');
+      meta.errors.push('files.unsupportedSchemaVersion');
     if (row.text_escape && row.text_escape !== 'apostrophe-v1')
-      meta.errors.push('不支持的 text_escape');
+      meta.errors.push('files.unsupportedTextEscape');
     if (row.text_escape === 'apostrophe-v1')
       for (const key of ['title', 'category_name'])
         if (row[key]?.startsWith("'")) row[key] = row[key].slice(1);
@@ -302,18 +317,23 @@ export function parseImportFile(
       }
       return r.data;
     };
-    const title = value(titleSchema, row.title, '名称须为 1–100 字', '待修正'),
+    const title = value(
+        titleSchema,
+        row.title,
+        'files.nameMustBe1100Words',
+        '待修正',
+      ),
       startDate = value(
         dateSchema,
         row.start_date,
-        '开始日期无效',
+        'common.invalidStartDate',
         '1970-01-01',
       );
     const endDate = row.end_date
-      ? value(dateSchema, row.end_date, '结束日期无效', startDate)
+      ? value(dateSchema, row.end_date, 'common.invalidEndDate', startDate)
       : null;
     if (endDate && endDate < startDate)
-      meta.errors.push('结束日期早于开始日期');
+      meta.errors.push('files.endDateIsEarlierThanStartDate');
     meta.endPresent = header.includes('end_date');
     meta.focusPresent = header.includes('focus_dates');
     meta.categoryPresent =
@@ -322,26 +342,31 @@ export function parseImportFile(
       meta.entryVersion = value(
         versionSchema,
         Number(row.entry_version),
-        '事项版本无效',
+        'common.entryVersionIsInvalid',
         1,
       );
     if (row.focus_version)
       meta.focusVersion = value(
         versionSchema,
         Number(row.focus_version),
-        '重点集合版本无效',
+        'common.invalidFocusCollectionVersion',
         1,
       );
     const name = row.category_name
       ? value(
           categoryNameSchema,
           row.category_name,
-          '分类名须为 1–12 字',
+          'files.categoryNameMustBe112Characters',
           '待映射',
         )
       : '待映射';
     const color = row.category_color
-      ? value(colorSchema, row.category_color, '分类颜色无效', '#A0A4B3')
+      ? value(
+          colorSchema,
+          row.category_color,
+          'common.invalidCategoryColor',
+          '#A0A4B3',
+        )
       : '#A0A4B3';
     const categoryId = stableId({
       category: row.category_id || null,
@@ -379,7 +404,7 @@ export function parseImportFile(
         ? meta.requestedId
         : stableId({ normalized, occurrence });
     if (meta.requestedId && ids.has(meta.requestedId))
-      meta.errors.push('同一文件重复更新相同 ID');
+      meta.errors.push('files.repeatedUpdateOfTheSameFileWith');
     if (meta.requestedId) ids.add(meta.requestedId);
     const e: EntryDto = {
       id,
@@ -397,7 +422,8 @@ export function parseImportFile(
     const dates = row.focus_dates
       ? row.focus_dates.split(';').map((d) => d.trim())
       : [];
-    if (new Set(dates).size !== dates.length) meta.errors.push('重点日期重复');
+    if (new Set(dates).size !== dates.length)
+      meta.errors.push('common.duplicateFocusDates');
     for (const date of dates) {
       if (
         !dateSchema.safeParse(date).success ||
@@ -405,15 +431,15 @@ export function parseImportFile(
         (endDate && date > endDate) ||
         date > businessToday(new Date(now))
       )
-        meta.errors.push('重点日期无效或超出范围');
+        meta.errors.push('files.focusDatesAreInvalidOrOutOf');
       else focusDays.push({ entryId: id, date, focused: true, version: 1 });
     }
     entries.push(e);
     rows.push(meta);
   }
   if (focusDays.length > 100_000)
-    throw new FileError('FILE_TOO_LARGE', '一次最多导入 100,000 个重点状态。');
-  if (categories.length > 20) fail('文件包含超过 20 个分类。');
+    throw new FileError('FILE_TOO_LARGE', 'files.importUpTo100000FocusStates');
+  if (categories.length > 20) fail('files.fileContainsMoreThan20Categories');
   // Empty CSV still has a safe mapping placeholder, never deletes business data.
   if (!categories.length)
     categories.push({
@@ -520,7 +546,7 @@ export function assessFileRow(
     Date.parse(row.source.purgeAfter) <= Date.parse(now)
   ) {
     row.action = 'skip';
-    row.reason = '回收站来源已到期，跳过且不延长期限';
+    row.reason = 'files.theTrashSourceHasExpiredSkippedAnd';
     return;
   }
   if (!current) {
@@ -533,9 +559,9 @@ export function assessFileRow(
     );
     row.action = duplicate ? 'needs_review' : 'create_copy';
     row.reason = duplicate
-      ? '与当前事项相似，请明确保留副本或跳过'
+      ? 'files.similarToCurrentEntryPleaseExplicitlyKeep'
       : file.requestedId
-        ? 'ID 无法在当前空间匹配，将分配新 ID'
+        ? 'files.idCannotBeMatchedInCurrentSpace'
         : null;
     return;
   }
@@ -547,7 +573,7 @@ export function assessFileRow(
       mapping?.targetId ?? mapping?.candidateId ?? '',
     );
   if (desired.endDate && desired.endDate < desired.startDate)
-    file.errors.push('开始日期晚于保留的结束日期，请明确结束日期后重新预览');
+    file.errors.push('files.theStartDateIsLaterThanThe');
   if (
     file.focusPresent &&
     row.focusDays.some(
@@ -557,7 +583,7 @@ export function assessFileRow(
           (desired.endDate && f.date > desired.endDate)),
     )
   )
-    file.errors.push('重点日期超出保留字段后的事项区间');
+    file.errors.push('files.focusDatesExceedTheEntryIntervalAfter');
   if (file.errors.length) {
     row.action = 'needs_review';
     row.reason = file.errors.join('；');
@@ -594,12 +620,12 @@ export function assessFileRow(
   }
   if (current.deletedAt) {
     row.action = 'needs_review';
-    row.reason = '目标在回收站，请明确恢复、保留副本或跳过';
+    row.reason = 'files.theTargetIsInTrashPleaseExplicitly';
     return;
   }
   if (row.source.deletedAt) {
     row.action = 'needs_review';
-    row.reason = '备份是回收站状态，当前事项保持活动；请选择副本或跳过';
+    row.reason = 'files.theBackupIsInTrashStateAnd';
     return;
   }
   const focusInvalid =
@@ -611,9 +637,7 @@ export function assessFileRow(
           (desired.endDate && f.date > desired.endDate)),
     );
   if (focusInvalid) {
-    file.errors.push(
-      '缩短范围会移除当前重点，请在文件明确提供重点集合并重新预览',
-    );
+    file.errors.push('files.shorteningTheScopeWillRemoveTheCurrent');
     row.action = 'needs_review';
     return;
   }
@@ -631,8 +655,8 @@ export function assessFileRow(
         : 'VERSION_CONFLICT';
     row.reason =
       file.entryVersion === null
-        ? '缺少更新版本，请核对当前内容'
-        : '内容或重点集合已有更新，请核对当前内容';
+        ? 'files.missingUpdatedVersionPleaseCheckTheCurrent'
+        : 'files.theContentOrFocusCollectionHasBeen';
     return;
   }
   row.action = file.differences.length ? 'apply_update' : 'unchanged';
@@ -755,15 +779,24 @@ export function reviewFileCategory(
       target.name !== mapping.restoreDefault.name ||
       target.color !== mapping.restoreDefault.color)
   )
-    throw new GuestError('PREVIEW_STALE', '默认分类已变化，请重新预览。');
+    throw new GuestError(
+      'PREVIEW_STALE',
+      msg('errors.theDefaultCategoryHasChangedPleasePreview'),
+    );
   if (choice.targetId && !target)
-    throw new GuestError('PREVIEW_STALE', '分类已变化，请重新核对。');
+    throw new GuestError(
+      'PREVIEW_STALE',
+      msg('errors.theCategoryHasChangedPleaseCheckAgain'),
+    );
   if (
     target &&
     !restoring &&
     (target.name !== choice.name || target.color !== choice.color)
   )
-    throw new GuestError('PREVIEW_STALE', '分类已变化，请重新核对。');
+    throw new GuestError(
+      'PREVIEW_STALE',
+      msg('errors.theCategoryHasChangedPleaseCheckAgain'),
+    );
   if (
     !target &&
     (cloud.categories.some(
@@ -779,7 +812,7 @@ export function reviewFileCategory(
   )
     throw new GuestError(
       'IMPORT_REVIEW_REQUIRED',
-      '请明确复用已有分类或作为自定义分类保留。',
+      msg('errors.pleaseExplicitlyReuseExistingCategoriesOrKeep'),
     );
   Object.assign(mapping, choice, { needsReview: false, action: 'apply' });
   if (!restoring) delete mapping.restoreDefault;
@@ -934,7 +967,7 @@ export function applyFilePlan(
         )
           throw new GuestError(
             'PREVIEW_STALE',
-            '默认分类已有变化，请重新核对。',
+            msg('errors.theDefaultCategoryHasChangedPleaseCheck'),
           );
         if (target.name !== c.name || target.color !== c.color) {
           target.name = c.name;
@@ -943,7 +976,10 @@ export function applyFilePlan(
           target.updatedAt = now;
         }
       } else if (!target || target.name !== c.name || target.color !== c.color)
-        throw new GuestError('PREVIEW_STALE', '分类已变化，请重新核对。');
+        throw new GuestError(
+          'PREVIEW_STALE',
+          msg('errors.theCategoryHasChangedPleaseCheckAgain'),
+        );
     } else
       next.categories.push({
         id,
@@ -985,10 +1021,13 @@ export function applyFilePlan(
     if (row.processed && row.action !== 'skip')
       throw new GuestError(
         'IMPORT_REVIEW_REQUIRED',
-        '此来源已完成处理，不重复新增；如需新内容请修改文件后建立新预览。',
+        msg('errors.thisSourceHasBeenProcessedAndWill'),
       );
     if (row.file?.errors.length)
-      throw new GuestError('IMPORT_INVALID', '请先修正所有错误。');
+      throw new GuestError(
+        'IMPORT_INVALID',
+        msg('errors.pleaseFixAnyErrorsFirst'),
+      );
     if (row.action === 'skip') {
       result.skipped++;
       if (row.previousTargetId)
@@ -1006,7 +1045,7 @@ export function applyFilePlan(
         current.version !== row.file?.current?.version ||
         current.focusVersion !== row.file.current.focusVersion
       )
-        throw new GuestError('PREVIEW_STALE', '事项已有变化。');
+        throw new GuestError('PREVIEW_STALE', msg('errors.entryHasChanged'));
       result.unchanged++;
       result.mappings.push({
         sourceKey: row.sourceKey,
@@ -1016,14 +1055,18 @@ export function applyFilePlan(
       continue;
     }
     const categoryId = categoryIds.get(row.source.categoryId);
-    if (!categoryId) throw new GuestError('IMPORT_INVALID', '分类映射缺失。');
+    if (!categoryId)
+      throw new GuestError('IMPORT_INVALID', msg('errors.categoryMapMissing'));
     let targetId = row.candidateId;
     if (row.action === 'create_copy') {
       if (
         row.source.purgeAfter &&
         Date.parse(row.source.purgeAfter) <= Date.parse(now)
       )
-        throw new GuestError('PREVIEW_STALE', '回收站来源已到期。');
+        throw new GuestError(
+          'PREVIEW_STALE',
+          msg('errors.theTrashSourceHasExpired'),
+        );
       next.entries.push({
         ...row.source,
         id: targetId,
@@ -1046,7 +1089,7 @@ export function applyFilePlan(
       )
         throw new GuestError(
           'PREVIEW_STALE',
-          '事项或重点已有变化，请重新核对。',
+          msg('errors.theEntryOrFocusHasChangedPlease'),
         );
       targetId = current.id;
       {
@@ -1056,12 +1099,15 @@ export function applyFilePlan(
             !current.purgeAfter ||
             Date.parse(current.purgeAfter) <= Date.parse(now)
           )
-            throw new GuestError('TRASH_EXPIRED', '已超过恢复期限。');
+            throw new GuestError(
+              'TRASH_EXPIRED',
+              msg('errors.theRecoveryPeriodHasExpired'),
+            );
           desired.deletedAt = null;
           desired.purgeAfter = null;
         }
         if (row.action === 'apply_update' && current.deletedAt)
-          throw new GuestError('PREVIEW_STALE', '目标已删除。');
+          throw new GuestError('PREVIEW_STALE', msg('errors.targetDeleted'));
         const contentChanged = [
           'title',
           'startDate',
@@ -1099,7 +1145,11 @@ export function applyFilePlan(
         if (contentChanged || focusChanged) result.updated++;
         else result.unchanged++;
       }
-    } else throw new GuestError('IMPORT_REVIEW_REQUIRED', '请先核对所有选择。');
+    } else
+      throw new GuestError(
+        'IMPORT_REVIEW_REQUIRED',
+        msg('errors.pleaseCheckAllSelectionsFirst'),
+      );
     result.mappings.push({
       sourceKey: row.sourceKey,
       sourceDigest: row.sourceDigest,
@@ -1113,7 +1163,10 @@ export function applyFilePlan(
     new Set(next.categories.flatMap((c) => (c.seedKey ? [c.seedKey] : [])))
       .size !== next.categories.filter((c) => c.seedKey).length
   )
-    throw new GuestError('CATEGORY_LIMIT_EXCEEDED', '请整理分类映射。');
+    throw new GuestError(
+      'CATEGORY_LIMIT_EXCEEDED',
+      msg('errors.pleaseSortOutTheCategoryMapping'),
+    );
   const graph = guestPackageSchema.safeParse({
     format: 'dayline-guest',
     schemaVersion: 1,
@@ -1127,7 +1180,7 @@ export function applyFilePlan(
   if (!graph.success)
     throw new GuestError(
       'IMPORT_INVALID',
-      '计划中的日期、重点或引用无效，请修正后重新预览。',
+      msg('errors.theDateEmphasisOrReferenceInThe'),
     );
   return result;
 }
@@ -1142,7 +1195,10 @@ export function guestFileCommit(
     !plan.canCommit ||
     plan.status !== 'preview'
   )
-    throw new GuestError('PREVIEW_STALE', '本机记录已变化，请重新预览。');
+    throw new GuestError(
+      'PREVIEW_STALE',
+      msg('errors.theLocalRecordHasChangedPleasePreview'),
+    );
   const result = applyFilePlan(current, plan, now);
   if (
     !result.created &&
@@ -1323,7 +1379,7 @@ export function initializeFilePlan(
         !byId &&
         plan.kind === 'csv'
       )
-        row.file.errors.push('新事项必须提供分类名称或当前分类 ID');
+        row.file.errors.push('files.newEntryMustProvideCategoryNameOr');
     }
     assessFileRow(row, cloud, plan.categoryMappings, now, index);
     const prior = importSourceReceipt(processed, row.sourceKey, digest);
@@ -1331,7 +1387,7 @@ export function initializeFilePlan(
       row.action = 'skip';
       row.processed = true;
       row.previousTargetId = prior.targetId;
-      row.reason = '此来源已处理，跳过（包括已清理目标）';
+      row.reason = 'files.thisSourceHasBeenProcessedSkippedIncluding';
     }
   }
   reconcileFileCategories(plan, cloud);
@@ -1433,7 +1489,10 @@ export function reviewLocalFilePlan(
     Date.parse(plan.expiresAt) <= Date.parse(now) ||
     input.expectedPlanRevision !== plan.planRevision
   )
-    throw new GuestError('PREVIEW_STALE', '计划已变化或到期，请重新预览。');
+    throw new GuestError(
+      'PREVIEW_STALE',
+      msg('errors.thePlanHasChangedOrExpiredPlease'),
+    );
   const next = JSON.parse(JSON.stringify(plan)) as ImportJobDto,
     index = fileIndex(cloud),
     rowsByKey = new Map<string, ImportRow>();
@@ -1443,12 +1502,16 @@ export function reviewLocalFilePlan(
     new Set(input.categories.map((c) => c.sourceId)).size !==
       input.categories.length
   )
-    throw new GuestError('IMPORT_INVALID', '选择重复。');
+    throw new GuestError('IMPORT_INVALID', msg('errors.repeatSelected'));
   for (const c of input.categories) {
     const mapping = next.categoryMappings.find(
       (v) => v.sourceId === c.sourceId,
     );
-    if (!mapping) throw new GuestError('PREVIEW_STALE', '分类来源已变化。');
+    if (!mapping)
+      throw new GuestError(
+        'PREVIEW_STALE',
+        msg('errors.theCategorySourceHasChanged'),
+      );
     reviewFileCategory(mapping, c, cloud, next.categoryMappings);
   }
   reassessFilePlan(next, cloud, now);
@@ -1457,10 +1520,13 @@ export function reviewLocalFilePlan(
     if (row?.processed && choice.action !== 'skip')
       throw new GuestError(
         'IMPORT_REVIEW_REQUIRED',
-        '此来源已处理，请保持跳过。',
+        msg('errors.thisSourceHasBeenProcessedPleaseKeep'),
       );
     if (!row || row.file?.errors.length)
-      throw new GuestError('IMPORT_INVALID', '请修正文件后重新预览。');
+      throw new GuestError(
+        'IMPORT_INVALID',
+        msg('errors.pleaseCorrectTheFileAndPreviewAgain'),
+      );
     if (choice.action === 'apply_update' || choice.action === 'restore') {
       const current = index.entries.get(row.file?.requestedId ?? '');
       if (
@@ -1475,7 +1541,7 @@ export function reviewLocalFilePlan(
       )
         throw new GuestError(
           'PREVIEW_STALE',
-          '当前内容已有新变化，请重新核对。',
+          msg('errors.thereAreNewChangesInTheCurrent'),
         );
       row.file.current = current;
       row.file.currentFocusDays = (index.focus.get(current.id) ?? []).map(

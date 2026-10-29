@@ -1,0 +1,10 @@
+{
+  "data.savingAsAWholeTheResultsCan": "正在整体保存，结果可查询。",
+  "data.theSavingResultHasNotBeenConfirmed": "保存结果尚未确认，请查询或恢复原任务后继续，原文件已保留。",
+  "data.queryingTheOriginalFileTaskPleaseWait": "正在查询原文件任务，请稍候。",
+  "data.theProcessingResultsHaveBeenSavedAnd": "已保存处理结果，可以导入。",
+  "data.theProcessingResultsHaveBeenSavedPlease": "处理结果已保存，请继续解决剩余问题。",
+  "data.theRecordHasBeenImportedAndThe": "记录已导入，本机任务状态未能保存；原文件仍在，请刷新后核对。",
+  "data.theImportWasSuccessfulButTheRecord": "导入已成功，记录刷新失败，请点击刷新重试。",
+  "data.theFileHasBeenGeneratedPleaseSave": "文件已生成，请在下载位置妥善保存。"
+}

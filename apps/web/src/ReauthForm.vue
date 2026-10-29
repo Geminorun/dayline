@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import PasswordInput from './components/PasswordInput.vue';
-import IconButton from './components/IconButton.vue';
-import { formatBeijingTime } from '@dayline/core';
-import { onBeforeUnmount, ref, watch } from 'vue';
 import {
   identityStatusLabel,
+  formatBeijingTime,
+  tr,
+  messageRef,
+} from './i18n/index';
+
+import PasswordInput from './components/PasswordInput.vue';
+import IconButton from './components/IconButton.vue';
+
+import { onBeforeUnmount, ref, watch } from 'vue';
+import {
   actionProofDtoSchema,
   qrCreatedDtoSchema,
   qrStatusDtoSchema,
@@ -19,7 +25,7 @@ const props = defineProps<{ action: ActionRequest }>(),
 const account = useAccount(),
   client = createIdentityClient(api);
 const password = ref(''),
-  error = ref(''),
+  error = messageRef(),
   busy = ref(false),
   qr = ref<QrCreatedDto | null>(null),
   status = ref('');
@@ -155,30 +161,41 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <section class="record-panel reauth-panel">
-    <h2>为本次操作重新验证</h2>
-    <p>验证只授权当前操作，五分钟内有效。</p>
+    <h2>{{ tr('reauthForm.reAuthenticateForThisOperation') }}</h2>
+    <p>
+      {{ tr('reauthForm.theVerificationOnlyAuthorizesTheCurrentOperation') }}
+    </p>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <form
       v-if="account.current.value?.passwordEnabled"
       @submit.prevent="verify"
     >
       <label
-        >当前账号密码<PasswordInput
+        >{{ tr('common.currentAccountPassword')
+        }}<PasswordInput
           v-model="password"
           autocomplete="current-password" /></label
-      ><button class="button primary" :disabled="busy">验证密码</button>
+      ><button class="button primary" :disabled="busy">
+        {{ tr('common.verifyPassword') }}
+      </button>
     </form>
     <template v-if="account.current.value?.wechatBound"
       ><button class="button subtle" :disabled="busy" @click="start">
-        用已绑定微信扫码重新验证
+        {{ tr('reauthForm.reVerifyUsingBoundWechatCodeScan') }}
       </button>
       <div v-if="qr">
-        <img :src="qr.miniappCode" alt="本次身份重新验证小程序码" width="220" />
+        <img
+          :src="qr.miniappCode"
+          :alt="tr('reauthForm.thisIdentityReVerificationAppletCode')"
+          width="220"
+        />
         <p>
-          请使用当前账号的微信扫描并明确确认。状态：{{
-            identityStatusLabel(status)
-          }}，有效至
-          {{ formatBeijingTime(qr.expiresAt) }}
+          {{
+            tr('reauthForm.pleaseUseTheWechatOfYourCurrent', {
+              value0: identityStatusLabel(status),
+              value1: formatBeijingTime(qr.expiresAt),
+            })
+          }}
         </p>
         <button
           class="button primary"
@@ -186,10 +203,10 @@ onBeforeUnmount(() => {
           :disabled="busy"
           @click="consume"
         >
-          领取本次验证证明</button
+          {{ tr('common.receiveThisVerificationCertificate') }}</button
         ><IconButton
           icon="close"
-          label="取消重新验证"
+          :label="tr('common.cancelRevalidation')"
           :disabled="busy"
           @click="cancel()"
         /></div

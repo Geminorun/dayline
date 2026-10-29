@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { tr } from '../i18n/index';
+import { msg } from '@dayline/locales';
 import { computed, onMounted, ref, watch } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import {
@@ -55,7 +57,15 @@ const dailyFocusCount = computed(() => {
 const week = computed(() =>
     isCalendarDate(date.value) ? weekDates(date.value) : [],
   ),
-  weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+  weekdays = computed(() => [
+    tr('common.mon'),
+    tr('common.tue'),
+    tr('common.wed'),
+    tr('common.thu'),
+    tr('common.fri'),
+    tr('common.sat'),
+    tr('common.sun'),
+  ]);
 function edit(entry?: EntryDto) {
   uni.navigateTo({ url: `/pages/entry/edit${entry ? '?id=' + entry.id : ''}` });
 }
@@ -115,7 +125,7 @@ watch(
       !snapshot.value?.categories.some((c) => c.id === filter.value.categoryId)
     ) {
       filter.value.categoryId = '';
-      notice.value = '分类已变化，筛选已清除。';
+      notice.value = msg('recordsScreen.theCategoryHasChangedAndTheFilter');
     }
   },
 );
@@ -136,26 +146,39 @@ onShow(async () => {
 <template>
   <view class="page"
     ><text class="subtitle"
-      >DAYLINE · {{ mode === 'guest' ? '游客 · 仅本机保存' : '云端记录' }}</text
-    ><text class="title">{{ kind === 'day' ? '每日回看' : '全部记录' }}</text
-    ><text v-if="loading" class="text">正在完整读取记录…</text
+      >DAYLINE ·
+      {{
+        mode === 'guest'
+          ? tr('recordsScreen.guestSaveLocallyOnly')
+          : tr('common.cloudRecording')
+      }}</text
+    ><text class="title">{{
+      kind === 'day' ? tr('common.dailyReview') : tr('common.allRecords')
+    }}</text
+    ><text v-if="loading" class="text">{{
+      tr('recordsScreen.readingCompleteRecord')
+    }}</text
     ><text v-if="error" class="text error" role="alert">{{ error }}</text
     ><text v-if="notice" class="text notice">{{ notice }}</text
     ><button class="secondary" :disabled="busy || loading" @click="load">
-      重新完整读取</button
+      {{ tr('common.completeReadAgain') }}</button
     ><template v-if="snapshot"
-      ><text class="text muted"
-        >{{
-          mode === 'guest'
-            ? '仅保存在此设备，登录后可同步。'
-            : '在线保存，未保存输入仅保留在当前页面。'
-        }}
-        北京时间 {{ today }}</text
+      ><text class="text muted">{{
+        tr('recordsScreen.beijingTime', {
+          value0:
+            mode === 'guest'
+              ? tr('recordsScreen.onlySavedOnThisDeviceCanBe')
+              : tr('recordsScreen.saveOnlineUnsavedInputOnlyRemainsOn'),
+          value1: today,
+        })
+      }}</text
       ><button v-if="!readonly" :disabled="busy" @click="edit()">
-        ＋ 新建事项</button
+        {{ tr('common.createNewEntry') }}</button
       ><view class="card"
         ><text class="text">{{
-          kind === 'day' ? '回看日期' : '重点操作日期'
+          kind === 'day'
+            ? tr('common.lookBackDate')
+            : tr('common.keyOperationDate')
         }}</text
         ><picker
           mode="date"
@@ -166,24 +189,26 @@ onShow(async () => {
           ><view class="picker">{{ date }} ▾</view></picker
         ><input
           v-model="date"
-          aria-label="日期 YYYY-MM-DD"
+          :aria-label="tr('recordsScreen.dateYyyyMmDd')"
           placeholder="YYYY-MM-DD（0001–9999）"
-        /><text v-if="!isCalendarDate(date)" class="text error"
-          >请输入合法 YYYY-MM-DD 日期。</text
+        /><text v-if="!isCalendarDate(date)" class="text error">{{
+          tr('recordsScreen.pleaseEnterAValidYyyyMmDd')
+        }}</text
         ><view class="actions"
           ><button
             class="secondary"
             :disabled="!isCalendarDate(date) || date === '0001-01-01'"
             @click="date = shiftDate(date, -1)"
           >
-            前一天</button
-          ><button class="secondary" @click="date = today">今天</button
+            {{ tr('common.theDayBefore') }}</button
+          ><button class="secondary" @click="date = today">
+            {{ tr('common.today') }}</button
           ><button
             class="secondary"
             :disabled="!isCalendarDate(date) || date === '9999-12-31'"
             @click="date = shiftDate(date, 1)"
           >
-            后一天
+            {{ tr('common.theNextDay') }}
           </button></view
         ><view v-if="kind === 'day'" class="week-strip"
           ><view
@@ -193,31 +218,45 @@ onShow(async () => {
             :class="{ selected: day === date }"
             role="button"
             @click="date = day"
-            ><text>周{{ weekdays[(dateOrdinal(day) - 1) % 7] }}</text
+            ><text>{{
+              tr('recordsScreen.week', {
+                value0: weekdays[(dateOrdinal(day) - 1) % 7],
+              })
+            }}</text
             ><text>{{ day.slice(5) }}</text></view
           ></view
-        ><text v-if="date > today" class="text muted"
-          >未来日期仅浏览计划范围，不可标记重点。</text
-        ></view
+        ><text v-if="date > today" class="text muted">{{
+          tr('recordsScreen.futureDatesCanOnlyBeViewedWithin')
+        }}</text></view
       ><Filters v-model="filter" :categories="snapshot.categories" /><view
         class="card"
-        ><text class="heading"
-          >{{ kind === 'day' ? '选定日事项' : '筛选后全部事项' }}
-          {{ summary.count }} · 今天仍在进行 {{ summary.ongoing }} · 涉及分类
-          {{ summary.categoryCount }}</text
-        ><text v-if="kind === 'day'" class="text"
-          >选定日重点 {{ dailyFocusCount }}</text
-        ><text class="text muted">分类分布 · 按事项数量</text
+        ><text class="heading">{{
+          tr('recordsScreen.stillInProgressTodayRelatingToCategory', {
+            value0:
+              kind === 'day'
+                ? tr('common.selectedDateEntry')
+                : tr('common.allEntriesAfterFiltering'),
+            value1: summary.count,
+            value2: summary.ongoing,
+            value3: summary.categoryCount,
+          })
+        }}</text
+        ><text v-if="kind === 'day'" class="text">{{
+          tr('recordsScreen.selectedDayFocus', { value0: dailyFocusCount })
+        }}</text
+        ><text class="text muted">{{
+          tr('recordsScreen.categoryDistributionByNumberOfEntries')
+        }}</text
         ><text v-for="(count, id) in summary.categories" :key="id" class="text"
           >{{ snapshot.categories.find((c) => c.id === id)?.name }}
           {{ count }}（{{ Math.round((count / summary.count) * 100) }}%）</text
         ></view
       ><text v-if="!visible.length" class="text empty">{{
         filter.search || filter.categoryId || filter.status !== 'all'
-          ? '筛选后无结果，请调整或清除筛选。'
+          ? tr('recordsScreen.noResultsAfterFilteringPleaseAdjustOr')
           : !snapshot.entries.length
-            ? '当前空间还没有事项，开始记录自己的经历。'
-            : '这一天没有覆盖的事项。'
+            ? tr('recordsScreen.thereIsNoEntryInTheCurrent')
+            : tr('recordsScreen.thereAreNoCoveredEntriesOnThis')
       }}</text
       ><EntryCard
         v-for="entry in visible.slice(0, limit)"
@@ -225,7 +264,7 @@ onShow(async () => {
         :entry="entry"
         :category="
           snapshot.categories.find((c) => c.id === entry.categoryId)?.name ??
-          '分类已变化'
+          tr('common.categoryHasChanged')
         "
         :color="
           snapshot.categories.find((c) => c.id === entry.categoryId)?.color ??
@@ -249,14 +288,23 @@ onShow(async () => {
         class="secondary"
         @click="limit += 30"
       >
-        显示更多（{{ Math.min(limit, visible.length) }} / {{ visible.length }}）
+        {{
+          tr('recordsScreen.showMore', {
+            value0: Math.min(limit, visible.length),
+            value1: visible.length,
+          })
+        }}
       </button></template
     ><view v-if="confirm" class="card confirmation"
-      ><text class="text"
-        >将“{{ confirm.title }}”及重点移入回收站，保留 30 天？</text
-      ><button :disabled="busy" @click="remove">确认移入回收站</button
+      ><text class="text">{{
+        tr('recordsScreen.moveAndEmphasisToTrashAndKeep', {
+          value0: confirm.title,
+        })
+      }}</text
+      ><button :disabled="busy" @click="remove">
+        {{ tr('common.confirmMoveIntoTrash') }}</button
       ><button class="secondary" :disabled="busy" @click="confirm = null">
-        取消
+        {{ tr('common.cancel') }}
       </button></view
     ></view
   >

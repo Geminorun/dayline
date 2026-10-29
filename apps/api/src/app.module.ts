@@ -15,6 +15,7 @@ import { WechatModule } from './wechat/wechat.module.js';
 import { RecordsModule } from './records/records.module.js';
 import { ImportsModule } from './imports/imports.module.js';
 import { UsersModule } from './users/users.module.js';
+import { LanguageModule } from './i18n/language.module.js';
 
 @Module({})
 export class AppModule {
@@ -25,6 +26,7 @@ export class AppModule {
     return {
       module: AppModule,
       imports: [
+        LanguageModule,
         RuntimeConfigModule.register(config),
         ClockModule,
         SecurityModule,

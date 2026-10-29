@@ -1,0 +1,9 @@
+{
+  "dates.notSet": "Not set",
+  "dates.unavailable": "Time unavailable",
+  "dates.beijing": " (Beijing time)",
+  "dates.startsOn": "Starts {date}",
+  "dates.elapsed": "Ongoing for {count} day | Ongoing for {count} days",
+  "dates.span": "{count} day | {count} days",
+  "dates.monthYear": "{month} {year}"
+}

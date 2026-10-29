@@ -1,0 +1,15 @@
+{
+  "timelineView.message": "{value0}年",
+  "timelineView.message2": "{value0}年{value1}月",
+  "timelineView.focusDay": "{value0} · {value1} · 重点日",
+  "timelineView.focusDays": "{value0} · {value1} 个重点日 · {value2}{value3}",
+  "timelineView.currentScopeByStartDate": "当前范围 · 按开始日期{value0}",
+  "timelineView.end": "结束{value0}",
+  "timelineView.cumulativeFocusDays": "累计重点 {value0} 天",
+  "timelineView.to": "{value0}，{value1} 至 {value2}，{value3}",
+  "timelineView.timelineScrollWheelToZoomDragThe": "时间轴，滚轮缩放，拖动空白区域或方向键左右浏览",
+  "timelineView.focusDays2": "{value0} 个重点日",
+  "timelineView.focusDatesDays": "重点日期 · {value0} 天",
+  "timelineView.theDateContainedInTheCurrentMark": "当前标记包含的日期，点击进入每日回看。",
+  "timelineView.review": "回看 {value0}"
+}

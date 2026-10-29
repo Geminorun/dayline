@@ -43,6 +43,7 @@ const entry = {
   updatedAt: time,
 };
 const profile = {
+  locale: 'zh-CN',
   id: userId,
   displayName: '测试',
   profileVersion: 1,

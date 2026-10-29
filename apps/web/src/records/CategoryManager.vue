@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { tr, messageRef } from '../i18n/index';
+import { msg } from '@dayline/locales';
 import { computed, ref, inject, watch } from 'vue';
 import { routeLocationKey } from 'vue-router';
 import PlannerIcon from '../components/PlannerIcon.vue';
@@ -27,7 +29,7 @@ const color = ref(nextCategoryColor(usedColors.value));
 const saving = ref(false);
 const locked = computed(() => props.busy || saving.value);
 const edit = ref<CategoryDto | null>(null);
-const error = ref('');
+const error = messageRef();
 const newId = ref(crypto.randomUUID());
 const deleting = ref<CategoryDto | null>(null);
 const fallbackId = ref(crypto.randomUUID());
@@ -73,7 +75,7 @@ async function persist(
     color: nextColor,
   });
   if (!input.success) {
-    error.value = '名称须为 1–12 字，颜色为 #RRGGBB。';
+    error.value = msg('categoryManager.nameMustBe112CharactersLong');
     return false;
   }
   error.value = '';
@@ -174,8 +176,8 @@ watch(
 </script>
 <template>
   <section class="record-panel category-manager">
-    <h2>分类管理</h2>
-    <p>最多 20 个、至少一个。在记录页拖动分类标签可调整顺序。</p>
+    <h2>{{ tr('common.categoryManagement') }}</h2>
+    <p>{{ tr('categoryManager.maximum20AtLeastOneDragThe') }}</p>
     <ul class="category-list">
       <li
         v-for="category in categories"
@@ -193,7 +195,9 @@ watch(
         >
           <input
             v-model="name"
-            :aria-label="`重命名${category.name}`"
+            :aria-label="
+              tr('categoryManager.rename', { value0: category.name })
+            "
             required
             :disabled="locked"
             autofocus
@@ -202,14 +206,14 @@ watch(
             type="submit"
             class="icon-btn tool-button"
             :disabled="locked"
-            title="保存名称"
-            aria-label="保存名称"
+            :title="tr('common.saveName')"
+            :aria-label="tr('common.saveName')"
           >
             <PlannerIcon name="check" />
           </button>
           <IconButton
             icon="close"
-            label="取消重命名"
+            :label="tr('common.cancelRename')"
             :disabled="locked"
             @click="reset"
           />
@@ -217,31 +221,33 @@ watch(
         <template v-else>
           <div class="category-description">
             <strong>{{ category.name }}</strong
-            ><small
-              >{{
-                entries.filter((entry) => entry.categoryId === category.id)
-                  .length
-              }}
-              条记录</small
-            >
+            ><small>{{
+              tr('categoryManager.records', {
+                value0: entries.filter(
+                  (entry) => entry.categoryId === category.id,
+                ).length,
+              })
+            }}</small>
           </div>
           <div class="row-tools">
             <IconButton
               icon="edit"
-              :label="`重命名${category.name}`"
+              :label="tr('categoryManager.rename', { value0: category.name })"
               :disabled="locked"
               @click="start(category)"
             />
             <ColorPicker
               :model-value="category.color"
-              :label="`更改${category.name}颜色`"
+              :label="tr('data.changeColor', { value0: category.name })"
               :used="usedColors.filter((c) => c !== category.color)"
               :disabled="locked"
               @update:model-value="recolor(category, $event)"
             />
             <IconButton
               icon="trash"
-              :label="`删除${category.name}分类`"
+              :label="
+                tr('categoryManager.deleteCategory', { value0: category.name })
+              "
               danger
               :disabled="locked || categories.length <= 1"
               @click="confirmDelete(category)"
@@ -252,11 +258,16 @@ watch(
           v-if="deleting?.id === category.id"
           class="category-delete-confirm"
           role="group"
-          :aria-label="`确认删除${category.name}分类`"
+          :aria-label="
+            tr('categoryManager.confirmDeletionOfCategory', {
+              value0: category.name,
+            })
+          "
         >
           <p>
-            该分类有 <strong>{{ deletionCount }}</strong>
-            条记录。删除分类后，记录将进入回收站，是否删除？
+            {{ tr('common.thisCategoryHas')
+            }}<strong>{{ deletionCount }}</strong
+            >{{ tr('categoryManager.recordsAfterDeletingACategoryTheRecords') }}
           </p>
           <div class="action-bar">
             <button
@@ -265,14 +276,14 @@ watch(
               :disabled="locked"
               @click="remove"
             >
-              删除分类与记录</button
+              {{ tr('common.deleteCategoriesAndRecords') }}</button
             ><button
               type="button"
               class="button subtle"
               :disabled="locked"
               @click="deleting = null"
             >
-              取消
+              {{ tr('common.cancel') }}
             </button>
           </div>
         </div>
@@ -285,7 +296,7 @@ watch(
       :disabled="locked || categories.length >= 20"
       @click="begin"
     >
-      <PlannerIcon name="plus" />添加分类
+      <PlannerIcon name="plus" />{{ tr('common.addCategory') }}
     </button>
     <form
       v-if="creating && !edit"
@@ -293,25 +304,26 @@ watch(
       @submit.prevent="save"
     >
       <label
-        >分类名称<input
+        >{{ tr('common.categoryName')
+        }}<input
           v-model="name"
           required
           :disabled="locked"
-          placeholder="新分类名称"
+          :placeholder="tr('common.newCategoryName')"
       /></label>
       <div class="category-create-actions">
         <ColorPicker
           v-model="color"
-          label="选择新分类颜色"
+          :label="tr('common.selectNewCategoryColor')"
           :used="usedColors"
           :disabled="locked"
         /><span class="category-dot" :style="{ backgroundColor: color }"></span>
         <button type="submit" class="button primary" :disabled="locked">
-          创建分类
+          {{ tr('common.createACategory2') }}
         </button>
         <IconButton
           icon="close"
-          label="取消创建分类"
+          :label="tr('common.cancelCreationOfCategory')"
           :disabled="locked"
           @click="reset"
         />

@@ -1,0 +1,19 @@
+{
+  "recordsScreen.guestSaveLocallyOnly": "guest · Save locally only",
+  "recordsScreen.readingCompleteRecord": "Reading complete record...",
+  "recordsScreen.onlySavedOnThisDeviceCanBe": "Only saved on this device, can be synchronized after logging in.",
+  "recordsScreen.saveOnlineUnsavedInputOnlyRemainsOn": "Save online, unsaved input only remains on the current page.",
+  "recordsScreen.beijingTime": "{value0} Beijing time {value1}",
+  "recordsScreen.dateYyyyMmDd": "Date YYYY-MM-DD",
+  "recordsScreen.pleaseEnterAValidYyyyMmDd": "Please enter a valid YYYY-MM-DD date.",
+  "recordsScreen.week": "Week{value0}",
+  "recordsScreen.futureDatesCanOnlyBeViewedWithin": "Future dates can only be viewed within the scope of the plan and cannot be highlighted.",
+  "recordsScreen.stillInProgressTodayRelatingToCategory": "{value0} {value1} · Still in progress today {value2} · Relating to category {value3}",
+  "recordsScreen.selectedDayFocus": "Selected day focus {value0}",
+  "recordsScreen.categoryDistributionByNumberOfEntries": "Category distribution · By number of entries",
+  "recordsScreen.noResultsAfterFilteringPleaseAdjustOr": "No results after filtering, please adjust or clear the filter.",
+  "recordsScreen.thereIsNoEntryInTheCurrent": "There is no entry in the current space, so I started to record my experience.",
+  "recordsScreen.thereAreNoCoveredEntriesOnThis": "There are no covered entries on this day.",
+  "recordsScreen.showMore": "Show more ({value0} / {value1})",
+  "recordsScreen.moveAndEmphasisToTrashAndKeep": "Move \"{value0}\" and emphasis to trash and keep it for 30 days?"
+}

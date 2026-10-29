@@ -3,6 +3,7 @@ import type { BetterAuthOptions } from 'better-auth';
 export const authModelOptions = {
   user: {
     additionalFields: {
+      locale: { type: 'string', defaultValue: 'zh-CN', input: false },
       emailKind: { type: 'string', defaultValue: 'real', input: false },
       status: { type: 'string', defaultValue: 'active', input: false },
       authEpoch: { type: 'number', defaultValue: 1, input: false },

@@ -1,8 +1,14 @@
 <script setup lang="ts">
+import {
+  admissionStatusLabel,
+  formatBeijingTime,
+  tr,
+  renderMessage,
+} from './i18n/index';
+
 import IconButton from './components/IconButton.vue';
 import ColorPicker from './components/ColorPicker.vue';
-import { admissionStatusLabel } from '@dayline/contracts';
-import { formatBeijingTime } from '@dayline/core';
+
 import { reviewSelectionKey } from '@dayline/contracts';
 import { computed, ref, watch } from 'vue';
 import { useAdmission } from './admission';
@@ -84,9 +90,7 @@ async function review() {
 }
 function restart() {
   if (
-    window.confirm(
-      '保留原冻结包和任务；请先核对云端。将当前本机修订创建为新的接入预览？',
-    )
+    window.confirm(tr('admissionReview.keepTheOriginalFrozenPackagesAndTasks'))
   )
     void begin(true, true);
 }
@@ -99,131 +103,167 @@ function chooseRow(index: number, event: Event) {
 }
 </script>
 <template>
-  <section v-if="job" class="record-panel" aria-label="游客接入预览">
-    <h2>本机游客记录接入</h2>
+  <section
+    v-if="job"
+    class="record-panel"
+    :aria-label="tr('common.guestImportPreview')"
+  >
+    <h2>{{ tr('common.importGuestRecords') }}</h2>
     <p v-if="job.status === 'committed'" class="notice">
-      云端已确认：新增 {{ job.result?.created }} 条，跳过
-      {{ job.result?.skipped }} 条。确认只对应这次冻结修订，原本机包仍保留。
+      {{
+        tr('admissionReview.cloudConfirmedItemsAddedItemsSkippedThe', {
+          value0: job.result?.created,
+          value1: job.result?.skipped,
+        })
+      }}
     </p>
     <template v-else-if="job.status === 'preview'"
       ><p>
-        本机 {{ job.sourceSummary.entries }} 条 /
-        {{ job.sourceSummary.categories }} 类；云端
-        {{ job.targetSummary.entries }} 条 /
-        {{ job.targetSummary.categories }}
-        类。默认保留双方，同名事项不合并。过期
-        {{ formatBeijingTime(job.expiresAt) }}
+        {{
+          tr('admissionReview.localItemsClassCloudItemsClassBy', {
+            value0: job.sourceSummary.entries,
+            value1: job.sourceSummary.categories,
+            value2: job.targetSummary.entries,
+            value3: job.targetSummary.categories,
+            value4: formatBeijingTime(job.expiresAt),
+          })
+        }}
       </p>
-      <h3>逐项分类映射</h3>
+      <h3>{{ tr('common.categoryMapping') }}</h3>
       <div v-for="(c, index) in categories" :key="c.sourceId" class="form-grid">
         <label
-          >分类名称<input v-model="c.name" :disabled="busy" maxlength="24"
+          >{{ tr('common.categoryName')
+          }}<input v-model="c.name" :disabled="busy" maxlength="24"
         /></label>
         <div class="mapping-color">
           <ColorPicker
             v-model="c.color"
             :disabled="busy"
-            label="更改分类颜色"
+            :label="tr('common.changeCategoryColor')"
           />
         </div>
         <label
-          >目标<select
+          >{{ tr('common.target')
+          }}<select
             :value="c.targetId ?? ''"
             :disabled="busy"
             @change="target(index, $event)"
           >
-            <option value="">保留为新分类</option>
+            <option value="">{{ tr('common.createACategory') }}</option>
             <option
               v-for="t in workspace.snapshot.value?.categories"
               :key="t.id"
               :value="t.id"
             >
-              复用 {{ t.name }} {{ t.color }}
+              {{
+                tr('admissionReview.multiplexing', {
+                  value0: t.name,
+                  value1: t.color,
+                })
+              }}
             </option>
           </select></label
         >
       </div>
-      <h3>记录计划与来源</h3>
+      <h3>{{ tr('common.importPlanAndSources') }}</h3>
       <details v-for="row in pageRows" :key="row.sourceKey">
         <summary>
           {{ row.source.title }} ·
           {{
             row.action === 'skip'
-              ? '跳过'
+              ? tr('common.skip')
               : row.action === 'needs_review'
-                ? '需要核对'
-                : '保留副本'
+                ? tr('common.needToCheck')
+                : tr('common.keepACopy')
           }}
         </summary>
         <p>
-          {{ row.source.startDate }} — {{ row.source.endDate ?? '未结束' }} ·
-          {{ row.source.deletedAt ? '保留回收站状态' : '活动事项' }} ·
-          {{ row.focusDays.filter((f) => f.focused).length }} 重点日
+          {{
+            tr('admissionReview.focusDay', {
+              value0: row.source.startDate,
+              value1: row.source.endDate ?? tr('common.notFinished'),
+              value2: row.source.deletedAt
+                ? tr('common.keepTrashStatus')
+                : tr('common.activityEntry'),
+              value3: row.focusDays.filter((f) => f.focused).length,
+            })
+          }}
         </p>
-        <p>{{ row.reason }}</p>
+        <p>{{ row.reason ? renderMessage(row.reason) : '' }}</p>
         <label
-          >处理<select
+          >{{ tr('common.process')
+          }}<select
             v-if="rows[row.index]"
             :disabled="busy"
             :value="rows[row.index]?.action"
             @change="chooseRow(row.index, $event)"
           >
-            <option value="skip">跳过此来源</option>
-            <option value="create_copy">明确保留为新副本</option>
+            <option value="skip">{{ tr('common.skipThisSource') }}</option>
+            <option value="create_copy">
+              {{ tr('common.keepAsANewCopy') }}
+            </option>
           </select></label
         >
       </details>
       <div class="actions">
         <IconButton
           icon="chevron"
-          label="上一页记录"
+          :label="tr('common.previousRecords')"
           class="chevron-back"
           :disabled="page === 0"
           @click="page--"
         />
-        <span
-          >第 {{ page + 1 }} / {{ pageCount }} 页，共
-          {{ job.rows.length }} 条</span
+        <span>{{
+          tr('admissionReview.pageOfItems', {
+            value0: page + 1,
+            value1: pageCount,
+            value2: job.rows.length,
+          })
+        }}</span
         ><IconButton
           icon="chevron"
-          label="下一页记录"
+          :label="tr('common.nextRecords')"
           :disabled="page + 1 >= pageCount"
           @click="page++"
         />
       </div>
       <button class="button primary" :disabled="busy" @click="review">
-        更新并核对计划</button
+        {{ tr('common.reviewUpdatedPlan') }}</button
       ><button
         class="button primary"
         :disabled="busy || !job.canCommit || unreviewedSelections"
         @click="commit"
       >
-        确认接入此计划</button
+        {{ tr('common.importThisPlan') }}</button
       ><button class="button subtle" :disabled="busy" @click="action('cancel')">
-        暂不导入
+        {{ tr('common.notNow') }}
       </button>
       <p v-if="unreviewedSelections" role="status">
-        分类或来源选择尚未保存核对，请先更新并核对计划。
+        {{ tr('admissionReview.theCategoryOrSourceSelectionHasNot') }}
       </p>
       <p v-if="!job.canCommit">
-        请处理分类名称、20 类上限及需要核对的记录后更新计划。
+        {{ tr('admissionReview.pleaseUpdateThePlanAfterProcessingThe') }}
       </p></template
     >
-    <p v-else>本次计划已取消或过期，原本机记录保留，可重新准备。</p>
+    <p v-else>{{ tr('admissionReview.thisPlanHasBeenCanceledOrExpired') }}</p>
     <button class="button subtle" :disabled="busy" @click="action('query')">
-      查询原任务状态
+      {{ tr('common.checkTaskStatus') }}
     </button>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
   </section>
   <section v-if="operation" class="record-panel">
     <p>
-      冻结本机修订 {{ operation.package.packageRevision }} ·
-      {{ admissionStatusLabel(operation.status) }}
+      {{
+        tr('admissionReview.freezeLocalRevision', {
+          value0: operation.package.packageRevision,
+          value1: admissionStatusLabel(operation.status),
+        })
+      }}
     </p>
     <button class="button subtle" :disabled="busy" @click="action('query')">
-      查询保留的原任务</button
+      {{ tr('common.findAnExistingTask') }}</button
     ><button class="button subtle" :disabled="busy" @click="restart">
-      明确重新预览当前本机修订
+      {{ tr('admissionReview.explicitlyRePreviewCurrentNativeRevision') }}
     </button>
   </section>
   <p v-if="error && !job" class="error" role="alert">{{ error }}</p>

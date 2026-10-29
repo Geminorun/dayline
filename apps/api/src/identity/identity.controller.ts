@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { SecurityService } from '../security/security.service.js';
 import { ApiTags, ApiBody, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { dtoSchema, dataResponseSchema } from '../common/openapi.js';
@@ -43,11 +44,16 @@ import { MergesService } from './merges.service.js';
 function parse<T>(schema: z.ZodType<T>, body: unknown) {
   const parsed = schema.safeParse(body);
   if (!parsed.success)
-    throw new AppError(422, 'VALIDATION_ERROR', '请求字段不符合要求。');
+    throw new AppError(
+      422,
+      'VALIDATION_ERROR',
+      msg('errors.requestedFieldsDoNotMeetRequirements'),
+    );
   return parsed.data;
 }
 function actor(request: Request): Actor {
-  if (!request.actor) throw new AppError(401, 'UNAUTHENTICATED', '请先登录。');
+  if (!request.actor)
+    throw new AppError(401, 'UNAUTHENTICATED', msg('errors.pleaseLogInFirst'));
   return request.actor;
 }
 @ApiTags('identity')
@@ -69,7 +75,7 @@ export class IdentityController {
         throw new AppError(
           403,
           'REAUTH_REQUIRED',
-          '新微信验证未通过，当前会话仍有效。',
+          msg('errors.theNewWechatVerificationFailedAndThe'),
         );
       throw error;
     }
@@ -128,7 +134,7 @@ export class IdentityController {
           throw new AppError(
             403,
             'REAUTH_REQUIRED',
-            '新微信身份与当前账号不符，当前会话仍有效。',
+            msg('errors.theNewWechatIdentityDoesNotMatch'),
           );
         return this.proofs.issue(current, input);
       });

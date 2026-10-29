@@ -1,0 +1,8 @@
+{
+  "entryRow.day": "Day {value0}",
+  "entryRow.cumulativeFocusDays": "{value0} · Cumulative {value1} focus days",
+  "entryRow.highlightsOfTheDay": "{value0} {value1} {value2} Highlights of the day",
+  "entryRow.days": "{value0} {value1} days",
+  "entryRow.edit": "Edit{value0}",
+  "entryRow.delete": "Delete {value0}"
+}

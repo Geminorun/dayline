@@ -31,12 +31,14 @@
     "express": "^5.1.0",
     "helmet": "^8.0.0",
     "jose": "6.2.13",
+    "nestjs-i18n": "10.8.5",
     "pg": "^8.0.0",
+    "prisma": "7.10.1",
     "reflect-metadata": "^0.2.2",
     "resend": "6.34.1",
     "rxjs": "^7.8.0",
     "zod": "^4.0.0",
-    "prisma": "7.10.1"
+    "@dayline/locales": "workspace:*"
   },
   "devDependencies": {
     "@nestjs/cli": "11.0.24",

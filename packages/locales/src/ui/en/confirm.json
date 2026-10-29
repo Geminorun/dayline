@@ -1,0 +1,12 @@
+{
+  "confirm.theCodeScanningOperationIsNotCompleted": "The code scanning operation is not completed. Please go back to the web page to regenerate the mini program code.",
+  "confirm.daylineWebLogin": "DAYLINE · Web login",
+  "confirm.confirmCurrentIdentityReAuthentication": "Confirm current identity re-authentication",
+  "confirm.thisOperationWillAllowTheWebpageThat": "This operation will allow the webpage that initiated the scan to enter the account corresponding to this WeChat.",
+  "confirm.thisTimeOnlyTheSpecifiedOperationsOf": "This time only the specified operations of the current account on the web page are re-verified, and the account will not be switched.",
+  "confirm.addThisWechatToTheCurrentAccount": "Add this WeChat to the current account on the webpage; when there are independent accounts, only verified preview merge is allowed, and the data of both parties is retained.",
+  "confirm.pleaseConfirmThatItWasInitiatedBy": "{value0} Please confirm that it was initiated by you.",
+  "confirm.verifyingThisScan": "Verifying this scan...",
+  "confirm.scanNotAuthorizedYetPleaseExplicitlySelect": "Scan not authorized yet. Please explicitly select Confirm or Cancel. Valid until {value0}.",
+  "confirm.confirmedPleaseReturnToTheOriginalWebpage": "Confirmed. Please return to the original webpage to collect the results of this operation; you can still cancel before collecting."
+}

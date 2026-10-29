@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/index';
 import { useId } from 'vue';
 import PlannerIcon from './PlannerIcon.vue';
 defineProps<{
@@ -19,18 +20,28 @@ const id = useId();
       :class="{ 'is-active': selected }"
       :aria-pressed="!!selected"
       @click="emit('toggle')"
-      :aria-label="`${date}的重点：${count}项，${selected ? '显示全部事项' : '只看重点'}`"
+      :aria-label="
+        tr('focusHelp.highlightsOfItems', {
+          value0: date,
+          value1: count,
+          value2: selected
+            ? tr('common.showAllEntries')
+            : tr('common.onlyFocusOnTheImportantPoints'),
+        })
+      "
     >
       <PlannerIcon name="star" /><span v-if="count" class="focus-help-count">{{
         count
       }}</span>
     </button>
     <span :id="id" role="tooltip" class="focus-help-tooltip"
-      ><strong>{{ date }}的重点 · {{ count }} 项</strong
+      ><strong>{{
+        tr('focusHelp.highlightsOfItems2', { value0: date, value1: count })
+      }}</strong
       ><span>{{
         future
-          ? '可以记录今天及过去日期的重点。'
-          : '点击只看当天重点。建议每天选择 1–2 项，可切换日期补记。'
+          ? tr('focusHelp.canRecordTheKeyPointsOfToday')
+          : tr('focusHelp.clickToSeeOnlyTheHighlightsOf')
       }}</span></span
     >
   </span>

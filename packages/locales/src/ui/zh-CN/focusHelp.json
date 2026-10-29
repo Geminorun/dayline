@@ -1,0 +1,6 @@
+{
+  "focusHelp.highlightsOfItems": "{value0}的重点：{value1}项，{value2}",
+  "focusHelp.highlightsOfItems2": "{value0}的重点 · {value1} 项",
+  "focusHelp.canRecordTheKeyPointsOfToday": "可以记录今天及过去日期的重点。",
+  "focusHelp.clickToSeeOnlyTheHighlightsOf": "点击只看当天重点。建议每天选择 1–2 项，可切换日期补记。"
+}

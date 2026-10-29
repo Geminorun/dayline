@@ -1,0 +1,4 @@
+{
+  "confirm.theRequestHasBeenClaimedByThe": "The request has been claimed by the web page or has ended and cannot be canceled. Please check your current account on your computer.",
+  "confirm.theScanCodeParametersAreInvalidPlease": "The scan code parameters are invalid, please scan the code again from the web page."
+}

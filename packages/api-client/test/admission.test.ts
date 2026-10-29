@@ -1,3 +1,4 @@
+import { fallbackText } from '@dayline/locales';
 import { describe, it, expect, vi } from 'vitest';
 import { AdmissionCoordinator } from '../src/admission-coordinator.js';
 import { ApiClient } from '../src/index.js';
@@ -194,7 +195,9 @@ describe('explicit admission recovery without background upload', () => {
     });
     await f.coordinator.begin(true);
     expect(f.observed.state?.operation?.status).toBe('missing');
-    expect(f.observed.state?.error).toContain('服务器未找到原任务');
+    expect(fallbackText(f.observed.state?.error ?? '')).toContain(
+      '服务器未找到原任务',
+    );
     expect(f.transport).toHaveBeenCalledOnce();
     await f.coordinator.begin(true, true);
     expect(f.operations.size).toBe(2);
@@ -204,7 +207,7 @@ describe('explicit admission recovery without background upload', () => {
     f.repository.putOperation.mockRejectedValueOnce(new Error('quota'));
     await f.coordinator.begin(true);
     expect(f.transport).not.toHaveBeenCalled();
-    expect(f.observed.state?.error).toContain('保留');
+    expect(fallbackText(f.observed.state?.error ?? '')).toContain('保留');
   });
   it('ignores old account results after identity invalidation', async () => {
     const f = fixture();

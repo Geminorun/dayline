@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { Clock } from '../records/clock.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
@@ -5,9 +6,9 @@ import { z } from 'zod';
 import { ActionProofService } from '../auth/action-proof.service.js';
 import { IdentityService, identityJson } from '../identity/identity.service.js';
 import type { Actor } from '../common/request-context.js';
-import type { ActionRequest } from '@dayline/contracts';
+import type { ActionRequest, QrStatusDto } from '@dayline/contracts';
 import { QR_STATUSES } from '@dayline/contracts';
-import type { QrStatusDto } from '@dayline/contracts';
+
 import { PrismaService } from '../database/prisma.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import type { QrRequest } from '../generated/prisma/client.js';
@@ -59,7 +60,7 @@ export class QrService {
           throw new AppError(
             409,
             'QR_REQUEST_EXISTS',
-            '扫码请求已存在，请重新创建。',
+            msg('errors.theQrCodeScanningRequestAlreadyExists'),
           );
         throw error;
       }
@@ -68,7 +69,7 @@ export class QrService {
       throw new AppError(
         409,
         'QR_PURPOSE_UNAVAILABLE',
-        '微信绑定将在账号绑定阶段开放。',
+        msg('errors.wechatBindingWillBeEnabledDuringThe'),
       );
     const scene = randomBytes(24).toString('base64url');
     const secret = randomSecret();
@@ -93,7 +94,7 @@ export class QrService {
         throw new AppError(
           409,
           'QR_REQUEST_EXISTS',
-          '请求已创建，请生成新的扫码请求。',
+          msg('errors.theRequestHasBeenCreatedPleaseGenerate'),
         );
       throw error;
     }
@@ -102,7 +103,11 @@ export class QrService {
 
   private dto(row: QrRequest): QrStatusDto {
     if (!['login', 'bind_wechat', 'reauth'].includes(row.purpose))
-      throw new AppError(409, 'QR_PURPOSE_UNAVAILABLE', '扫码用途不受支持。');
+      throw new AppError(
+        409,
+        'QR_PURPOSE_UNAVAILABLE',
+        msg('errors.scanCodeUsageIsNotSupported'),
+      );
     return {
       id: row.id,
       purpose: z.enum(['login', 'bind_wechat', 'reauth']).parse(row.purpose),
@@ -141,7 +146,11 @@ export class QrService {
       where: { id, browserSecretHash: hashSecret(secret) },
     });
     if (!secret || !row)
-      throw new AppError(404, 'QR_NOT_FOUND', '扫码请求不存在。');
+      throw new AppError(
+        404,
+        'QR_NOT_FOUND',
+        msg('errors.scanCodeRequestDoesNotExist'),
+      );
     return this.expire(row);
   }
 
@@ -153,7 +162,12 @@ export class QrService {
     const initial = await this.database.qrRequest.findUnique({
       where: { sceneHash: hashSecret(scene) },
     });
-    if (!initial) throw new AppError(404, 'QR_NOT_FOUND', '扫码请求不存在。');
+    if (!initial)
+      throw new AppError(
+        404,
+        'QR_NOT_FOUND',
+        msg('errors.scanCodeRequestDoesNotExist'),
+      );
     const row = await this.expire(initial);
     this.requireState(row, ['pending', 'scanned']);
     const identity = await this.wechat.exchangeCode(code);
@@ -169,7 +183,7 @@ export class QrService {
         throw new AppError(
           409,
           'QR_SCANNER_CONFLICT',
-          '请使用当前账号已绑定的微信重新验证。',
+          msg('errors.pleaseUseTheWechatAccountBoundTo'),
         );
     }
     const scanner = await this.database.wechatIdentity.findUnique({
@@ -213,16 +227,24 @@ export class QrService {
       throw new AppError(
         409,
         'QR_SCANNER_CONFLICT',
-        '此请求已被其他微信确认或状态已变化，请重新扫码。',
+        msg('errors.thisRequestHasBeenConfirmedByOther'),
       );
     return { ...this.dto({ ...row, status: 'scanned' }), scannerProof };
   }
 
   private requireState(row: QrRequest, allowed: string[]) {
     if (row.status === 'expired')
-      throw new AppError(410, 'QR_EXPIRED', '二维码已过期，请重新生成。');
+      throw new AppError(
+        410,
+        'QR_EXPIRED',
+        msg('errors.theQrCodeHasExpiredPleaseRegenerate'),
+      );
     if (!allowed.includes(row.status))
-      throw new AppError(409, 'QR_STATE_CONFLICT', '扫码请求状态已变化。');
+      throw new AppError(
+        409,
+        'QR_STATE_CONFLICT',
+        msg('errors.theStatusOfTheScanCodeRequest'),
+      );
     this.dto(row);
   }
 
@@ -235,7 +257,12 @@ export class QrService {
       const row = await transaction.qrRequest.findFirst({
         where: { id, scannerSecretHash: hashSecret(scannerProof) },
       });
-      if (!row) throw new AppError(404, 'QR_NOT_FOUND', '扫码确认凭据无效。');
+      if (!row)
+        throw new AppError(
+          404,
+          'QR_NOT_FOUND',
+          msg('errors.theScanCodeConfirmationCredentialsAreInvalid'),
+        );
       this.requireState(
         row.expiresAt.getTime() <= this.clock.now().getTime()
           ? { ...row, status: 'expired' }
@@ -243,7 +270,11 @@ export class QrService {
         ['scanned'],
       );
       if (!row.scannerAppId || !row.scannerOpenid)
-        throw new AppError(409, 'QR_STATE_CONFLICT', '请重新扫码。');
+        throw new AppError(
+          409,
+          'QR_STATE_CONFLICT',
+          msg('errors.pleaseScanTheCodeAgain'),
+        );
       const userId = await this.identities.findOrCreateInTransaction(
         {
           appId: row.scannerAppId,
@@ -262,7 +293,11 @@ export class QrService {
         data: { status: 'confirmed', confirmedUserId: userId },
       });
       if (updated.count !== 1)
-        throw new AppError(409, 'QR_STATE_CONFLICT', '扫码请求状态已变化。');
+        throw new AppError(
+          409,
+          'QR_STATE_CONFLICT',
+          msg('errors.theStatusOfTheScanCodeRequest'),
+        );
       return this.dto({ ...row, status: 'confirmed' });
     });
   }
@@ -271,7 +306,11 @@ export class QrService {
     const row = await this.browser(id, secret);
     this.requireState(row, ['confirmed']);
     if (!row.confirmedUserId)
-      throw new AppError(409, 'QR_STATE_CONFLICT', '请重新扫码。');
+      throw new AppError(
+        409,
+        'QR_STATE_CONFLICT',
+        msg('errors.pleaseScanTheCodeAgain'),
+      );
     // Consume first: session adapter failure burns this right, never restores confirmed.
     const updated = await this.database.qrRequest.updateMany({
       where: {
@@ -283,7 +322,11 @@ export class QrService {
       data: { status: 'consumed', scannerOpenid: null, scannerUnionid: null },
     });
     if (updated.count !== 1)
-      throw new AppError(409, 'QR_STATE_CONFLICT', '扫码请求已领取或失效。');
+      throw new AppError(
+        409,
+        'QR_STATE_CONFLICT',
+        msg('errors.theScanCodeRequestHasBeenReceived'),
+      );
     return row.confirmedUserId;
   }
 
@@ -312,7 +355,11 @@ export class QrService {
       !row.initiatorSessionId ||
       !row.initiatorAuthEpoch
     )
-      throw new AppError(403, 'REAUTH_REQUIRED', '请重新开始身份验证。');
+      throw new AppError(
+        403,
+        'REAUTH_REQUIRED',
+        msg('errors.pleaseRestartAuthentication'),
+      );
     return {
       userId: row.initiatorUserId,
       sessionId: row.initiatorSessionId,
@@ -327,11 +374,19 @@ export class QrService {
     action?: ActionRequest & { proof?: string | undefined },
   ) {
     if (!actor || !action || !['reauth', 'bind_wechat'].includes(purpose))
-      throw new AppError(403, 'REAUTH_REQUIRED', '请先登录并重新验证。');
+      throw new AppError(
+        403,
+        'REAUTH_REQUIRED',
+        msg('errors.pleaseLogInAndReVerify'),
+      );
     let proofExpiresAt: string | undefined;
     if (purpose === 'bind_wechat') {
       if (action.purpose !== 'bind_wechat' || action.target !== 'wechat')
-        throw new AppError(403, 'REAUTH_REQUIRED', '绑定操作证明不匹配。');
+        throw new AppError(
+          403,
+          'REAUTH_REQUIRED',
+          msg('errors.bindOperationProvedMismatch'),
+        );
       const c = await this.proofs.verify(action.proof ?? '', actor, action);
       proofExpiresAt = new Date(c.exp * 1000).toISOString();
     }
@@ -382,7 +437,7 @@ export class QrService {
           throw new AppError(
             409,
             'PREVIEW_STALE',
-            '发起网页会话已失效，请重新开始扫码。',
+            msg('errors.theWebSessionInitiatedHasExpiredPlease'),
           );
         throw error;
       }
@@ -392,7 +447,11 @@ export class QrService {
         where: { id: initial.id, scannerSecretHash: hashSecret(scannerProof) },
       });
       if (!row)
-        throw new AppError(404, 'QR_NOT_FOUND', '本次扫码确认凭据无效。');
+        throw new AppError(
+          404,
+          'QR_NOT_FOUND',
+          msg('errors.theScanCodeConfirmationCredentialsAreInvalid2'),
+        );
       this.requireState(
         row.expiresAt <= this.clock.now() ? { ...row, status: 'expired' } : row,
         ['scanned'],
@@ -405,7 +464,7 @@ export class QrService {
         throw new AppError(
           403,
           'REAUTH_REQUIRED',
-          '网页需要重新验证本次绑定。',
+          msg('errors.theWebPageNeedsToReVerify'),
         );
       if (action.scannerUserId) {
         const scanner = await tx.user.findUnique({
@@ -416,13 +475,17 @@ export class QrService {
           scanner.authEpoch !== action.scannerEpoch ||
           (scanner.status !== 'active' && row.purpose !== 'reauth')
         )
-          throw new AppError(409, 'PREVIEW_STALE', '扫码账号身份已变化。');
+          throw new AppError(
+            409,
+            'PREVIEW_STALE',
+            msg('errors.theIdentityOfTheScannedAccountHas'),
+          );
       }
       if (row.purpose === 'reauth' && action.scannerUserId !== actor.userId)
         throw new AppError(
           409,
           'QR_SCANNER_CONFLICT',
-          '扫描者与当前账号不符。',
+          msg('errors.theScannerDoesNotMatchTheCurrent'),
         );
       await tx.qrRequest.update({
         where: { id: row.id },
@@ -441,7 +504,11 @@ export class QrService {
         expected.sessionId !== actor.sessionId ||
         expected.authEpoch !== actor.authEpoch
       )
-        throw new AppError(403, 'REAUTH_REQUIRED', '请返回发起操作的原会话。');
+        throw new AppError(
+          403,
+          'REAUTH_REQUIRED',
+          msg('errors.pleaseReturnToTheOriginalSessionWhere'),
+        );
       const ids = [
         ...new Set([
           actor.userId,
@@ -462,7 +529,11 @@ export class QrService {
           action.scannerUserId !== actor.userId ||
           action.scannerEpoch !== actor.authEpoch
         )
-          throw new AppError(409, 'QR_SCANNER_CONFLICT', '扫描身份不符。');
+          throw new AppError(
+            409,
+            'QR_SCANNER_CONFLICT',
+            msg('errors.scanningIdentityDoesNotMatch'),
+          );
         const result = await this.proofs.issue(actor, action);
         await tx.qrRequest.update({
           where: { id },
@@ -481,7 +552,11 @@ export class QrService {
         !row.scannerAppId ||
         !row.scannerOpenid
       )
-        throw new AppError(403, 'REAUTH_REQUIRED', '本次操作需重新验证。');
+        throw new AppError(
+          403,
+          'REAUTH_REQUIRED',
+          msg('errors.thisOperationRequiresReVerification'),
+        );
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${row.scannerAppId + ':' + row.scannerOpenid}))`;
       const identity = await tx.wechatIdentity.findUnique({
         where: {
@@ -496,7 +571,7 @@ export class QrService {
         throw new AppError(
           409,
           'PREVIEW_STALE',
-          '微信关联已变化，请重新扫码。',
+          msg('errors.theWechatAssociationHasChangedPleaseScan'),
         );
       let result;
       if (identity && identity.userId !== actor.userId) {
@@ -521,7 +596,7 @@ export class QrService {
             throw new AppError(
               409,
               'IDENTITY_COMBINATION_UNSUPPORTED',
-              '此账号已有微信，不能替换或添加第二个微信。',
+              msg('errors.thisAccountAlreadyHasWechatAndCannot'),
             );
           await tx.wechatIdentity.create({
             data: {
@@ -566,7 +641,12 @@ export class QrService {
         ],
       },
     });
-    if (!initial) throw new AppError(404, 'QR_NOT_FOUND', '扫码请求不存在。');
+    if (!initial)
+      throw new AppError(
+        404,
+        'QR_NOT_FOUND',
+        msg('errors.scanCodeRequestDoesNotExist'),
+      );
     const row = await this.expire(initial);
     this.requireState(row, ['pending', 'scanned', 'confirmed', 'cancelled']);
     if (row.status !== 'cancelled') {
@@ -584,7 +664,11 @@ export class QrService {
         },
       });
       if (updated.count !== 1)
-        throw new AppError(409, 'QR_STATE_CONFLICT', '扫码请求已领取或失效。');
+        throw new AppError(
+          409,
+          'QR_STATE_CONFLICT',
+          msg('errors.theScanCodeRequestHasBeenReceived'),
+        );
     }
     return this.dto({ ...row, status: 'cancelled' });
   }

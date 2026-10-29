@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { admissionStatusLabel } from '@dayline/contracts';
+import { admissionStatusLabel, tr, renderMessage } from '../i18n/index';
+
 import { reviewSelectionKey } from '@dayline/contracts';
 import { computed, ref, watch } from 'vue';
 import { useAdmission } from '../admission';
@@ -82,9 +83,8 @@ async function review() {
 }
 function restart() {
   uni.showModal({
-    title: '重新准备本机记录接入',
-    content:
-      '保留所有原冻结包和任务。将当前本机修订创建为新的预览，请先核对云端记录。',
+    title: tr('admissionReview.rePrepareLocalRecordAccess'),
+    content: tr('admissionReview.keepAllOriginalFrozenPackagesAndTasks'),
     success: (result) => {
       if (result.confirm) void begin(true, true);
     },
@@ -102,91 +102,122 @@ function chooseRow(
 </script>
 <template>
   <view v-if="job" class="card"
-    ><text class="heading">本机游客接入</text
-    ><text v-if="job.status === 'committed'" class="text notice"
-      >云端已确认：新增 {{ job.result?.created }} 条、跳过
-      {{ job.result?.skipped }} 条。原包保留，确认只对应被冻结修订。</text
+    ><text class="heading">{{ tr('common.localGuestAccess') }}</text
+    ><text v-if="job.status === 'committed'" class="text notice">{{
+      tr('admissionReview.cloudConfirmedAddedSkippedTheOriginalPackage', {
+        value0: job.result?.created,
+        value1: job.result?.skipped,
+      })
+    }}</text
     ><template v-else-if="job.status === 'preview'"
-      ><text class="text"
-        >本机 {{ job.sourceSummary.entries }} 条 /
-        {{ job.sourceSummary.categories }} 类；云端
-        {{ job.targetSummary.entries }} 条 /
-        {{ job.targetSummary.categories }} 类。默认保留双方。</text
+      ><text class="text">{{
+        tr('admissionReview.localItemsClassCloudItemsClassBoth', {
+          value0: job.sourceSummary.entries,
+          value1: job.sourceSummary.categories,
+          value2: job.targetSummary.entries,
+          value3: job.targetSummary.categories,
+        })
+      }}</text
       ><view v-for="(c, index) in categories" :key="c.sourceId" class="card"
-        ><text class="text">分类名称与颜色</text
+        ><text class="text">{{ tr('common.categoryNamesAndColors') }}</text
         ><input v-model="c.name" :disabled="busy" :maxlength="24" /><input
           v-model="c.color"
           :disabled="busy"
         /><picker
           :disabled="busy"
           :range="[
-            '保留为新分类',
+            tr('common.createACategory'),
             ...(workspace.snapshot.value?.categories.map(
               (t) => t.name + ' ' + t.color,
             ) ?? []),
           ]"
           @change="target(index, $event)"
-          ><view class="picker"
-            >{{ c.targetId ? '复用已有分类' : '保留新分类' }} ·
-            点此选择映射</view
-          ></picker
+          ><view class="picker">{{
+            tr('admissionReview.clickHereToSelectMapping', {
+              value0: c.targetId
+                ? tr('common.reuseExistingCategory')
+                : tr('common.keepNewCategories'),
+            })
+          }}</view></picker
         ></view
       ><view v-for="row in pageRows" :key="row.sourceKey" class="card"
         ><text class="heading">{{ row.source.title }}</text
         ><text class="text"
-          >{{ row.source.startDate }} — {{ row.source.endDate ?? '未结束' }} ·
-          {{ row.source.deletedAt ? '回收站' : '活动事项' }}</text
+          >{{ row.source.startDate }} —
+          {{ row.source.endDate ?? tr('common.notFinished') }} ·
+          {{
+            row.source.deletedAt
+              ? tr('common.trash')
+              : tr('common.activityEntry')
+          }}</text
         ><text class="text">{{
-          row.reason ?? '保留独立副本，不按同名去重'
+          (row.reason ? renderMessage(row.reason) : null) ??
+          tr('admissionReview.keepIndependentCopiesAndDoNotDeduplicate')
         }}</text
         ><picker
           v-if="rows[row.index]"
           :disabled="busy"
-          :range="['跳过来源', '明确保留新副本']"
+          :range="[
+            tr('common.skipSource'),
+            tr('common.explicitlyRetainNewCopy'),
+          ]"
           :value="rows[row.index]?.action === 'skip' ? 0 : 1"
           @change="chooseRow(row.index, $event)"
           ><view class="picker">{{
-            rows[row.index]?.action === 'skip' ? '跳过来源' : '保留新副本'
+            rows[row.index]?.action === 'skip'
+              ? tr('common.skipSource')
+              : tr('common.keepNewCopy')
           }}</view></picker
         ></view
       ><view class="actions"
         ><button class="secondary" :disabled="page === 0" @click="page--">
-          上一页记录</button
-        ><text
-          >第 {{ page + 1 }} / {{ pageCount }} 页，共
-          {{ job.rows.length }} 条</text
+          {{ tr('common.previousRecords') }}</button
+        ><text>{{
+          tr('admissionReview.pageOfItems', {
+            value0: page + 1,
+            value1: pageCount,
+            value2: job.rows.length,
+          })
+        }}</text
         ><button
           class="secondary"
           :disabled="page + 1 >= pageCount"
           @click="page++"
         >
-          下一页记录
+          {{ tr('common.nextRecords') }}
         </button></view
-      ><button :disabled="busy" @click="review">更新并核对计划</button
+      ><button :disabled="busy" @click="review">
+        {{ tr('common.reviewUpdatedPlan') }}</button
       ><button
         :disabled="busy || !job.canCommit || unreviewedSelections"
         @click="commit"
       >
-        确认接入</button
+        {{ tr('common.confirmAccess') }}</button
       ><button class="secondary" :disabled="busy" @click="action('cancel')">
-        暂不导入</button
-      ><text v-if="unreviewedSelections" class="text notice"
-        >分类或来源选择尚未保存核对，请先更新并核对计划。</text
-      ><text v-if="!job.canCommit" class="text"
-        >请处理分类重名、20 类上限及需要核对的来源后更新计划。</text
-      ></template
-    ><text v-else class="text">计划已取消或过期，原游客记录保留。</text
+        {{ tr('common.notNow') }}</button
+      ><text v-if="unreviewedSelections" class="text notice">{{
+        tr('admissionReview.theCategoryOrSourceSelectionHasNot')
+      }}</text
+      ><text v-if="!job.canCommit" class="text">{{
+        tr('admissionReview.pleaseDealWithTheDuplicateNamesOf')
+      }}</text></template
+    ><text v-else class="text">{{
+      tr('admissionReview.thePlanHasBeenCanceledOrExpired')
+    }}</text
     ><button class="secondary" :disabled="busy" @click="action('query')">
-      查询原任务</button
+      {{ tr('common.queryOriginalTask') }}</button
     ><text v-if="error" class="text error">{{ error }}</text></view
   ><view v-if="operation" class="card"
-    ><text class="text"
-      >冻结本机修订 {{ operation.package.packageRevision }} ·
-      {{ admissionStatusLabel(operation.status) }}</text
+    ><text class="text">{{
+      tr('admissionReview.freezeLocalRevision', {
+        value0: operation.package.packageRevision,
+        value1: admissionStatusLabel(operation.status),
+      })
+    }}</text
     ><button class="secondary" :disabled="busy" @click="action('query')">
-      查询保留的原任务</button
+      {{ tr('common.findAnExistingTask') }}</button
     ><button class="secondary" :disabled="busy" @click="restart">
-      明确重新预览当前本机修订
+      {{ tr('admissionReview.explicitlyRePreviewCurrentNativeRevision') }}
     </button></view
   ><text v-if="error && !job" class="text error">{{ error }}</text>
 </template>

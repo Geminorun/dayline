@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/index';
 import { ref, useId } from 'vue';
 import { CATEGORY_PALETTE, nextCategoryColor } from '@dayline/core';
 import IconButton from './IconButton.vue';
@@ -10,7 +11,7 @@ const props = withDefaults(
     disabled?: boolean;
     used?: string[];
   }>(),
-  { label: '更改颜色', disabled: false, used: () => [] },
+  { disabled: false, used: () => [] },
 );
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 const id = useId();
@@ -39,7 +40,7 @@ function custom(event: Event) {
   <span class="color-picker">
     <IconButton
       icon="palette"
-      :label="label"
+      :label="label ?? tr('common.changeColor')"
       :disabled="disabled"
       :popovertarget="id"
       :style="{ '--chosen-color': modelValue }"
@@ -47,15 +48,19 @@ function custom(event: Event) {
       @click="locate"
     />
     <div :id="id" ref="panel" popover class="color-palette" :style="position">
-      <p class="palette-heading">分类颜色</p>
-      <div class="color-swatches" role="group" aria-label="选择分类颜色">
+      <p class="palette-heading">{{ tr('common.categoryColor') }}</p>
+      <div
+        class="color-swatches"
+        role="group"
+        :aria-label="tr('common.selectCategoryColor')"
+      >
         <button
           v-for="color in CATEGORY_PALETTE"
           :key="color"
           type="button"
           class="color-swatch"
           :style="{ backgroundColor: color }"
-          :aria-label="`颜色 ${color}`"
+          :aria-label="tr('colorPicker.color', { value0: color })"
           :aria-pressed="modelValue.toUpperCase() === color"
           :title="color"
           :disabled="disabled"
@@ -71,10 +76,11 @@ function custom(event: Event) {
           :disabled="disabled"
           @click="choose(nextCategoryColor(used))"
         >
-          <PlannerIcon name="wand" />自动推荐
+          <PlannerIcon name="wand" />{{ tr('common.automaticRecommendation') }}
         </button>
         <label class="color-custom"
-          >自定义<input
+          >{{ tr('common.custom')
+          }}<input
             type="color"
             :value="modelValue"
             :disabled="disabled"

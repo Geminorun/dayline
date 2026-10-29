@@ -1,0 +1,9 @@
+{
+  "language.title": "Language",
+  "language.description": "Language for the interface and emails. Your choice syncs when signed in.",
+  "language.saved": "Language preference saved.",
+  "language.localSaved": "Language applied on this device.",
+  "language.storageUnavailable": "Language changed, but this device could not save your preference.",
+  "language.saveFailed": "Language changed. Your account preference was not saved; please try again.",
+  "language.retry": "Retry saving"
+}

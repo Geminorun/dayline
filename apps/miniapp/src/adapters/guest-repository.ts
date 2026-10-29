@@ -1,6 +1,11 @@
-import { GuestError, readGuestPackage } from '@dayline/contracts';
+import { msg } from '@dayline/locales';
+import {
+  GuestError,
+  readGuestPackage,
+  guestManifestSchema as manifestSchema,
+} from '@dayline/contracts';
 import type { GuestPackage, GuestRepository } from '@dayline/contracts';
-import { guestManifestSchema as manifestSchema } from '@dayline/contracts';
+
 export interface KeyStorage {
   get(key: string): unknown;
   set(key: string, value: string): void;
@@ -36,7 +41,7 @@ export class MiniGuestRepository implements GuestRepository {
     } catch {
       throw new GuestError(
         'LOCAL_RECOVERY_REQUIRED',
-        '本机记录目录损坏或版本不兼容。已保留原始分片，请恢复后重试。',
+        msg('guest-repository.theLocalRecordDirectoryIsDamagedOr'),
       );
     }
   }
@@ -49,7 +54,7 @@ export class MiniGuestRepository implements GuestRepository {
         )
           throw new GuestError(
             'LOCAL_RECOVERY_REQUIRED',
-            '发现未提交或缺少目录的本机分片。原数据已保留，停止空包初始化。',
+            msg('guest-repository.uncommittedOrMissingNativeShardForDirectory'),
           );
         return null;
       }
@@ -78,13 +83,16 @@ export class MiniGuestRepository implements GuestRepository {
       if (cause instanceof GuestError) throw cause;
       throw new GuestError(
         'LOCAL_RECOVERY_REQUIRED',
-        '本机记录无法完整读取，原始数据已保留，请恢复后重试。',
+        msg('guest-repository.theLocalRecordCannotBeReadCompletely'),
       );
     }
   }
   async commit(next: GuestPackage, expectedRevision: number | null) {
     if (this.busy)
-      throw new GuestError('LOCAL_CONFLICT', '另一次本机保存正在进行。');
+      throw new GuestError(
+        'LOCAL_CONFLICT',
+        msg('guest-repository.anotherLocalSaveIsInProgress'),
+      );
     this.busy = true;
     try {
       const checked = readGuestPackage(next),
@@ -95,7 +103,7 @@ export class MiniGuestRepository implements GuestRepository {
       )
         throw new GuestError(
           'LOCAL_CONFLICT',
-          '本机记录已有更新，请重新读取并核对输入。',
+          msg('guest-repository.theLocalRecordHasBeenUpdatedPlease'),
         );
       const text = JSON.stringify(checked),
         generation = this.generation(),
@@ -107,7 +115,7 @@ export class MiniGuestRepository implements GuestRepository {
       )
         throw new GuestError(
           'LOCAL_CAPACITY',
-          '本机空间不足，未保存。原记录仍保留，请释放空间后重试。',
+          msg('guest-repository.theLocalComputerHasInsufficientSpaceAnd'),
         );
       for (let i = 0; i < chunks; i++) {
         const key = `${this.prefix}:chunk:${generation}:${i}`,
@@ -131,7 +139,7 @@ export class MiniGuestRepository implements GuestRepository {
       )
         throw new GuestError(
           'LOCAL_CONFLICT',
-          '本机记录已有更新，请重新读取并核对输入。',
+          msg('guest-repository.theLocalRecordHasBeenUpdatedPlease'),
         );
       // Single final pointer replacement is the commit point. Never destroy the old generation before it.
       this.storage.set(this.prefix + ':manifest', JSON.stringify(manifest));
@@ -154,7 +162,7 @@ export class MiniGuestRepository implements GuestRepository {
       if (cause instanceof GuestError) throw cause;
       throw new GuestError(
         'LOCAL_WRITE_FAILED',
-        '本机保存未完成，上一份完整记录已保留。当前输入仍在，请重试。',
+        msg('guest-repository.theLocalSaveIsNotCompletedAnd'),
       );
     } finally {
       this.busy = false;

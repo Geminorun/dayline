@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import {
   Body,
   Controller,
@@ -51,7 +52,11 @@ import { QrService } from './qr.service.js';
 function parse<T>(schema: z.ZodType<T>, input: unknown): T {
   const result = schema.safeParse(input);
   if (!result.success)
-    throw new AppError(400, 'INVALID_REQUEST', '请求参数不符合要求。');
+    throw new AppError(
+      400,
+      'INVALID_REQUEST',
+      msg('errors.theRequestParametersDoNotMeetThe'),
+    );
   return result.data;
 }
 
@@ -79,7 +84,11 @@ export class WechatController {
       (request.headers.origin &&
         !this.config.trustedOrigins.includes(request.headers.origin))
     )
-      throw new AppError(403, 'UNTRUSTED_ORIGIN', '请求来源未被允许。');
+      throw new AppError(
+        403,
+        'UNTRUSTED_ORIGIN',
+        msg('errors.theRequestSourceIsNotAllowed'),
+      );
     if (this.config.environment === 'test') return;
     const now = Date.now();
     for (const [key, value] of this.rateBuckets)
@@ -92,7 +101,11 @@ export class WechatController {
       this.rateBuckets.size >= 10_000
     ) {
       response.setHeader('Retry-After', '60');
-      throw new AppError(429, 'RATE_LIMITED', '操作过于频繁，请稍后重试。');
+      throw new AppError(
+        429,
+        'RATE_LIMITED',
+        msg('errors.theOperationIsTooFrequentPleaseTry'),
+      );
     }
     this.rateBuckets.set(key, bucket);
   }

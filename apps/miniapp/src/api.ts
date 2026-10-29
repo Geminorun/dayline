@@ -1,7 +1,10 @@
-import { ref } from 'vue';
+import { messageRef } from './i18n/index';
+import { msg } from '@dayline/locales';
+
 import { ApiClient, ClientError } from '@dayline/api-client';
 import type { Transport } from '@dayline/api-client';
-export const credentialWarning = ref('');
+import { locale } from './i18n';
+export const credentialWarning = messageRef();
 const baseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
 const tokenKey = `dayline:${import.meta.env.MODE}:${encodeURIComponent(baseUrl)}:auth:signed-token:v1`;
 let token: string | null = null;
@@ -15,7 +18,7 @@ function loadToken() {
     } catch {
       throw new ClientError(
         'STORAGE_ERROR',
-        '无法读取登录凭据，请检查本机存储。',
+        msg('api.unableToReadLoginCredentialsPleaseCheck'),
       );
     }
   }
@@ -32,21 +35,26 @@ export function clearCredential() {
   } catch {
     throw new ClientError(
       'STORAGE_ERROR',
-      '登录凭据清理失败，请检查本机存储。',
+      msg('api.loginCredentialCleanupFailedPleaseCheckLocal'),
     );
   }
 }
 export const bearerTransport: Transport = (request) =>
   new Promise((resolve, reject) => {
     if (!/^https:\/\//.test(baseUrl) && !import.meta.env.DEV) {
-      reject(new ClientError('API_NOT_CONFIGURED', '服务地址须使用 HTTPS。'));
+      reject(
+        new ClientError(
+          'API_NOT_CONFIGURED',
+          msg('api.theServiceAddressMustUseHttps'),
+        ),
+      );
       return;
     }
     if (!baseUrl) {
       reject(
         new ClientError(
           'API_NOT_CONFIGURED',
-          '服务地址尚未配置，请联系服务维护者。',
+          msg('api.theServiceAddressHasNotBeenConfigured'),
         ),
       );
       return;
@@ -62,6 +70,7 @@ export const bearerTransport: Transport = (request) =>
       url: baseUrl.replace(/\/$/, '') + request.path,
       method: request.method === 'PATCH' ? 'POST' : request.method,
       header: {
+        'Accept-Language': locale.value,
         ...request.headers,
         ...(request.method === 'PATCH'
           ? { 'X-Dayline-Method-Override': 'PATCH' }
@@ -98,8 +107,7 @@ export const api = new ApiClient(bearerTransport, (headers) => {
     uni.setStorageSync(tokenKey, signed);
     credentialWarning.value = '';
   } catch {
-    credentialWarning.value =
-      '云端请求已确认，但登录凭据未能持久保存；当前会话仅在内存，请检查空间后重新登录。';
+    credentialWarning.value = msg('api.theCloudRequestWasConfirmedButThe');
   }
 });
 api.onIdentityChange(() => {
@@ -119,14 +127,17 @@ export function wechatCode(): Promise<string> {
         if (result.code) resolve(result.code);
         else
           reject(
-            new ClientError('WECHAT_CODE_INVALID', '未取得微信凭据，请重试。'),
+            new ClientError(
+              'WECHAT_CODE_INVALID',
+              msg('api.wechatCredentialsNotObtainedPleaseTryAgain'),
+            ),
           );
       },
       fail() {
         reject(
           new ClientError(
             'WECHAT_UNAVAILABLE',
-            '无法取得微信登录凭据，请重试。',
+            msg('api.unableToObtainWechatLoginCredentialsPlease'),
           ),
         );
       },

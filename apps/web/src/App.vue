@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { monthYearLabel } from './i18n';
+import { tr, messageRef } from './i18n/index';
+import { msg } from '@dayline/locales';
 import AdmissionReview from './AdmissionReview.vue';
 import { useRouter, useRoute } from 'vue-router';
 import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue';
@@ -56,7 +59,7 @@ const { mode, identityState, switchMode, cacheError } = workspace,
 const { count: draftCount, unavailable: draftsUnavailable } = useDraftCount();
 const starting = ref(true);
 const loggingOut = ref(false),
-  logoutError = ref('');
+  logoutError = messageRef();
 async function logout() {
   if (loggingOut.value) return;
   loggingOut.value = true;
@@ -66,7 +69,7 @@ async function logout() {
     await switchMode('guest');
     closeAccountMenu();
     await router.replace('/day');
-    workspace.notice.value = '已退出登录。';
+    workspace.notice.value = msg('common.signedOut');
   } catch (cause) {
     logoutError.value = errorMessage(cause);
   } finally {
@@ -174,10 +177,13 @@ watch(
   },
   { immediate: true },
 );
-const monthLabel = computed(
-  () =>
-    `${Number(calendarMonth.value.slice(0, 4))}年 ${Number(calendarMonth.value.slice(5, 7))}月`,
+const monthLabel = computed(() =>
+  monthYearLabel(
+    Number(calendarMonth.value.slice(0, 4)),
+    Number(calendarMonth.value.slice(5, 7)),
+  ),
 );
+
 const calendarDays = computed(() => {
   if (!isCalendarDate(calendarMonth.value)) return [];
   const start = weekDates(calendarMonth.value)[0];
@@ -198,23 +204,25 @@ watch(
 );
 const pageLabel = computed(() =>
   route.path.startsWith('/timeline')
-    ? '时间轴'
+    ? tr('common.timeline')
     : ({
-        '/day': '每日回看',
+        '/day': tr('common.dailyReview'),
         '/categories':
-          recordView.activeView === 'timeline' ? '时间轴' : '每日回看',
-        '/trash': '回收站',
-        '/drafts': '未提交修改',
-        '/data': '数据管理',
-        '/settings': '设置',
-        '/identity': '账号关联',
-        '/account-deletion': '账号注销',
+          recordView.activeView === 'timeline'
+            ? tr('common.timeline')
+            : tr('common.dailyReview'),
+        '/trash': tr('common.trash'),
+        '/drafts': tr('common.unsavedChanges'),
+        '/data': tr('common.dataManagement'),
+        '/settings': tr('common.settings'),
+        '/identity': tr('common.linkedAccounts'),
+        '/account-deletion': tr('common.deleteAccount'),
       }[route.path] ??
       (route.path.startsWith('/entries/')
         ? recordView.activeView === 'timeline'
-          ? '时间轴'
-          : '每日回看'
-        : '账号')),
+          ? tr('common.timeline')
+          : tr('common.dailyReview')
+        : tr('common.account'))),
 );
 function selectCalendar(date: string) {
   recordView.selectedDate = date;
@@ -244,25 +252,29 @@ function hasEvent(date: string) {
   <PlannerSymbols />
   <div class="app-shell">
     <aside class="sidebar">
-      <RouterLink class="brand" to="/day" aria-label="日序首页"
+      <RouterLink class="brand" to="/day" :aria-label="tr('common.daylineHome')"
         ><span class="brand-mark"><i></i><i></i><i></i></span
-        ><span>日序<small>DAYLINE</small></span></RouterLink
+        ><span
+          >{{ tr('common.dayline') }}<small>DAYLINE</small></span
+        ></RouterLink
       >
-      <div class="workspace-label">我的生活足迹</div>
-      <nav class="primary-nav" aria-label="主导航">
+      <div class="workspace-label">{{ tr('common.myDays') }}</div>
+      <nav class="primary-nav" :aria-label="tr('common.mainNavigation')">
         <RouterLink
           class="nav-item"
           :class="{
             active: recordView.activeView === 'day',
           }"
           to="/day"
-          ><PlannerIcon name="calendar" />每日回看<span class="nav-dot"></span
+          ><PlannerIcon name="calendar" />{{ tr('common.dailyReview')
+          }}<span class="nav-dot"></span
         ></RouterLink>
         <RouterLink
           class="nav-item"
           :class="{ active: recordView.activeView === 'timeline' }"
           to="/timeline"
-          ><PlannerIcon name="timeline" />时间轴<span class="nav-dot"></span
+          ><PlannerIcon name="timeline" />{{ tr('common.timeline')
+          }}<span class="nav-dot"></span
         ></RouterLink>
       </nav>
       <div class="mini-calendar">
@@ -271,7 +283,7 @@ function hasEvent(date: string) {
           <div>
             <button
               class="icon-btn small"
-              aria-label="上个月"
+              :aria-label="tr('common.previousMonth')"
               :disabled="calendarMonth === '0001-01-01'"
               @click="calendarMonth = shiftMonth(calendarMonth, -1)"
             >
@@ -279,7 +291,7 @@ function hasEvent(date: string) {
             </button>
             <button
               class="icon-btn small"
-              aria-label="下个月"
+              :aria-label="tr('common.nextMonth')"
               :disabled="calendarMonth === '9999-12-01'"
               @click="calendarMonth = shiftMonth(calendarMonth, 1)"
             >
@@ -289,7 +301,15 @@ function hasEvent(date: string) {
         </div>
         <div class="mini-weekdays">
           <span
-            v-for="day in ['一', '二', '三', '四', '五', '六', '日']"
+            v-for="day in [
+              tr('common.mon'),
+              tr('common.tue'),
+              tr('common.wed'),
+              tr('common.thu'),
+              tr('common.fri'),
+              tr('common.sat'),
+              tr('common.sun'),
+            ]"
             :key="day"
             >{{ day }}</span
           >
@@ -314,9 +334,10 @@ function hasEvent(date: string) {
         </div>
       </div>
       <div class="side-section-title">
-        事项分类<RouterLink class="manage-link" to="/categories"
-          >管理</RouterLink
-        >
+        {{ tr('common.categories')
+        }}<RouterLink class="manage-link" to="/categories">{{
+          tr('common.manage')
+        }}</RouterLink>
       </div>
       <div class="side-categories">
         <div
@@ -337,31 +358,36 @@ function hasEvent(date: string) {
           <RouterLink
             class="icon-btn small"
             :to="{ path: '/categories', query: { edit: category.id } }"
-            :aria-label="`编辑分类${category.name}`"
+            :aria-label="tr('app.editCategory', { value0: category.name })"
             ><PlannerIcon name="edit"
           /></RouterLink>
           <RouterLink
             class="icon-btn small"
             :to="{ path: '/categories', query: { remove: category.id } }"
-            :aria-label="`删除分类${category.name}`"
+            :aria-label="tr('app.deleteCategory', { value0: category.name })"
             ><PlannerIcon name="trash"
           /></RouterLink>
         </div>
       </div>
       <div class="sidebar-bottom">
         <div class="little-spark">✧</div>
-        <p>时间有迹，生活有序。</p>
-        <span>为每一件小事，留一点空间。</span>
+        <p>{{ tr('app.makeRoomForYourDays') }}</p>
+        <span>{{ tr('app.aLittleSpaceForTheThingsThat') }}</span>
       </div>
       <div class="storage-label">
         <span></span
-        >{{ mode === 'guest' ? '记录保存在当前浏览器' : '账号记录 · 云端保存' }}
+        >{{
+          mode === 'guest'
+            ? tr('app.recordSavedInCurrentBrowser')
+            : tr('app.accountRecordsCloudStorage')
+        }}
       </div>
     </aside>
     <main>
       <header class="topbar">
         <div class="breadcrumb">
-          我的空间<span>/</span><strong>{{ pageLabel }}</strong>
+          {{ tr('common.mySpace') }}<span>/</span
+          ><strong>{{ pageLabel }}</strong>
         </div>
         <div class="topbar-end">
           <SyncStatus />
@@ -376,40 +402,54 @@ function hasEvent(date: string) {
           >
             <summary class="account-entry" @click="toggleAccountMenu">
               <span class="avatar">{{
-                current?.displayName?.slice(0, 1) ?? '客'
+                current?.displayName?.slice(0, 1) ?? tr('common.guest')
               }}</span
-              ><span>{{ current?.displayName ?? '游客 · 登录·注册' }}</span>
+              ><span>{{
+                current?.displayName ?? tr('app.guestLoginRegister')
+              }}</span>
             </summary>
-            <section class="profile-popover" aria-label="账号与更多功能">
+            <section
+              class="profile-popover"
+              :aria-label="tr('common.accountsAndMoreFeatures')"
+            >
               <div class="profile-heading">
-                {{ current ? '我的账号' : '欢迎使用日序' }}
+                {{
+                  current
+                    ? tr('common.myAccount')
+                    : tr('common.welcomeToDayline')
+                }}
               </div>
               <strong class="profile-name">{{
-                current?.displayName ?? '每一段经历，都值得记录'
+                current?.displayName ??
+                tr('app.everyExperienceIsWorthRecording')
               }}</strong>
               <div class="account-actions">
                 <RouterLink
                   v-if="!current"
                   class="button account-signin"
                   to="/login"
-                  >登录·注册</RouterLink
+                  >{{ tr('common.signInSignUp') }}</RouterLink
                 >
-                <RouterLink class="button" to="/settings">设置</RouterLink
+                <RouterLink class="button" to="/settings">{{
+                  tr('common.settings')
+                }}</RouterLink
                 ><RouterLink
                   v-if="draftCount > 0 || draftsUnavailable"
                   class="button"
                   to="/drafts"
-                  >未提交修改
-                  <span
+                  >{{ tr('common.unsavedChanges')
+                  }}<span
                     class="draft-count"
                     :title="
                       draftsUnavailable
-                        ? '本机未提交内容暂时无法读取'
+                        ? tr('app.theUnsubmittedContentOfThisMachineCannot')
                         : undefined
                     "
                     >{{ draftsUnavailable ? '!' : draftCount }}</span
                   ></RouterLink
-                ><RouterLink class="button" to="/trash">回收站</RouterLink>
+                ><RouterLink class="button" to="/trash">{{
+                  tr('common.trash')
+                }}</RouterLink>
                 <button
                   v-if="current"
                   class="button account-logout"
@@ -417,7 +457,7 @@ function hasEvent(date: string) {
                   @click="logout"
                 >
                   <PlannerIcon name="logout" />{{
-                    loggingOut ? '正在退出…' : '退出登录'
+                    loggingOut ? tr('common.exiting') : tr('common.signOut')
                   }}
                 </button>
                 <p v-if="logoutError" role="alert" class="settings-error">
@@ -437,12 +477,14 @@ function hasEvent(date: string) {
           class="notice"
           role="status"
         >
-          <p>身份尚未确认，私人缓存已隐藏；原账号草稿仍保留。</p>
+          <p>{{ tr('app.theIdentityHasNotBeenConfirmedAnd') }}</p>
           <button class="button subtle" @click="workspace.retryIdentity">
-            重新验证已有会话</button
-          ><RouterLink to="/auth/login">重新登录</RouterLink
+            {{ tr('common.reauthenticateExistingSession') }}</button
+          ><RouterLink to="/auth/login">{{
+            tr('common.signInAgain')
+          }}</RouterLink
           ><button class="button subtle" @click="switchMode('guest')">
-            明确继续游客
+            {{ tr('common.continueAsGuest') }}
           </button>
         </section>
         <section
@@ -450,11 +492,14 @@ function hasEvent(date: string) {
           class="notice"
           role="status"
         >
-          <p>账号正在注销中，普通登录不会撤销。业务写入已暂停。</p>
-          <RouterLink to="/account-deletion"
-            >查看到期时间 / 明确撤销</RouterLink
-          >
-          · <RouterLink to="/data">导出已保存记录</RouterLink>
+          <p>{{ tr('app.theAccountIsBeingAccountDeletionNormal') }}</p>
+          <RouterLink to="/account-deletion">{{
+            tr('app.viewExpirationDateExplicitCancellation')
+          }}</RouterLink>
+          ·
+          <RouterLink to="/data">{{
+            tr('common.exportingSavedRecords')
+          }}</RouterLink>
         </section>
         <AdmissionReview
           v-if="mode === 'account' && current?.status === 'active'"
@@ -479,7 +524,8 @@ function hasEvent(date: string) {
             "
         /></RouterView>
         <footer class="page-footer">
-          <span>日序 DAYLINE</span><span>慢慢来，每一天都算数。</span>
+          <span>{{ tr('app.dayline') }}</span
+          ><span>{{ tr('app.oneDayAtATime') }}</span>
         </footer>
       </div>
     </main>

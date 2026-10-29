@@ -1,0 +1,8 @@
+{
+  "categoryManager.maximum20AtLeastOneDragThe": "Maximum 20, at least one. Drag the category labels on the record page to adjust the order.",
+  "categoryManager.rename": "Rename {value0}",
+  "categoryManager.records": "{value0} records",
+  "categoryManager.deleteCategory": "Delete {value0} category",
+  "categoryManager.recordsAfterDeletingACategoryTheRecords": "records. After deleting a category, the records will go into trash. Do you want to delete them?",
+  "categoryManager.confirmDeletionOfCategory": "Confirm deletion of {value0} category"
+}

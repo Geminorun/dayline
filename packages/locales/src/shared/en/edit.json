@@ -1,0 +1,10 @@
+{
+  "edit.theEntryDoesNotExistOrHas": "The entry does not exist or has entered trash.",
+  "edit.theDataSpaceHasChangedPleaseEnter": "The data space has changed, please enter entry again. The original input will not be submitted to other accounts.",
+  "edit.theDataSpaceHasChangedPleaseRe": "The data space has changed, please re-verify the original account.",
+  "edit.pleaseCheckTitle1100WordsLegal": "Please check title (1–100 characters), legal date, and category.",
+  "edit.theSameStableIdentifierAlreadyHasDifferent": "The same stable identifier already has different cloud content, please check before saving.",
+  "edit.verifiedThatTheCloudSaveWasSuccessful": "Verified that the cloud save was successful.",
+  "edit.theCurrentCloudHasBeenCheckedAnd": "The current cloud has been checked and the input is still retained. Please check manually and try again.",
+  "edit.theSavedResultStillNeedsToBe": "The saved result still needs to be confirmed, and the current input is retained; please read it again after connecting to the Internet."
+}

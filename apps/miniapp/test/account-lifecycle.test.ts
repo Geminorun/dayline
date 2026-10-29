@@ -65,6 +65,7 @@ describe('miniapp account cold restore and foreground truth', () => {
         calls.push(options.method + ' ' + options.url);
         const data = options.url.endsWith('/me')
           ? {
+              locale: 'zh-CN',
               id: userId,
               displayName: '原账号',
               profileVersion: 1,

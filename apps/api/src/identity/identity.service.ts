@@ -1,3 +1,5 @@
+import { normalizeLocale, msg } from '@dayline/locales';
+
 import { Clock } from '../records/clock.js';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
@@ -47,7 +49,11 @@ export class IdentityService {
     const current = await this.proofs.current(tx, actor);
     const other = await tx.user.findUniqueOrThrow({ where: { id: otherId } });
     if (other.status !== 'active' || current.status !== 'active')
-      throw new AppError(409, 'PREVIEW_STALE', '账号状态已变化。');
+      throw new AppError(
+        409,
+        'PREVIEW_STALE',
+        msg('errors.theAccountStatusHasChanged'),
+      );
     const context = await tx.mergeContext.create({
       data: {
         id: randomUUID(),
@@ -85,7 +91,7 @@ export class IdentityService {
         throw new AppError(
           409,
           'IDENTITY_COMBINATION_UNSUPPORTED',
-          '当前账号已有邮箱，首版不支持替换或添加第二个邮箱。',
+          msg('errors.theCurrentAccountAlreadyHasAnEmail'),
         );
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'binding-email:' + normalized}))`;
       const recent = await tx.emailBindingRequest.findFirst({
@@ -98,7 +104,7 @@ export class IdentityService {
         throw new AppError(
           429,
           'RATE_LIMITED',
-          '邮件已申请，请至少一分钟后重发。',
+          msg('errors.theEmailHasBeenRequestedPleaseWait'),
         );
       const old = await tx.emailBindingRequest.findUnique({
         where: { userId_operationId: { userId: actor.userId, operationId } },
@@ -107,13 +113,13 @@ export class IdentityService {
         throw new AppError(
           409,
           'IDEMPOTENCY_KEY_REUSED',
-          '请为新的邮箱重新开始操作。',
+          msg('errors.pleaseRestartTheOperationForANew'),
         );
       if (old && ['consumed', 'cancelled'].includes(old.status))
         throw new AppError(
           409,
           'BINDING_ENDED',
-          '绑定已结束，请重新读取账号。',
+          msg('errors.bindingHasEndedPleaseReadTheAccount'),
         );
       if (
         old &&
@@ -123,7 +129,7 @@ export class IdentityService {
         throw new AppError(
           429,
           'RATE_LIMITED',
-          '邮件已申请，请至少一分钟后重发。',
+          msg('errors.theEmailHasBeenRequestedPleaseWait'),
         );
       return tx.emailBindingRequest.upsert({
         where: { userId_operationId: { userId: actor.userId, operationId } },
@@ -152,12 +158,20 @@ export class IdentityService {
     url.searchParams.set('id', row.id);
     url.searchParams.set('token', token);
     try {
-      await this.mail.sendEmailBinding(normalized, url.toString());
+      const profile = await this.db.user.findUnique({
+        where: { id: actor.userId },
+        select: { locale: true },
+      });
+      await this.mail.sendEmailBinding(
+        normalized,
+        url.toString(),
+        normalizeLocale(profile?.locale),
+      );
     } catch {
       throw new AppError(
         503,
         'MAIL_UNAVAILABLE',
-        '邮件暂时不可用，请稍后重发。',
+        msg('errors.theEmailIsTemporarilyUnavailablePleaseTry'),
       );
     }
     // Registered and unused addresses follow precisely the same response and mail path.
@@ -176,7 +190,7 @@ export class IdentityService {
       throw new AppError(
         403,
         'BINDING_LINK_INVALID',
-        '验证链接已失效，请回原设备重新申请。',
+        msg('errors.theVerificationLinkHasExpiredPleaseGo'),
       );
     const changed = await this.db.emailBindingRequest.updateMany({
       where: {
@@ -188,7 +202,11 @@ export class IdentityService {
       data: { status: 'verified', verifiedAt: this.clock.now() },
     });
     if (!changed.count)
-      throw new AppError(403, 'BINDING_LINK_INVALID', '验证链接已失效。');
+      throw new AppError(
+        403,
+        'BINDING_LINK_INVALID',
+        msg('errors.theVerificationLinkHasExpired'),
+      );
     return { success: true as const };
   }
   async completeEmail(
@@ -204,7 +222,12 @@ export class IdentityService {
     const row = await this.db.emailBindingRequest.findFirst({
       where: { id, userId: actor.userId, operationId: input.operationId },
     });
-    if (!row) throw new AppError(404, 'RESOURCE_NOT_FOUND', '绑定请求不存在。');
+    if (!row)
+      throw new AppError(
+        404,
+        'RESOURCE_NOT_FOUND',
+        msg('errors.bindingRequestDoesNotExist'),
+      );
     const claims = await this.proofs.verify(input.proof, actor, {
       purpose: 'bind_email',
       operationId: input.operationId,
@@ -253,7 +276,7 @@ export class IdentityService {
           throw new AppError(
             403,
             'REAUTH_REQUIRED',
-            '请完成邮件验证并在原账号重新验证后继续。',
+            msg('errors.pleaseCompleteTheEmailVerificationAndContinue'),
           );
         // The new session must supply its own fresh proof; the old proof never crosses SID.
         if (current.sessionId !== actor.sessionId)
@@ -265,7 +288,7 @@ export class IdentityService {
           throw new AppError(
             409,
             'IDENTITY_COMBINATION_UNSUPPORTED',
-            '当前账号已具有真实邮箱，双方保持独立。',
+            msg('errors.theCurrentAccountAlreadyHasAReal'),
           );
         const occupied = await tx.user.findUnique({
           where: { email: row.email },
@@ -280,7 +303,7 @@ export class IdentityService {
             throw new AppError(
               403,
               'REAUTH_REQUIRED',
-              '请验证该邮箱账号的当前密码后继续；当前会话仍有效。',
+              msg('errors.pleaseVerifyTheCurrentPasswordOfThe'),
             );
           // The fresh mailbox event + current credential prove B, scoped to A's session and this operation.
           return this.grant(
@@ -297,7 +320,7 @@ export class IdentityService {
           throw new AppError(
             422,
             'VALIDATION_ERROR',
-            '请设置 8–128 字符的新密码。',
+            msg('errors.pleaseSetANewPasswordOf8'),
           );
         await this.auth.bindEmail(tx, actor.userId, row.email, passwordHash);
         await tx.emailBindingRequest.update({
@@ -317,7 +340,7 @@ export class IdentityService {
         throw new AppError(
           409,
           'IDENTITY_ALREADY_LINKED',
-          '邮箱关联已变化，请重新验证后继续。',
+          msg('errors.theEmailAssociationHasChangedPleaseRe'),
         );
       throw error;
     }
@@ -360,7 +383,7 @@ export class IdentityService {
         throw new AppError(
           409,
           'PREVIEW_STALE',
-          '微信关联已变化，请重新验证。',
+          msg('errors.theWechatAssociationHasChangedPleaseVerify'),
         );
       if (identity?.userId === actor.userId)
         return {
@@ -379,7 +402,7 @@ export class IdentityService {
         throw new AppError(
           409,
           'IDENTITY_COMBINATION_UNSUPPORTED',
-          '此账号已有微信，不能替换或添加第二个微信。',
+          msg('errors.thisAccountAlreadyHasWechatAndCannot'),
         );
       await tx.wechatIdentity.create({
         data: {
@@ -413,7 +436,7 @@ export class IdentityService {
         throw new AppError(
           404,
           'RESOURCE_NOT_FOUND',
-          '绑定请求不存在或已完成。',
+          msg('errors.theBindRequestDoesNotExistOr'),
         );
       const request = await tx.emailBindingRequest.findUniqueOrThrow({
         where: { id },
@@ -446,7 +469,7 @@ export class IdentityService {
       throw new AppError(
         403,
         'REAUTH_REQUIRED',
-        '密码验证未通过，当前会话仍有效。',
+        msg('errors.passwordVerificationFailedTheCurrentSessionIs'),
       );
     return this.transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM users WHERE id=${actor.userId}::uuid FOR UPDATE`;

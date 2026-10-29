@@ -1409,6 +1409,8 @@ API 不返回能把这些状态混成“已同步”的模糊成功。后端无�
 
 ## 21. 参考与证据
 
+请求语言、`User.locale`、资料版本修改、公开错误键与邮件语言规则见 [多语言方案](i18n.md)，作为本 Spec 的后续补充。
+
 - 产品范围、决策和验收：[requirements.md](requirements.md) v1.0。
 - 旧站默认分类：原站第 9 版 `public/core.mjs` 的 `DEFAULT_CATEGORIES`，本次只读取源码，未做 UI 体验验证。
 - [Better Auth 数据库与生成模型](https://better-auth.com/docs/concepts/database)。

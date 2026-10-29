@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/index';
 import { computed } from 'vue';
 import type { CategoryDto } from '@dayline/contracts';
 import { emptyFilter } from '@dayline/core';
@@ -12,7 +13,11 @@ const search = computed({
   get: () => props.modelValue.search,
   set: (value: string) => update({ search: value }),
 });
-const statuses = ['全部', '进行中', '已结束'],
+const statuses = computed(() => [
+    tr('common.all'),
+    tr('common.ongoing'),
+    tr('common.ended'),
+  ]),
   statusValues = ['all', 'ongoing', 'ended'] as const;
 function update(patch: Partial<EntryFilter>) {
   emit('update:modelValue', { ...props.modelValue, ...patch });
@@ -29,16 +34,16 @@ function status(event: { detail: { value: unknown } }) {
   <view class="card filters"
     ><input
       v-model="search"
-      placeholder="搜索事项标题"
-      aria-label="搜索标题"
+      :placeholder="tr('common.searchEntryTitle')"
+      :aria-label="tr('common.searchTitle')"
     /><view class="actions"
       ><picker
-        :range="['全部分类', ...categories.map((c) => c.name)]"
+        :range="[tr('common.allCategories'), ...categories.map((c) => c.name)]"
         @change="category"
         ><view class="picker"
           >{{
             categories.find((c) => c.id === modelValue.categoryId)?.name ??
-            '全部分类'
+            tr('common.allCategories')
           }}
           ▾</view
         ></picker
@@ -54,13 +59,15 @@ function status(event: { detail: { value: unknown } }) {
         @click="update({ sort: modelValue.sort === 'asc' ? 'desc' : 'asc' })"
       >
         {{
-          modelValue.sort === 'asc' ? '开始日期升序' : '开始日期降序'
+          modelValue.sort === 'asc'
+            ? tr('common.startDateAscending')
+            : tr('common.startDateDescending')
         }}</button
       ><button
         class="secondary"
         @click="emit('update:modelValue', emptyFilter())"
       >
-        清除筛选
+        {{ tr('common.clearFilters') }}
       </button></view
     ></view
   >

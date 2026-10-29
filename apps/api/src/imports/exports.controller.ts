@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { Controller, Get, Inject, Req, Res } from '@nestjs/common';
 import { ApiProduces, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -42,9 +43,18 @@ export class ExportsController {
   }
   private async data(request: Request) {
     if (!request.actor)
-      throw new AppError(401, 'UNAUTHENTICATED', '请先登录。');
+      throw new AppError(
+        401,
+        'UNAUTHENTICATED',
+        msg('errors.pleaseLogInFirst'),
+      );
     const { data } = await this.records.snapshot(request.actor);
-    if (!data) throw new AppError(503, 'EXPORT_UNAVAILABLE', '请稍后重试。');
+    if (!data)
+      throw new AppError(
+        503,
+        'EXPORT_UNAVAILABLE',
+        msg('errors.pleaseTryAgainLater'),
+      );
     return {
       categories: data.categories,
       entries: [...data.entries, ...data.trashEntries],

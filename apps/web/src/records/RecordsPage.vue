@@ -1,6 +1,10 @@
 <script setup lang="ts">
+import { calendarLabel } from '../i18n';
+import { formatBeijingTime, spanLabel, tr } from '../i18n/index';
+
+import { msg } from '@dayline/locales';
 import IconButton from '../components/IconButton.vue';
-import { formatBeijingTime } from '@dayline/core';
+
 import {
   computed,
   nextTick,
@@ -17,7 +21,6 @@ import {
   isCalendarDate,
   selectEntries,
   shiftDate,
-  spanLabel,
   summarizeEntries,
   timelineCanvasWindow,
   TIMELINE_RECENT_POSITION,
@@ -215,7 +218,15 @@ const hasFilter = computed(
     filter.value.status !== 'ongoing' ||
     (contentView.value === 'day' && recordView.focusOnly),
 );
-const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+const weekdays = computed(() => [
+  tr('common.mon2'),
+  tr('common.tue2'),
+  tr('common.wed2'),
+  tr('common.thu2'),
+  tr('common.fri2'),
+  tr('common.sat2'),
+  tr('common.sun2'),
+]);
 const editing = computed(
   () =>
     route.path === '/entries/new' ||
@@ -285,7 +296,7 @@ async function syncEditor() {
         return;
       }
     } catch {
-      error.value = '无法读取原草稿，已保留原始内容。';
+      error.value = msg('records.unableToReadOriginalDraftOriginalContent');
       return;
     }
   }
@@ -324,7 +335,7 @@ watch(
       !snapshot.value?.categories.some((c) => c.id === filter.value.categoryId)
     ) {
       filter.value.categoryId = '';
-      notice.value = '分类已变化，已清除失效筛选。';
+      notice.value = msg('records.theCategoryHasChangedAndTheInvalid');
     }
   },
 );
@@ -417,7 +428,8 @@ async function confirmed() {
 }
 function categoryName(id: string) {
   return (
-    snapshot.value?.categories.find((c) => c.id === id)?.name ?? '分类已变化'
+    snapshot.value?.categories.find((c) => c.id === id)?.name ??
+    tr('common.categoryHasChanged')
   );
 }
 function changeDate(date: string) {
@@ -476,20 +488,40 @@ onMounted(async () => {
 });
 const dateInput = ref<HTMLInputElement | null>(null);
 const statuses = [
-  { value: 'all', label: '全部' },
-  { value: 'ongoing', label: '进行中' },
-  { value: 'ended', label: '已结束' },
+  {
+    value: 'all',
+    get label() {
+      return tr('common.all');
+    },
+  },
+  {
+    value: 'ongoing',
+    get label() {
+      return tr('common.ongoing');
+    },
+  },
+  {
+    value: 'ended',
+    get label() {
+      return tr('common.ended');
+    },
+  },
 ] as const;
 function dateLabel(date: string) {
-  return isCalendarDate(date)
-    ? `${Number(date.slice(0, 4))}年${Number(date.slice(5, 7))}月${Number(date.slice(8))}日`
-    : '选择日期';
+  return isCalendarDate(date) ? calendarLabel(date) : tr('common.selectDate');
 }
+
 const selectedWeekday = computed(() =>
   isCalendarDate(selectedDate.value)
-    ? ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'][
-        (dateOrdinal(selectedDate.value) - 1) % 7
-      ]
+    ? [
+        tr('common.monday'),
+        tr('common.tuesday'),
+        tr('common.wednesday'),
+        tr('common.thursday'),
+        tr('common.friday'),
+        tr('common.saturday'),
+        tr('common.sunday'),
+      ][(dateOrdinal(selectedDate.value) - 1) % 7]
     : '',
 );
 const distribution = computed(() =>
@@ -527,13 +559,13 @@ const recent = computed(
         <h1>
           {{
             contentView === 'timeline'
-              ? '时间轴'
+              ? tr('common.timeline')
               : view === 'trash'
-                ? '回收站'
-                : '我的记录'
+                ? tr('common.trash')
+                : tr('common.myRecords')
           }}<span class="heading-dot">.</span>
         </h1>
-        <p>记录这段日子，正在做的事。</p>
+        <p>{{ tr('records.recordWhatYouAreDoingDuringThese') }}</p>
       </div>
       <button
         v-if="!readonly && view !== 'editor'"
@@ -541,38 +573,38 @@ const recent = computed(
         :disabled="busy"
         @click="open(null)"
       >
-        <PlannerIcon name="plus" />新建事项
+        <PlannerIcon name="plus" />{{ tr('common.newEntry2') }}
       </button>
     </div>
     <section
       v-if="mode === 'guest' && identityState === 'guest'"
       class="account-panel"
-      aria-label="记录保存方式"
+      :aria-label="tr('common.recordKeepingMethod')"
     >
       <div>
-        <strong>游客模式</strong>
-        <p>
-          事项、分类和每日重点仅保存在当前浏览器。换设备不会同步，清除网站数据会丢失。
-        </p>
+        <strong>{{ tr('common.guestMode') }}</strong>
+        <p>{{ tr('records.entriesCategoriesAndDailyHighlightsAreOnly') }}</p>
       </div>
     </section>
     <div
       v-if="!snapshot && (loading || accountLoading)"
       class="records-skeleton"
       role="status"
-      aria-label="正在加载记录"
+      :aria-label="tr('common.loadingRecords')"
     >
       <div class="skeleton-date"></div>
       <div class="skeleton-stats"><i></i><i></i><i></i></div>
       <div class="skeleton-content"></div>
     </div>
     <template v-if="snapshot">
-      <p v-if="readonly" class="notice">账号受限，当前仅可查看。</p>
+      <p v-if="readonly" class="notice">
+        {{ tr('records.theAccountIsRestrictedAndCanOnly') }}
+      </p>
       <template v-if="contentView === 'day' || contentView === 'timeline'">
         <section
           v-if="contentView !== 'timeline'"
           class="date-panel"
-          aria-label="选择日期"
+          :aria-label="tr('common.selectDate')"
         >
           <div class="date-toolbar">
             <div class="date-heading">
@@ -587,7 +619,7 @@ const recent = computed(
                 ref="dateInput"
                 :value="selectedDate"
                 type="date"
-                aria-label="选择日期"
+                :aria-label="tr('common.selectDate')"
                 min="0001-01-01"
                 max="9999-12-31"
                 @change="changeDate(($event.target as HTMLInputElement).value)"
@@ -602,24 +634,25 @@ const recent = computed(
                 selectedFocusTitles.length
                   ? selectedFocusTitles.join('、')
                   : selectedDate > today
-                    ? '这一天还没有重点'
-                    : '为这一天选一件值得记住的事'
+                    ? tr('common.thereIsNoFocusOnThisDay')
+                    : tr('records.chooseOneMemorableEventForThisDay')
               }}</span>
             </div>
             <div class="date-controls">
               <button
                 class="icon-btn"
-                aria-label="前一天"
+                :aria-label="tr('common.theDayBefore')"
                 :disabled="
                   !isCalendarDate(selectedDate) || selectedDate === '0001-01-01'
                 "
                 @click="changeDate(shiftDate(selectedDate, -1))"
               >
                 <PlannerIcon class="flip" name="chevron" /></button
-              ><button class="today-btn" @click="changeDate(today)">今天</button
+              ><button class="today-btn" @click="changeDate(today)">
+                {{ tr('common.today') }}</button
               ><button
                 class="icon-btn"
-                aria-label="后一天"
+                :aria-label="tr('common.theNextDay')"
                 :disabled="
                   !isCalendarDate(selectedDate) || selectedDate === '9999-12-31'
                 "
@@ -649,10 +682,17 @@ const recent = computed(
               <span class="day-name">{{ weekdays[index] }}</span
               ><span class="day-num-wrap"
                 ><span class="day-number">{{ Number(date.slice(8)) }}</span
-                ><span v-if="date === today" class="today-tag">今</span></span
+                ><span v-if="date === today" class="today-tag">{{
+                  tr('common.today2')
+                }}</span></span
               ><span
                 class="week-activity"
-                :aria-label="`${count}项，${focused}项重点`"
+                :aria-label="
+                  tr('records.itemsItemsFocus', {
+                    value0: count,
+                    value1: focused,
+                  })
+                "
               >
                 <span v-if="count" class="week-colors" aria-hidden="true"
                   ><i
@@ -661,7 +701,9 @@ const recent = computed(
                     :style="{ background: category.color }"
                   ></i
                 ></span>
-                <span>{{ count ? `${count} 项` : '—' }}</span
+                <span>{{
+                  count ? tr('records.item', { value0: count }) : '—'
+                }}</span
                 ><span v-if="focused" class="week-focus">★{{ focused }}</span>
               </span>
             </button>
@@ -670,27 +712,27 @@ const recent = computed(
         <section
           v-if="contentView === 'timeline'"
           class="timeline-panel"
-          aria-label="事项时间轴"
+          :aria-label="tr('common.entrytimeline')"
         >
           <div class="timeline-toolbar">
             <div class="timeline-heading">
-              <h2>每一段经历，都有自己的跨度</h2>
-              <p>左侧滚动事项 · 右侧缩放与拖动 · 点击事项查看</p>
+              <h2>{{ tr('records.everyExperienceHasItsOwnSpan') }}</h2>
+              <p>{{ tr('records.scrollEntryOnTheLeftZoomAnd') }}</p>
             </div>
             <div class="timeline-controls">
-              <select v-model="filter.sort" aria-label="排序方式">
-                <option value="asc">开始日期 ↑</option>
-                <option value="desc">开始日期 ↓</option>
+              <select v-model="filter.sort" :aria-label="tr('common.sortBy')">
+                <option value="asc">{{ tr('common.startDate2') }}</option>
+                <option value="desc">{{ tr('common.startDate3') }}</option>
               </select>
               <select
                 :value="scale"
-                aria-label="时间轴范围"
+                :aria-label="tr('common.timelineRange')"
                 @change="changeScale"
               >
-                <option value="month">月视图</option>
-                <option value="quarter">季度视图</option>
-                <option value="year">年视图</option>
-                <option value="all">全部时间</option>
+                <option value="month">{{ tr('common.month') }}</option>
+                <option value="quarter">{{ tr('common.quarter') }}</option>
+                <option value="year">{{ tr('common.year') }}</option>
+                <option value="all">{{ tr('common.allTime') }}</option>
               </select>
             </div>
           </div>
@@ -710,7 +752,7 @@ const recent = computed(
             <div
               class="timeline-state-tabs"
               role="group"
-              aria-label="时间轴状态筛选"
+              :aria-label="tr('common.timelineStatusFilter')"
             >
               <button
                 v-for="status in statuses"
@@ -726,7 +768,7 @@ const recent = computed(
             <div class="timeline-range-controls">
               <button
                 class="icon-btn"
-                aria-label="上一个时间范围"
+                :aria-label="tr('common.previousTimeRange')"
                 :disabled="range.start <= 1"
                 @click="move(-1)"
               >
@@ -738,12 +780,14 @@ const recent = computed(
                 }}</strong
               ><button
                 class="icon-btn"
-                aria-label="下一个时间范围"
+                :aria-label="tr('common.nextTimeRange')"
                 :disabled="range.endExclusive >= 3652060"
                 @click="move(1)"
               >
                 <PlannerIcon name="chevron" /></button
-              ><button class="today-btn" @click="locate">今天</button>
+              ><button class="today-btn" @click="locate">
+                {{ tr('common.today') }}
+              </button>
             </div>
           </div>
           <TimelineView
@@ -767,18 +811,23 @@ const recent = computed(
           <div v-if="!visible.length" class="timeline-empty">
             {{
               hasFilter
-                ? '这里还没有匹配的记录，试试其他分类、状态或关键词。'
-                : '时间轴还空着，记录第一段经历吧。'
+                ? tr('records.thereAreNoMatchingRecordsHereTry')
+                : tr('records.theTimelineIsStillEmptyLetS')
             }}
           </div>
           <footer class="timeline-footer">
-            <span><i></i>未结束事项自动延伸到今天</span
+            <span
+              ><i></i
+              >{{
+                tr('records.theUnfinishedEntryIsAutomaticallyExtendedTo')
+              }}</span
             ><span class="focus-legend"
-              >重点天数 <span aria-hidden="true">少</span>
+              >{{ tr('common.focusDays')
+              }}<span aria-hidden="true">{{ tr('common.less') }}</span>
               <span
                 class="focus-legend-ramp"
                 role="img"
-                aria-label="颜色由浅到深：1 天、2 至 3 天、4 至 7 天、8 天及以上"
+                :aria-label="tr('records.colorFromLightToDark1Day')"
               >
                 <i
                   v-for="step in FOCUS_HEAT_STEPS"
@@ -788,8 +837,8 @@ const recent = computed(
                   :title="step.label"
                   aria-hidden="true"
                 ></i> </span
-              ><span aria-hidden="true">多</span></span
-            ><span>{{ visible.length }} 件事项</span>
+              ><span aria-hidden="true">{{ tr('common.more') }}</span></span
+            ><span>{{ tr('records.entry', { value0: visible.length }) }}</span>
           </footer>
         </section>
         <div v-else class="content-grid">
@@ -799,10 +848,10 @@ const recent = computed(
                 <h2>
                   {{
                     filter.status === 'ended'
-                      ? '这一天，已结束的事'
+                      ? tr('records.thisDayIsOver')
                       : filter.status === 'all'
-                        ? '这一天，记录的事'
-                        : '这一天，正在做的事'
+                        ? tr('common.onThisDayWhatIRecorded')
+                        : tr('records.whatYouAreDoingOnThisDay')
                   }}
                 </h2>
                 <span>{{ visible.length }}</span>
@@ -825,7 +874,11 @@ const recent = computed(
                 @toggle="recordView.focusOnly = !recordView.focusOnly"
               /><FileTools />
             </div>
-            <div class="state-filters" role="group" aria-label="筛选记录状态">
+            <div
+              class="state-filters"
+              role="group"
+              :aria-label="tr('common.filterRecordStatus')"
+            >
               <button
                 v-for="status in statuses"
                 :key="status.value"
@@ -836,7 +889,7 @@ const recent = computed(
               >
                 {{ status.label }}</button
               ><button v-if="hasFilter" class="state-tab" @click="resetFilters">
-                清除筛选
+                {{ tr('common.clearFilters') }}
               </button>
             </div>
             <div class="event-area">
@@ -848,25 +901,29 @@ const recent = computed(
                 <h3>
                   {{
                     hasFilter
-                      ? '这里还没有匹配的记录'
+                      ? tr('records.thereIsNoMatchingRecordHereYet')
                       : snapshot.entries.length
-                        ? '这一天没有进行中的事项'
-                        : '记录一段经历，从今天开始'
+                        ? tr('records.thereAreNoEntriesInProgressOn')
+                        : tr('records.recordAnExperienceStartingToday')
                   }}
                 </h3>
-                <p v-if="hasFilter">试试其他分类或状态，或换个关键词。</p>
+                <p v-if="hasFilter">
+                  {{ tr('records.tryOtherCategoriesOrStatusesOrChange') }}
+                </p>
                 <p v-else-if="snapshot.entries.length">
-                  切换到已结束事项，或选择其他日期继续回看。
+                  {{ tr('records.switchToTheEndedEntryOrSelect') }}
                 </p>
                 <p v-else>
-                  一本读了一个月的书，一款玩了几周的游戏，<br />都可以在这里，慢慢留下痕迹。
+                  {{ tr('records.aBookIVeBeenReadingFor') }}<br />{{
+                    tr('records.youCanAllStayHereAndSlowly')
+                  }}
                 </p>
                 <button
                   v-if="hasFilter"
                   class="demo-link"
                   @click="resetFilters"
                 >
-                  清除筛选 →</button
+                  {{ tr('common.clearFilter') }}</button
                 ><button
                   v-else-if="!readonly"
                   class="demo-link"
@@ -874,8 +931,8 @@ const recent = computed(
                 >
                   {{
                     snapshot.entries.length
-                      ? '记录一件新事项'
-                      : '记录自己的第一件事'
+                      ? tr('common.recordANewEntry')
+                      : tr('records.recordYourselfFirst')
                   }}
                   →
                 </button>
@@ -918,29 +975,42 @@ const recent = computed(
                 class="demo-link"
                 @click="limit += 40"
               >
-                显示更多（已显示 {{ Math.min(limit, visible.length) }} /
-                {{ visible.length }}）
+                {{
+                  tr('records.showMoreShown', {
+                    value0: Math.min(limit, visible.length),
+                    value1: visible.length,
+                  })
+                }}
               </button>
             </div>
             <button v-if="!readonly" class="add-inline" @click="open(null)">
-              <PlannerIcon name="plus" />记录一件事
+              <PlannerIcon name="plus" />{{ tr('common.recordSomething') }}
             </button>
           </section>
           <aside class="insights-column">
             <section class="distribution-panel">
               <div class="panel-header">
-                <h2>分类分布</h2>
-                <span class="muted-label">当天全部记录</span>
+                <h2>{{ tr('common.categoryDistribution') }}</h2>
+                <span class="muted-label">{{
+                  tr('common.allRecordsForTheDay')
+                }}</span>
               </div>
               <div class="donut-wrap">
                 <div
                   class="donut"
                   :style="{ background: donutBackground }"
                   role="img"
-                  :aria-label="`分类分布，共 ${summary.count} 件事项`"
+                  :aria-label="
+                    tr('records.categoryDistributionTotalEntries', {
+                      value0: summary.count,
+                    })
+                  "
                 >
                   <div>
-                    <span>事项总数</span><strong>{{ summary.count }}件</strong>
+                    <span>{{ tr('common.totalNumberOfEntries') }}</span
+                    ><strong>{{
+                      tr('records.items', { value0: summary.count })
+                    }}</strong>
                   </div>
                 </div>
               </div>
@@ -953,7 +1023,9 @@ const recent = computed(
                 >
                   <i class="category-dot"></i
                   ><span class="legend-name">{{ category.name }}</span
-                  ><strong>{{ category.count }}件</strong
+                  ><strong>{{
+                    tr('records.items', { value0: category.count })
+                  }}</strong
                   ><span class="legend-percent"
                     >{{
                       Math.round((category.count / summary.count) * 100)
@@ -961,30 +1033,44 @@ const recent = computed(
                   >
                 </div>
                 <div v-if="!summary.count" class="legend-empty">
-                  记录之后，看看生活的不同侧面
+                  {{ tr('records.afterRecordingLookAtDifferentAspectsOf') }}
                 </div>
               </div>
-              <p class="distribution-note">按事项数量统计，每件事只计一次。</p>
+              <p class="distribution-note">
+                {{ tr('records.basedOnTheNumberOfEntriesEach') }}
+              </p>
             </section>
             <section class="next-panel">
-              <span class="next-eyebrow"><span></span>最近开始</span
+              <span class="next-eyebrow"
+                ><span></span>{{ tr('common.recentlyStarted') }}</span
               ><template v-if="recent"
                 ><button class="next-title recent-entry" @click="open(recent)">
                   {{ recent.title }}
                 </button>
                 <div class="next-meta">
                   <PlannerIcon name="calendar" />{{
-                    dateLabel(recent.startDate)
-                  }}开始 · {{ spanLabel(recent, today) }}
+                    tr('records.started', {
+                      value0: dateLabel(recent.startDate),
+                      value1: spanLabel(recent, today),
+                    })
+                  }}
                 </div></template
               ><template v-else
-                ><p class="next-title">最近，在做些什么？</p>
-                <div class="next-meta">一件小事，也值得被记录。</div></template
+                ><p class="next-title">
+                  {{ tr('records.whatHaveYouBeenDoingRecently') }}
+                </p>
+                <div class="next-meta">
+                  {{ tr('records.aSmallThingIsWorthRecording') }}
+                </div></template
               >
             </section>
             <div class="quote">
               <span>“</span>
-              <p>每一段经历，<br />都让日子有了自己的形状。</p>
+              <p>
+                {{ tr('common.everyExperience') }}<br />{{
+                  tr('records.itAllGivesLifeItsOwnShape')
+                }}
+              </p>
               <small>LITTLE THINGS, LASTING MEMORIES.</small>
               <div class="quote-art" aria-hidden="true">
                 <i></i><i></i><i></i>
@@ -996,7 +1082,7 @@ const recent = computed(
       <PlannerDialog
         v-if="view === 'editor'"
         :class="{ 'entry-detail-dialog': !editing }"
-        :label="editing ? '事项编辑' : '事项详情'"
+        :label="editing ? tr('common.entryedit') : tr('common.entryDetails')"
         @close="closeEditor"
       >
         <EntryEditor
@@ -1030,15 +1116,15 @@ const recent = computed(
           @edit="router.replace({ path: route.path, query: { edit: '1' } })"
           @close="closeEditor"
         />
-        <p v-else>事项不存在或当前不可编辑。</p>
+        <p v-else>{{ tr('records.theEntryDoesNotExistOrIs') }}</p>
         <section v-if="editor?.entry && editing" class="record-panel">
-          <h2>累计重点日期</h2>
+          <h2>{{ tr('common.cumulativeFocusDates') }}</h2>
           <p class="date-list">
             {{
               snapshot.focusDays
                 .filter((f) => f.entryId === editor?.entry?.id && f.focused)
                 .map((f) => f.date)
-                .join('、') || '尚无重点日'
+                .join('、') || tr('common.noFocusDayYet')
             }}
           </p>
         </section></PlannerDialog
@@ -1052,10 +1138,10 @@ const recent = computed(
             confirm = { kind: 'clear', dataVersion: snapshot.dataVersion }
           "
         >
-          永久清空回收站
+          {{ tr('common.clearTrashPermanently') }}
         </button>
         <p v-if="!snapshot.trashEntries.length" class="empty-state">
-          回收站为空。
+          {{ tr('common.trashIsEmpty') }}
         </p>
         <ul class="entry-list">
           <li
@@ -1067,26 +1153,38 @@ const recent = computed(
             <p>
               {{ categoryName(entry.categoryId) }} · {{ entry.startDate }} →
               {{
-                entry.endDate ?? (entry.startDate > today ? '结束未定' : '至今')
+                entry.endDate ??
+                (entry.startDate > today
+                  ? tr('common.endingPending')
+                  : tr('common.present'))
               }}
               · {{ spanLabel(entry, today) }}
             </p>
             <p>
-              删除：{{ formatBeijingTime(entry.deletedAt) }}<br />到期：{{
-                formatBeijingTime(entry.purgeAfter)
+              {{
+                tr('records.delete', {
+                  value0: formatBeijingTime(entry.deletedAt),
+                })
+              }}<br />{{
+                tr('records.expired', {
+                  value0: formatBeijingTime(entry.purgeAfter),
+                })
               }}
             </p>
             <p>
-              重点：{{
-                snapshot.focusDays
-                  .filter((f) => f.entryId === entry.id && f.focused)
-                  .map((f) => f.date)
-                  .join('、') || '无'
+              {{
+                tr('records.focus', {
+                  value0:
+                    snapshot.focusDays
+                      .filter((f) => f.entryId === entry.id && f.focused)
+                      .map((f) => f.date)
+                      .join('、') || tr('common.none'),
+                })
               }}
             </p>
             <IconButton
               icon="restore"
-              label="恢复事项"
+              :label="tr('common.restoreEntry')"
               v-if="!readonly"
               :disabled="
                 busy || (!!entry.purgeAfter && entry.purgeAfter <= serverTime)
@@ -1095,7 +1193,7 @@ const recent = computed(
             />
             <IconButton
               icon="trash"
-              label="永久删除此项"
+              :label="tr('common.deleteThisItemPermanently')"
               danger
               v-if="!readonly"
               :disabled="busy"
@@ -1105,7 +1203,7 @@ const recent = computed(
       ></template>
       <PlannerDialog
         v-if="view === 'categories' && !readonly"
-        label="分类管理"
+        :label="tr('common.categoryManagement')"
         @close="
           router.push({
             path: categoryReturnPath,
@@ -1115,7 +1213,7 @@ const recent = computed(
       >
         <button
           class="icon-btn manager-close"
-          aria-label="关闭分类管理"
+          :aria-label="tr('common.closeCategoryManagement')"
           @click="
             router.push({
               path: categoryReturnPath,
@@ -1135,25 +1233,27 @@ const recent = computed(
       /></PlannerDialog>
       <PlannerDialog
         v-if="confirm"
-        label="危险操作确认"
+        :label="tr('common.hazardousOperationConfirmation')"
         @close="confirm = null"
       >
         <section
           v-if="confirm"
           class="confirmation"
           role="region"
-          aria-label="危险操作确认"
+          :aria-label="tr('common.hazardousOperationConfirmation')"
           @keydown.esc="confirm = null"
         >
           <div class="modal-header">
             <h2>
               {{
-                confirm.kind === 'delete' ? '删除这件事项？' : '永久删除记录？'
+                confirm.kind === 'delete'
+                  ? tr('common.deleteThisEntry')
+                  : tr('common.permanentlyDeleteRecords')
               }}
             </h2>
             <button
               class="icon-btn"
-              aria-label="关闭删除确认"
+              :aria-label="tr('common.turnOffDeleteConfirmation')"
               @click="confirm = null"
             >
               <PlannerIcon name="close" />
@@ -1162,22 +1262,33 @@ const recent = computed(
           <p>
             {{
               confirm.kind === 'delete'
-                ? `将“${confirm.entry.title}”及重点移入回收站，保留 30 天。`
+                ? tr('records.moveAndEmphasisToTrashAndKeep', {
+                    value0: confirm.entry.title,
+                  })
                 : confirm.kind === 'purge'
-                  ? `永久删除“${confirm.entry.title}”？无法恢复。`
-                  : `永久清空当前 ${snapshot.trashEntries.length} 条回收站事项？无法恢复；期间有修改会重新确认。`
+                  ? tr('records.permanentlyDeleteUnableToRecover', {
+                      value0: confirm.entry.title,
+                    })
+                  : tr('records.permanentlyClearTheCurrentTrashentryUnableTo', {
+                      value0: snapshot.trashEntries.length,
+                    })
             }}
           </p>
           <button class="button danger" :disabled="busy" @click="confirmed">
-            确认{{
-              confirm.kind === 'delete' ? '移入回收站' : '永久删除'
+            {{
+              tr('records.confirm', {
+                value0:
+                  confirm.kind === 'delete'
+                    ? tr('common.moveIntoTrash')
+                    : tr('common.deletePermanently'),
+              })
             }}</button
           ><button
             class="button subtle"
             :disabled="busy"
             @click="confirm = null"
           >
-            取消
+            {{ tr('common.cancel') }}
           </button>
         </section></PlannerDialog
       >

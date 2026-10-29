@@ -1,0 +1,11 @@
+{
+  "api.theDownloadFileEncodingIsInvalidPlease": "The download file encoding is invalid, please try again.",
+  "api.theDownloadResponseFormatIsInvalidPlease": "The download response format is invalid, please try again.",
+  "api.unableToReadLoginCredentialsPleaseCheck": "Unable to read login credentials, please check local storage.",
+  "api.loginCredentialCleanupFailedPleaseCheckLocal": "Login credential cleanup failed, please check local storage.",
+  "api.theServiceAddressMustUseHttps": "The service address must use HTTPS.",
+  "api.theServiceAddressHasNotBeenConfigured": "The service address has not been configured, please contact the service maintainer.",
+  "api.theCloudRequestWasConfirmedButThe": "The cloud request was confirmed, but the login credentials could not be persisted; the current session is only in memory, please check the space and log in again.",
+  "api.wechatCredentialsNotObtainedPleaseTryAgain": "WeChat credentials not obtained, please try again.",
+  "api.unableToObtainWechatLoginCredentialsPlease": "Unable to obtain WeChat login credentials, please try again."
+}

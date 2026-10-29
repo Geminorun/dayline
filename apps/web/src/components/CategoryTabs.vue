@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { tr, messageRef } from '../i18n/index';
+import { msg } from '@dayline/locales';
 import {
   computed,
   nextTick,
@@ -21,8 +23,8 @@ const emit = defineEmits<{ select: [id: string] }>();
 const ids = ref(props.categories.map((c) => c.id));
 const list = ref<HTMLElement | null>(null);
 const saving = ref(false),
-  error = ref(''),
-  announcement = ref('');
+  error = messageRef(),
+  announcement = messageRef();
 const ordered = computed(() =>
   ids.value.flatMap((id) => {
     const category = props.categories.find((c) => c.id === id);
@@ -55,11 +57,13 @@ async function publish(next: string[], focusId?: string) {
   error.value = '';
   try {
     await props.reorder(next);
-    if (alive) announcement.value = '分类顺序已保存';
+    if (alive) announcement.value = msg('common.sortingOrderSaved');
   } catch (cause) {
     if (alive) {
       ids.value = props.categories.map((c) => c.id);
-      error.value = `分类顺序未保存：${errorMessage(cause)}`;
+      error.value = msg('categoryTabs.sortingOrderNotSaved', {
+        value0: errorMessage(cause),
+      });
     }
   } finally {
     if (alive) {
@@ -124,12 +128,12 @@ onBeforeUnmount(() => {
         :aria-pressed="!selected"
         @click="emit('select', '')"
       >
-        全部
+        {{ tr('common.all') }}
       </button>
       <div
         ref="list"
         class="category-sort-list"
-        aria-label="分类，可拖动或按 Alt 加左右方向键排序"
+        :aria-label="tr('categoryTabs.categoryYouCanDragOrPressAlt')"
       >
         <button
           v-for="category in ordered"
@@ -139,7 +143,11 @@ onBeforeUnmount(() => {
           :data-id="category.id"
           :class="{ active: selected === category.id }"
           :aria-pressed="selected === category.id"
-          :title="`${category.name} · 拖动排序，或按 Alt + 左右方向键`"
+          :title="
+            tr('categoryTabs.dragToSortOrPressAltLeft', {
+              value0: category.name,
+            })
+          "
           @keydown="move($event, category.id)"
           @click="select(category.id)"
         >
@@ -150,9 +158,11 @@ onBeforeUnmount(() => {
     <RouterLink
       class="category-manage-button"
       to="/categories"
-      aria-label="管理分类"
-      title="管理分类"
-      ><PlannerIcon name="sliders" /><span>管理</span></RouterLink
+      :aria-label="tr('common.managementCategory')"
+      :title="tr('common.managementCategory')"
+      ><PlannerIcon name="sliders" /><span>{{
+        tr('common.manage')
+      }}</span></RouterLink
     >
     <span class="sr-only" role="status">{{ announcement }}</span>
     <p v-if="error" class="category-order-error" role="alert">{{ error }}</p>

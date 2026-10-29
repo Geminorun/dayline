@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { SecurityService } from '../security/security.service.js';
 import { Inject, Injectable } from '@nestjs/common';
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
@@ -48,7 +49,11 @@ export class SessionGuard implements CanActivate {
         !request.headers.origin ||
         !this.config.trustedOrigins.includes(request.headers.origin)
       ) {
-        throw new AppError(403, 'UNTRUSTED_ORIGIN', '请求来源未被允许。');
+        throw new AppError(
+          403,
+          'UNTRUSTED_ORIGIN',
+          msg('errors.theRequestSourceIsNotAllowed'),
+        );
       }
     }
     forwardSessionHeaders(

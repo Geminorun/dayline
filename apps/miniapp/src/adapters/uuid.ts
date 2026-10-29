@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { GuestError } from '@dayline/contracts';
 declare const wx: {
   getRandomValues(options: {
@@ -12,7 +13,7 @@ export async function uuidBatch(count: number): Promise<string[]> {
       reject(
         new GuestError(
           'RANDOM_UNAVAILABLE',
-          '当前微信版本不支持安全随机数，请更新微信后重试。',
+          msg('uuid.theCurrentWechatVersionDoesNotSupport'),
         ),
       );
       return;
@@ -22,14 +23,20 @@ export async function uuidBatch(count: number): Promise<string[]> {
       success: (result) => resolve(result.randomValues),
       fail: () =>
         reject(
-          new GuestError('RANDOM_UNAVAILABLE', '无法生成记录标识，请重试。'),
+          new GuestError(
+            'RANDOM_UNAVAILABLE',
+            msg('uuid.unableToGenerateRecordIdPleaseTry'),
+          ),
         ),
     });
   });
   const data = new Uint8Array(bytes),
     ids: string[] = [];
   if (data.length !== count * 16)
-    throw new GuestError('RANDOM_UNAVAILABLE', '无法生成记录标识，请重试。');
+    throw new GuestError(
+      'RANDOM_UNAVAILABLE',
+      msg('uuid.unableToGenerateRecordIdPleaseTry'),
+    );
   for (let i = 0; i < count; i++) {
     const part = data.slice(i * 16, (i + 1) * 16);
     part[6] = ((part[6] ?? 0) & 15) | 64;

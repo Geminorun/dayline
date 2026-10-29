@@ -1,0 +1,13 @@
+{
+  "drafts.pleaseSelectTheTargetCategoryExplicitlyThe": "Please select the target category explicitly; the original text of the old draft remains.",
+  "drafts.localCopyFailedTheOriginalDraftIs": "Local copy failed, the original draft is retained. Please check the local storage and try again.",
+  "drafts.abandonThisLocalDraftTheCloudEntry": "Abandon this local draft? The cloud entry remains unchanged.",
+  "drafts.theseContentsAreOnlyTemporaryOnThis": "These contents are only temporary on this device. After continuing to edit and save, it will be uploaded to the account.",
+  "drafts.lastBuffer": "{value0} · Last buffer {value1}",
+  "drafts.onlyAfterTheUnifiedAccountIsRe": "Only after the unified account is re-verified and the back-end mapping is obtained, the local source draft is read. Normally switching accounts will not migrate the draft.",
+  "drafts.mergeCompleted": "{value0} · Merge completed",
+  "drafts.explicitlySelectSaveCategoryAsWhenCategory": "Explicitly select Save Category As when category mapping is missing",
+  "drafts.originalDatum": "{value0} — {value1} · Original datum {value2}",
+  "drafts.keepTheOriginalAndCopyItAs": "Keep the original and copy it as a draft to be checked.",
+  "drafts.noUnsavedChanges": "No unsaved changes."
+}

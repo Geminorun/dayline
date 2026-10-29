@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { tr } from '../../i18n/index';
+import { msg } from '@dayline/locales';
 import { computed, ref } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import { nextCategoryColor } from '@dayline/core';
@@ -49,7 +51,7 @@ async function save() {
       color: color.value,
     });
     if (!input.success) {
-      error.value = '分类名称须为 1–12 字，颜色须为 #RRGGBB。';
+      error.value = msg('mini.categoryNamesMustBe112Characters');
       return;
     }
     if (edit.value) {
@@ -99,52 +101,69 @@ async function remove() {
 </script>
 <template>
   <view class="page"
-    ><text class="title">分类管理</text
-    ><text class="text muted"
-      >最多 20 个、至少一个。删除分类会把记录移入回收站。</text
-    ><text v-if="loading" class="text">正在读取…</text
+    ><text class="title">{{ tr('common.categoryManagement') }}</text
+    ><text class="text muted">{{
+      tr('mini.maximum20AtLeastOneDeletingA')
+    }}</text
+    ><text v-if="loading" class="text">{{ tr('common.loading') }}</text
     ><text v-if="error" class="text error">{{ error }}</text
     ><text v-if="notice" class="text notice">{{ notice }}</text
     ><template v-if="snapshot"
       ><view v-for="c in snapshot.categories" :key="c.id" class="card"
         ><text class="heading"
-          ><text :style="{ color: c.color }">● </text>{{ c.name }} ·
-          {{ entries.filter((e) => e.categoryId === c.id).length }}
-          条（含回收站）</text
+          ><text :style="{ color: c.color }">● </text
+          >{{
+            tr('mini.includingTrash', {
+              value0: c.name,
+              value1: entries.filter((e) => e.categoryId === c.id).length,
+            })
+          }}</text
         ><view v-if="!readonly" class="actions"
           ><button class="secondary" :disabled="busy" @click="start(c)">
-            改名 / 改色</button
+            {{ tr('common.changeNameColor') }}</button
           ><button
             class="secondary"
             :disabled="busy || snapshot.categories.length <= 1"
             @click="confirmDelete(c)"
           >
-            删除分类
+            {{ tr('common.deleteCategory') }}
           </button></view
         ></view
       ><view v-if="!readonly" class="card"
-        ><text class="heading">{{ edit ? '修改分类' : '新建分类' }}</text
-        ><text class="text">分类名称</text
-        ><input v-model="name" :maxlength="24" aria-label="分类名称" /><text
-          class="text"
-          >颜色 #RRGGBB</text
-        ><input v-model="color" aria-label="分类颜色" /><button
-          :disabled="busy"
-          @click="save"
-        >
-          {{ edit ? '保存分类修改' : '创建分类' }}</button
+        ><text class="heading">{{
+          edit ? tr('common.modifyCategory') : tr('common.newCategory2')
+        }}</text
+        ><text class="text">{{ tr('common.categoryName') }}</text
+        ><input
+          v-model="name"
+          :maxlength="24"
+          :aria-label="tr('common.categoryName')"
+        /><text class="text">{{ tr('mini.colorRrggbb') }}</text
+        ><input
+          v-model="color"
+          :aria-label="tr('common.categoryColor')"
+        /><button :disabled="busy" @click="save">
+          {{
+            edit
+              ? tr('common.saveCategoryChanges')
+              : tr('common.createACategory2')
+          }}</button
         ><button v-if="edit" class="secondary" :disabled="busy" @click="reset">
-          取消修改
+          {{ tr('common.cancelModification') }}
         </button></view
       ><view v-if="deleting" class="card confirmation"
-        ><text class="heading">删除“{{ deleting.name }}”？</text
-        ><text class="text"
-          >包含
-          {{ entries.filter((e) => e.categoryId === deleting?.id).length }}
-          条记录，删除后将进入回收站，30 天内可恢复。</text
-        ><button :disabled="busy" @click="remove">删除分类与记录</button
+        ><text class="heading">{{
+          tr('mini.delete', { value0: deleting.name })
+        }}</text
+        ><text class="text">{{
+          tr('mini.containsRecordsWhichWillBeTrashedAfter', {
+            value0: entries.filter((e) => e.categoryId === deleting?.id).length,
+          })
+        }}</text
+        ><button :disabled="busy" @click="remove">
+          {{ tr('common.deleteCategoriesAndRecords') }}</button
         ><button class="secondary" :disabled="busy" @click="deleting = null">
-          取消
+          {{ tr('common.cancel') }}
         </button></view
       >
     </template>

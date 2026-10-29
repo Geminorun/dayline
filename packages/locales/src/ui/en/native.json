@@ -1,0 +1,17 @@
+{
+  "native.day": "Daily review",
+  "native.entries": "All records",
+  "native.timeline": "Timeline",
+  "native.me": "Me",
+  "native.entry.edit": "Entry details",
+  "native.categories": "Categories",
+  "native.trash": "Trash",
+  "native.account.index": "Dayline account",
+  "native.scan.confirm": "Confirm sign-in",
+  "native.account.identity": "Linked accounts",
+  "native.account.deletion": "Account deletion",
+  "native.tabs.day": "Review",
+  "native.tabs.entries": "Entries",
+  "native.tabs.timeline": "Timeline",
+  "native.tabs.me": "Me"
+}

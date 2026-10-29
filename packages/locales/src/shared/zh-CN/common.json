@@ -1,0 +1,11 @@
+{
+  "common.displayNameSaved": "显示名已保存。",
+  "common.signedOut": "已退出登录。",
+  "common.fileNotGenerated2": "文件未生成。",
+  "common.unableToReadAccount": "无法读取账号。",
+  "common.theLocalSpaceHasChanged": "本机空间已变化。",
+  "common.savedToThisMachine": "已保存到本机。",
+  "common.savedToTheCloud": "已保存到云端。",
+  "common.theAccountHasChanged": "账号已变化。",
+  "common.joinMessages": "{value0} {value1}"
+}

@@ -21,6 +21,7 @@ it('coalesces foreground reads, honors snapshot Retry-After and retains the last
     data = createGuestPackage(() => crypto.randomUUID(), now);
   const snapshot = { ...guestSnapshot(data, '2026-10-28'), userId: id };
   const profile = {
+    locale: 'zh-CN',
     id,
     displayName: '读取测试',
     profileVersion: 1,

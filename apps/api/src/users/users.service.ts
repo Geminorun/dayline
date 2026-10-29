@@ -1,3 +1,4 @@
+import { msg, normalizeLocale } from '@dayline/locales';
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 import { BUSINESS_TIME_ZONE } from '@dayline/core';
@@ -11,6 +12,7 @@ import type { Prisma } from '../generated/prisma/client.js';
 const profileSelect = {
   id: true,
   name: true,
+  locale: true,
   email: true,
   emailVerified: true,
   emailKind: true,
@@ -40,23 +42,40 @@ export class UsersService {
         user.status === 'merged' ||
         user.authEpoch !== actor.authEpoch
       )
-        throw new AppError(401, 'SESSION_REVOKED', '登录状态已失效。');
+        throw new AppError(
+          401,
+          'SESSION_REVOKED',
+          msg('errors.theLoginStatusHasExpired'),
+        );
       if (user.status !== 'active')
-        throw new AppError(403, 'ACCOUNT_PENDING_DELETION', '账号正在注销中。');
+        throw new AppError(
+          403,
+          'ACCOUNT_PENDING_DELETION',
+          msg('errors.accountDeletionIsPending'),
+        );
       if (user.profileVersion !== input.expectedProfileVersion)
         throw new AppError(
           409,
           'VERSION_CONFLICT',
-          '显示名已有更新，请重新读取后核对。',
+          msg('errors.profileConflict'),
           {
             expectedVersion: input.expectedProfileVersion,
             currentVersion: user.profileVersion,
           },
         );
-      if (user.name !== input.displayName)
+      if (
+        (input.displayName !== undefined && user.name !== input.displayName) ||
+        (input.locale !== undefined && user.locale !== input.locale)
+      )
         await tx.user.update({
           where: { id: actor.userId },
-          data: { name: input.displayName, profileVersion: { increment: 1 } },
+          data: {
+            ...(input.displayName === undefined
+              ? {}
+              : { name: input.displayName }),
+            ...(input.locale === undefined ? {} : { locale: input.locale }),
+            profileVersion: { increment: 1 },
+          },
         });
       return readProfile(tx, actor.userId);
     });
@@ -75,9 +94,15 @@ async function readProfile(
     where: { id: userId },
     select: profileSelect,
   });
-  if (!user) throw new AppError(404, 'RESOURCE_NOT_FOUND', '账号不存在。');
+  if (!user)
+    throw new AppError(
+      404,
+      'RESOURCE_NOT_FOUND',
+      msg('errors.theAccountDoesNotExist'),
+    );
   return {
     id: user.id,
+    locale: normalizeLocale(user.locale),
     displayName: user.name,
     profileVersion: user.profileVersion,
     email: user.emailKind === 'real' ? user.email : null,

@@ -1,0 +1,4 @@
+{
+  "syncStatus.recordsAreSavedOnThisDeviceClick": "记录保存在此设备，点击刷新",
+  "syncStatus.retryInSeconds": "{value0} 秒后重试"
+}

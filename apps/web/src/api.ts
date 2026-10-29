@@ -1,5 +1,7 @@
+import { msg } from '@dayline/locales';
 import { ClientError, ApiClient } from '@dayline/api-client';
 import type { Transport } from '@dayline/api-client';
+import { locale } from './i18n';
 
 async function downloadText(response: Response) {
   const bytes = await response.arrayBuffer();
@@ -8,7 +10,10 @@ async function downloadText(response: Response) {
       bytes,
     );
   } catch {
-    throw new ClientError('INVALID_RESPONSE', '下载文件编码无效，请重试。');
+    throw new ClientError(
+      'INVALID_RESPONSE',
+      msg('api.theDownloadFileEncodingIsInvalidPlease'),
+    );
   }
 }
 export const cookieTransport: Transport = async (request) => {
@@ -26,6 +31,7 @@ export const cookieTransport: Transport = async (request) => {
       method: request.method,
       credentials: 'include',
       headers: {
+        'Accept-Language': locale.value,
         ...request.headers,
         ...(request.body === undefined
           ? {}
@@ -58,7 +64,10 @@ export const cookieTransport: Transport = async (request) => {
             request.path.endsWith('json') ? 'application/json' : 'text/csv',
           ))
     )
-      throw new ClientError('INVALID_RESPONSE', '下载响应格式无效，请重试。');
+      throw new ClientError(
+        'INVALID_RESPONSE',
+        msg('api.theDownloadResponseFormatIsInvalidPlease'),
+      );
     const body: unknown =
       response.status === 204 || response.status === 304
         ? undefined

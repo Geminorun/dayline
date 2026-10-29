@@ -1,0 +1,6 @@
+{
+  "focusHelp.highlightsOfItems": "Highlights of {value0}: {value1} items, {value2}",
+  "focusHelp.highlightsOfItems2": "Highlights of {value0} · {value1} items",
+  "focusHelp.canRecordTheKeyPointsOfToday": "Can record the key points of today and past dates.",
+  "focusHelp.clickToSeeOnlyTheHighlightsOf": "Click to see only the highlights of the day. It is recommended to choose 1-2 items every day, and you can switch the date to make up for it."
+}

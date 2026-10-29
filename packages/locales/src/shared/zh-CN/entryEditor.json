@@ -1,0 +1,12 @@
+{
+  "entryEditor.theLocalDraftTemporaryStorageFailedThe": "本机草稿暂存失败，输入仍在。请重试，或手动保留输入后再离开。",
+  "entryEditor.theOriginalEntryHasBeenPermanentlyCleared": "原事项已永久清理；可以保留草稿或明确另存副本。",
+  "entryEditor.itHasBeenSavedToTheCloud": "已保存到云端，但本机草稿清理失败，可稍后核对后放弃。",
+  "entryEditor.theAccountHasChangedPleaseReVerify": "账号已变化，请重新验证原账号；当前输入仍保留。",
+  "entryEditor.pleaseCheckTheTitle1100Words": "请检查标题（1–100 字）、有效日期和分类。",
+  "entryEditor.currentlyOfflineDraftIsRetainedPleaseSave": "当前离线，草稿保留；联网后请手动保存。",
+  "entryEditor.theAccountHasBeenChangedAndThe": "账号已变化，草稿已留在原账号。",
+  "entryEditor.thisStableRecordIdentifierAlreadyHasDifferent": "此稳定记录标识已存在不同内容，请核对冲突。",
+  "entryEditor.theSavedResultsArePendingConfirmationAnd": "保存结果待确认，正在读取云端核对。",
+  "entryEditor.theSavingResultNeedsToBeConfirmed": "保存结果待确认；已读取可用的当前内容，请核对后手动重试。"
+}

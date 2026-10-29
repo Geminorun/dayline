@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import Dexie, { type Table } from 'dexie';
 import {
   GuestError,
@@ -36,7 +37,7 @@ export class WebGuestRepository implements GuestRepository {
       if (cause instanceof GuestError) throw cause;
       throw new GuestError(
         'LOCAL_UNAVAILABLE',
-        '无法读取本机记录。原始数据保持不变，请检查浏览器存储权限。',
+        msg('guest-repository.unableToReadLocalRecordTheOriginal'),
       );
     }
   }
@@ -54,7 +55,7 @@ export class WebGuestRepository implements GuestRepository {
     )
       throw new GuestError(
         'LOCAL_RECOVERY_REQUIRED',
-        '本机文件任务归属无效，原文已保留。',
+        msg('guest-repository.theLocalFileTaskOwnershipIsInvalid'),
       );
     return op;
   }
@@ -67,18 +68,27 @@ export class WebGuestRepository implements GuestRepository {
         (op.jobId !== op.localPlan.id ||
           op.clientOperationId !== op.localPlan.clientOperationId))
     )
-      throw new GuestError('LOCAL_RECOVERY_REQUIRED', '文件任务归属无效。');
+      throw new GuestError(
+        'LOCAL_RECOVERY_REQUIRED',
+        msg('guest-repository.fileTaskOwnershipIsInvalid'),
+      );
     await this.database.transaction('rw', this.packages, async () => {
       const current = await this.read();
       if (!current || current.guestDatasetId !== op.ownerId)
-        throw new GuestError('LOCAL_RECOVERY_REQUIRED', '文件任务数据集不符。');
+        throw new GuestError(
+          'LOCAL_RECOVERY_REQUIRED',
+          msg('guest-repository.fileTaskDataSetDoesNotMatch'),
+        );
       const old = await this.fileOperation(op.ownerId);
       if (
         old &&
         old.clientOperationId === op.clientOperationId &&
         (old.text !== op.text || old.format !== op.format)
       )
-        throw new GuestError('IDEMPOTENCY_KEY_REUSED', '原任务文件不能更换。');
+        throw new GuestError(
+          'IDEMPOTENCY_KEY_REUSED',
+          msg('guest-repository.theOriginalTaskFileCannotBeReplaced'),
+        );
       await this.packages.put({
         key: 'file:' + op.ownerId,
         value: fileOperationSchema.parse(op),
@@ -91,7 +101,7 @@ export class WebGuestRepository implements GuestRepository {
     if (v.environment !== this.fileEnvironment || v.ownerId !== ownerId)
       throw new GuestError(
         'LOCAL_RECOVERY_REQUIRED',
-        '文件回执归属无效，原数据已保留。',
+        msg('guest-repository.theFileReceiptOwnershipIsInvalidAnd'),
       );
     return v.receipts;
   }
@@ -114,18 +124,27 @@ export class WebGuestRepository implements GuestRepository {
         saved.jobId !== op.jobId ||
         saved.localPlan?.planDigest !== plan.planDigest
       )
-        throw new GuestError('PREVIEW_STALE', '文件计划已变化，请重新读取。');
+        throw new GuestError(
+          'PREVIEW_STALE',
+          msg('guest-repository.theFilePlanHasChangedPleaseRead'),
+        );
       if (saved.status === 'committed') return saved.localPlan;
       const current = await this.read();
       if (!current || current.guestDatasetId !== op.ownerId)
-        throw new GuestError('PREVIEW_STALE', '本机空间已变化。');
+        throw new GuestError(
+          'PREVIEW_STALE',
+          msg('common.theLocalSpaceHasChanged'),
+        );
       const frozen = saved.localPlan;
       if (
         !frozen ||
         frozen.id !== plan.id ||
         frozen.planRevision !== plan.planRevision
       )
-        throw new GuestError('PREVIEW_STALE', '文件计划已有变化。');
+        throw new GuestError(
+          'PREVIEW_STALE',
+          msg('guest-repository.theFilePlanHasChanged'),
+        );
       const completed = await this.fileMappings(op.ownerId);
       if (
         frozen.rows.some(
@@ -144,7 +163,7 @@ export class WebGuestRepository implements GuestRepository {
       )
         throw new GuestError(
           'PREVIEW_STALE',
-          '此来源已由另一任务完成，请重新预览。',
+          msg('guest-repository.thisSourceHasBeenCompletedByAnother'),
         );
       const next = guestFileCommit(current, frozen, now),
         applied = applyFilePlan(current, frozen, now);
@@ -195,7 +214,7 @@ export class WebGuestRepository implements GuestRepository {
         )
           throw new GuestError(
             'LOCAL_CONFLICT',
-            '另一标签页已修改本机记录。请重新读取后核对输入。',
+            msg('guest-repository.anotherTabHasModifiedTheLocalRecord'),
           );
         await this.packages.put({ key: 'current', value: checked });
       });
@@ -203,7 +222,7 @@ export class WebGuestRepository implements GuestRepository {
       if (cause instanceof GuestError) throw cause;
       throw new GuestError(
         'LOCAL_WRITE_FAILED',
-        '本机保存失败，原始记录和当前输入已保留。请检查剩余空间后重试。',
+        msg('guest-repository.localSaveFailedOriginalRecordAndCurrent'),
       );
     }
   }

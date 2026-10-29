@@ -1,3 +1,5 @@
+import { tr, messageRef } from '../i18n/index';
+import { msg } from '@dayline/locales';
 import { computed, ref } from 'vue';
 import { SnapshotCoordinator, ClientError } from '@dayline/api-client';
 import { resetRecordView } from './view-state';
@@ -26,10 +28,10 @@ const mode = ref<'guest' | 'account'>('guest'),
   guest = ref<GuestPackage | null>(null),
   loading = ref(false),
   busy = ref(false),
-  error = ref(''),
-  notice = ref(''),
+  error = messageRef(),
+  notice = messageRef(),
   serverTime = ref(''),
-  cacheError = ref(''),
+  cacheError = messageRef(),
   identityState = ref<'unknown' | 'guest' | 'verified' | 'expired'>('unknown');
 const { current, refresh } = useAccount();
 const retrySeconds = ref(0);
@@ -66,7 +68,9 @@ function refreshError(cause: unknown) {
         Math.ceil((retryUntil - Date.now()) / 1000),
       );
       if (retrySeconds.value)
-        error.value = `操作过于频繁，请等待 ${retrySeconds.value} 秒后再试。`;
+        error.value = msg('errors.theOperationIsTooFrequentPleaseWait', {
+          value0: retrySeconds.value,
+        });
       else {
         clearInterval(retryTimer);
         retryTimer = undefined;
@@ -95,15 +99,17 @@ const coordinator = new SnapshotCoordinator(
     }
   },
   () => {
-    cacheError.value =
-      '本机账号缓存不可用，云端保存状态不受影响；草稿仍独立保留。';
+    cacheError.value = msg('workspace.theLocalAccountCacheIsUnavailableAnd');
   },
   () => performance.now(),
 );
 let identityWritePending = false;
 async function identityWrite<T>(work: () => Promise<T>): Promise<T> {
   if (identityWritePending)
-    throw new ClientError('OPERATION_BUSY', '身份操作正在处理中。');
+    throw new ClientError(
+      'OPERATION_BUSY',
+      msg('workspace.identityOperationInProgress'),
+    );
   identityWritePending = true;
   stop();
   const generation = api.getGeneration();
@@ -111,7 +117,10 @@ async function identityWrite<T>(work: () => Promise<T>): Promise<T> {
   try {
     await loadWork?.catch(() => {});
     if (generation !== api.getGeneration())
-      throw new ClientError('STALE_RESPONSE', '账号已变化，请重新验证。');
+      throw new ClientError(
+        'STALE_RESPONSE',
+        msg('workspace.theAccountHasChangedPleaseVerifyAgain'),
+      );
     return await work();
   } finally {
     resumeProbes();
@@ -152,7 +161,7 @@ api.onIdentityChange(() => {
   notice.value = '';
   error.value = api.getAccount()
     ? ''
-    : '会话已变化，私人内容已隐藏，原账号草稿保留。请重新验证或明确继续游客。';
+    : msg('workspace.theSessionHasChangedPrivateContentHas');
   cacheError.value = '';
   mode.value = 'guest';
   resetRecordView();
@@ -246,7 +255,10 @@ export function useWorkspace() {
         await refresh();
         if (intent !== switchIntent) return;
         if (!current.value)
-          throw new ClientError('UNAUTHENTICATED', '请先登录。');
+          throw new ClientError(
+            'UNAUTHENTICATED',
+            msg('errors.pleaseLogInFirst'),
+          );
         mode.value = 'account';
         identityState.value = 'verified';
         coordinator.reset(current.value.id);
@@ -278,7 +290,7 @@ export function useWorkspace() {
     mutation: GuestMutation,
     cloud: () => Promise<unknown>,
   ) {
-    if (busy.value) throw new Error('操作正在进行');
+    if (busy.value) throw new Error(tr('common.operationInProgress'));
     const generation = scopeGeneration,
       space = mode.value;
     busy.value = true;
@@ -286,7 +298,8 @@ export function useWorkspace() {
     notice.value = '';
     try {
       if (space === 'guest') {
-        if (!guest.value) throw new Error('本机记录尚未加载');
+        if (!guest.value)
+          throw new Error(tr('common.theLocalRecordHasNotBeenLoaded'));
         const data = await commitGuestMutation(
           guestRepository,
           guest.value,
@@ -297,14 +310,20 @@ export function useWorkspace() {
         guest.value = data;
         snapshot.value = guestSnapshot(data, businessToday());
         serverTime.value = new Date().toISOString();
-        notice.value = '已保存到本机。';
+        notice.value = msg('common.savedToThisMachine');
       } else {
         if (!navigator.onLine)
-          throw new ClientError('OFFLINE', '当前离线，联网后请手动保存。');
+          throw new ClientError(
+            'OFFLINE',
+            msg('workspace.currentlyOfflinePleaseSaveManuallyAfterConnecting'),
+          );
         const result = await cloud();
         if (generation !== scopeGeneration)
-          throw new ClientError('STALE_RESPONSE', '账号已变化，原输入仍保留。');
-        notice.value = '已保存到云端。';
+          throw new ClientError(
+            'STALE_RESPONSE',
+            msg('workspace.theAccountHasBeenChangedButThe'),
+          );
+        notice.value = msg('common.savedToTheCloud');
         try {
           if (coordinator.requiresFullRefresh()) await reload();
           else {

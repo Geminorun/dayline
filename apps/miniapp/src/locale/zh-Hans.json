@@ -1,0 +1,17 @@
+{
+  "native.day": "每日回看",
+  "native.entries": "全部记录",
+  "native.timeline": "时间轴",
+  "native.me": "我的",
+  "native.entry.edit": "事项详情",
+  "native.categories": "分类管理",
+  "native.trash": "回收站",
+  "native.account.index": "日序 · 账号",
+  "native.scan.confirm": "确认登录网页",
+  "native.account.identity": "登录方式与合并",
+  "native.account.deletion": "账号注销与撤销",
+  "native.tabs.day": "回看",
+  "native.tabs.entries": "记录",
+  "native.tabs.timeline": "时间轴",
+  "native.tabs.me": "我的"
+}

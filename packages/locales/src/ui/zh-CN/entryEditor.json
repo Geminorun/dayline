@@ -1,0 +1,21 @@
+{
+  "entryEditor.thisMachineHasBeenStagedAndHas": "已暂存本机，尚未提交。",
+  "entryEditor.theCurrentInputHasNotBeenSaved": "当前输入尚未保存，确定放弃并离开？",
+  "entryEditor.theOriginalCategoryHasBeenDeletedPlease": "原分类已删除，请重选",
+  "entryEditor.savedToTheCloudThereAreStill": "已保存到云端，仍有未提交修改。",
+  "entryEditor.abandonThisDraftModificationAndUseServer": "放弃这份草稿修改，使用服务器内容？",
+  "entryEditor.serverFieldsCheckedWillMyChangesBe": "已核对服务器字段，将按当前版本保存我的修改？",
+  "entryEditor.saveTheCurrentEntryAsANew": "将当前输入另存为一条新事项，保留原事项？",
+  "entryEditor.theLastUncommittedModificationHasBeenRestored": "已恢复上次未提交的修改，保存后才会上传。",
+  "entryEditor.theOriginalEntryIsInTrashRecovery": "原事项在回收站，恢复须单独操作；不会自动恢复。",
+  "entryEditor.abandonDraftAndUseServerContent": "放弃草稿，使用服务器内容",
+  "entryEditor.afterVerificationSaveAccordingToTheCurrent": "核对后按当前版本保存",
+  "entryEditor.theOriginalDraftIsStillRetainedAfter": "原草稿仍保留；提交当前输入后，可在草稿列表核对并明确放弃原稿。",
+  "entryEditor.title100Words": "标题（{value0} / 100 字）",
+  "entryEditor.forExamplePlayingCivilizationViReadingInside": "例如：玩《文明 VI》、阅读《置身事内》",
+  "entryEditor.endDateLeaveBlankToIndicateNot": "结束日期（留空表示未结束）",
+  "entryEditor.highlightsWillBeRemovedFromTheFollowing": "将取消以下日期的重点：",
+  "entryEditor.totalFocusDays": "共 {value0} 个重点日。",
+  "entryEditor.showMoreAffectedDates": "显示更多受影响日期",
+  "entryEditor.confirmToRemoveTheseHighlightsAndSave": "确认移除这些重点并保存"
+}

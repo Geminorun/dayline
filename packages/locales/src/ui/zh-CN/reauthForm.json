@@ -1,0 +1,7 @@
+{
+  "reauthForm.reAuthenticateForThisOperation": "为本次操作重新验证",
+  "reauthForm.theVerificationOnlyAuthorizesTheCurrentOperation": "验证只授权当前操作，五分钟内有效。",
+  "reauthForm.reVerifyUsingBoundWechatCodeScan": "用已绑定微信扫码重新验证",
+  "reauthForm.thisIdentityReVerificationAppletCode": "本次身份重新验证小程序码",
+  "reauthForm.pleaseUseTheWechatOfYourCurrent": "请使用当前账号的微信扫描并明确确认。状态：{value0}，有效至 {value1}"
+}

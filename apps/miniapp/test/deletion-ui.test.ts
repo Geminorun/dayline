@@ -53,6 +53,7 @@ it('shows pending Beijing deadline, preserves same-UUID confirmation, and drops 
   const w = useWorkspace();
   Object.assign(w.current, {
     value: {
+      locale: 'zh-CN',
       id: randomUUID(),
       displayName: '微信账号',
       profileVersion: 1,

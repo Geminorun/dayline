@@ -1,0 +1,8 @@
+{
+  "entryRow.day": "第{value0}天",
+  "entryRow.cumulativeFocusDays": "{value0} · 累计 {value1} 个重点日",
+  "entryRow.highlightsOfTheDay": "{value0} {value1} {value2}当天重点",
+  "entryRow.days": "{value0} {value1} 天",
+  "entryRow.edit": "编辑{value0}",
+  "entryRow.delete": "删除{value0}"
+}

@@ -73,6 +73,7 @@ it('shows only current-owner pending edits and logs out from below trash while r
   const snapshot = { ...guestSnapshot(data, now.slice(0, 10)), userId: id };
   const requests: string[] = [];
   const profile = {
+    locale: 'zh-CN',
     id,
     displayName: '测试账号',
     profileVersion: 1,

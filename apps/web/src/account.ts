@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import {
   sessionStatusSchema,
   userDtoSchema,
@@ -7,6 +8,7 @@ import { readonly, ref } from 'vue';
 import type { UserDto } from '@dayline/contracts';
 import { ClientError } from '@dayline/api-client';
 import { api } from './api';
+import { applyAccountLanguage, clearAccountLanguage } from './i18n';
 const current = ref<UserDto | null>(null),
   loading = ref(false),
   serverTime = ref('');
@@ -18,6 +20,7 @@ api.onIdentityChange(() => {
   probeSequence++;
   loading.value = false;
   if (current.value?.id !== api.getAccount()) {
+    clearAccountLanguage();
     current.value = null;
     serverTime.value = '';
   }
@@ -37,7 +40,7 @@ export function useAccount() {
     if (probesPaused)
       throw new ClientError(
         'OPERATION_BUSY',
-        '身份操作正在处理中，请完成后重新读取。',
+        msg('account.theIdentityOperationIsBeingProcessedPlease'),
       );
     if (probe && !relogin) return probe;
     if (relogin) api.setAccount(api.getAccount());
@@ -51,15 +54,24 @@ export function useAccount() {
             decode: sessionStatusSchema.parse,
           });
           if (!session.data?.authenticated)
-            throw new ClientError('UNAUTHENTICATED', '请先登录。', 401);
+            throw new ClientError(
+              'UNAUTHENTICATED',
+              msg('errors.pleaseLogInFirst'),
+              401,
+            );
         }
         const response = await api.request('/api/v1/me', {
           decode: userDtoSchema.parse,
         });
         const data = response.data;
         if (generation !== api.getGeneration()) return;
-        if (!data) throw new ClientError('EMPTY_RESPONSE', '无法读取账号。');
+        if (!data)
+          throw new ClientError(
+            'EMPTY_RESPONSE',
+            msg('common.unableToReadAccount'),
+          );
         current.value = data;
+        applyAccountLanguage(data.id, data.locale);
         serverTime.value = response.serverTime ?? '';
         api.confirmAccount(data.id);
       } catch (error) {

@@ -1,3 +1,5 @@
+import { msg } from '@dayline/locales';
+import { serverText } from '../../i18n/server-text.js';
 import { APIError, createAuthEndpoint } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
 import { z } from 'zod';
@@ -22,7 +24,11 @@ export function identityPlugin() {
               .object({ status: z.enum(['active', 'pending_deletion']) })
               .safeParse(user).success
           )
-            throw new APIError('FORBIDDEN', { message: '账号暂不可登录。' });
+            throw new APIError('FORBIDDEN', {
+              message: serverText(
+                msg('errors.theAccountIsTemporarilyUnavailableForLogin'),
+              ),
+            });
           const session = await context.context.internalAdapter.createSession(
             user.id,
             false,

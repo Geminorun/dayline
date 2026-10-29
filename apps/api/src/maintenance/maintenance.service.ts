@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { importJobSchema, mergePlanSchema } from '@dayline/contracts';
@@ -53,7 +54,7 @@ export class MaintenanceService
       throw new AppError(
         503,
         'MAINTENANCE_PENDING',
-        '服务正在完成启动维护，请稍后重试。',
+        msg('errors.theServiceIsCompletingStartupMaintenancePlease'),
       );
   }
   run(startup = false): Promise<void> {
@@ -99,7 +100,7 @@ export class MaintenanceService
         throw new AppError(
           503,
           'MAINTENANCE_FAILED',
-          '维护尚未完成，请稍后重试。',
+          msg('errors.maintenanceHasNotBeenCompletedPleaseTry'),
         );
       }
     })();

@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import {
   MAX_FOCUS_REMOVAL_ACKNOWLEDGEMENTS,
   MAX_TRASH_PURGE_ENTRIES,
@@ -55,7 +56,7 @@ export const businessConfirmationBodyParser: RequestHandler = (
               new AppError(
                 422,
                 'IMPORT_INVALID',
-                '接入包超过事项或重点数量限制。',
+                msg('errors.theAccessPackageExceedsTheEntryOr'),
               ),
             );
             return;
@@ -88,7 +89,13 @@ export const businessConfirmationBodyParser: RequestHandler = (
             (Array.isArray(rows) && rows.length > MAX_IMPORT_ENTRIES) ||
             (Array.isArray(categories) && categories.length > 20)
           ) {
-            next(new AppError(422, 'IMPORT_INVALID', '预览选择超过条数限制。'));
+            next(
+              new AppError(
+                422,
+                'IMPORT_INVALID',
+                msg('errors.theNumberOfPreviewSelectionsExceedsThe'),
+              ),
+            );
             return;
           }
         }
@@ -135,14 +142,20 @@ export const businessConfirmationBodyParser: RequestHandler = (
         new AppError(
           422,
           'VALIDATION_ERROR',
-          `批量确认最多包含 ${maxItems} 项。`,
+          msg('errors.batchAcknowledgmentContainsAtMostItems', {
+            value0: maxItems,
+          }),
         ),
       );
       return;
     }
     if (bodyBytes > ordinaryLimit && !Array.isArray(collection)) {
       next(
-        new AppError(413, 'INVALID_REQUEST', '普通事项请求不能超过 64 KiB。'),
+        new AppError(
+          413,
+          'INVALID_REQUEST',
+          msg('errors.aNormalEntryRequestCannotExceed64'),
+        ),
       );
       return;
     }

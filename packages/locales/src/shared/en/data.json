@@ -1,0 +1,10 @@
+{
+  "data.savingAsAWholeTheResultsCan": "Saving as a whole, the results can be queried.",
+  "data.theSavingResultHasNotBeenConfirmed": "The saving result has not been confirmed. Please query or restore the original task before continuing. The original file has been retained.",
+  "data.queryingTheOriginalFileTaskPleaseWait": "Querying the original file task, please wait.",
+  "data.theProcessingResultsHaveBeenSavedAnd": "The processing results have been saved and can be imported.",
+  "data.theProcessingResultsHaveBeenSavedPlease": "The processing results have been saved, please continue to solve the remaining problems.",
+  "data.theRecordHasBeenImportedAndThe": "The record has been imported and the local task status cannot be saved; the original file is still there, please refresh and check.",
+  "data.theImportWasSuccessfulButTheRecord": "The import was successful, but the record refresh failed. Please click Refresh to try again.",
+  "data.theFileHasBeenGeneratedPleaseSave": "The file has been generated, please save it properly in the download location."
+}

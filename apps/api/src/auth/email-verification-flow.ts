@@ -8,6 +8,8 @@ import type { MailService } from '../mail/mail.service.js';
 import type { Clock } from '../records/clock.js';
 import { requestBudget } from '../common/request-budget.js';
 import { MailDeliveryError } from '../mail/mail-delivery.error.js';
+import { normalizeLocale } from '@dayline/locales';
+import { requestLocale } from '../i18n/server-text.js';
 
 type VerificationUser = { id: string; email: string; emailVerified: boolean };
 
@@ -60,7 +62,17 @@ export class EmailVerificationFlow {
           expiresAt: new Date(this.clock.now().getTime() + 86400000),
         },
       });
-      await this.mail.sendVerification(user.email, url);
+      // New signup mail runs before Better Auth commits its user transaction.
+      // An independent read may see no row; retain the request language then.
+      const profile = await this.database.user.findUnique({
+        where: { id: user.id },
+        select: { locale: true },
+      });
+      await this.mail.sendVerification(
+        user.email,
+        url,
+        normalizeLocale(profile?.locale ?? requestLocale()),
+      );
       if (scope?.emailFlow) scope.emailFlow.mailStatus = 'accepted';
     } catch (cause) {
       const delivery = cause instanceof Error ? cause.cause : undefined;

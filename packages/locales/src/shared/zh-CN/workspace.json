@@ -1,0 +1,12 @@
+{
+  "workspace.theLocalAccountCacheIsUnavailableAnd": "本机账号缓存不可用，云端保存状态不受影响；草稿仍独立保留。",
+  "workspace.identityOperationInProgress": "身份操作正在处理中。",
+  "workspace.theAccountHasChangedPleaseVerifyAgain": "账号已变化，请重新验证。",
+  "workspace.theSessionHasChangedPrivateContentHas": "会话已变化，私人内容已隐藏，原账号草稿保留。请重新验证或明确继续游客。",
+  "workspace.currentlyOfflinePleaseSaveManuallyAfterConnecting": "当前离线，联网后请手动保存。",
+  "workspace.theAccountHasBeenChangedButThe": "账号已变化，原输入仍保留。",
+  "workspace.theLocalAccountCacheIsUnavailableAnd2": "本机账号缓存不可用，云端数据仍保留。",
+  "workspace.theSessionHasChangedAndPrivateContent": "会话已变化，私人内容已隐藏；请重新验证或明确继续游客。",
+  "workspace.savedToCloudRefreshFailed": "已保存到云端，刷新失败：{value0}",
+  "workspace.exitedLocalCleanupOfLoginCredentialsFailed": "已退出，登录凭据本机清理失败，请检查存储。"
+}

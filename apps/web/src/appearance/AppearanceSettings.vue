@@ -1,13 +1,29 @@
 <script setup lang="ts">
+import { tr } from '../i18n/index';
 import { ref, watch } from 'vue';
 import { themePresets } from './presets';
 import { useAppearance } from './theme';
 const appearance = useAppearance();
 const { preferences, resolvedMode, accent, storageError } = appearance;
 const modes = [
-  { value: 'system', label: '跟随系统' },
-  { value: 'light', label: '浅色' },
-  { value: 'dark', label: '深色' },
+  {
+    value: 'system',
+    get label() {
+      return tr('common.followTheSystem');
+    },
+  },
+  {
+    value: 'light',
+    get label() {
+      return tr('common.lightColor');
+    },
+  },
+  {
+    value: 'dark',
+    get label() {
+      return tr('common.darkColor');
+    },
+  },
 ] as const;
 const hex = ref(accent.value),
   invalid = ref(false);
@@ -24,13 +40,20 @@ function applyHex() {
 }
 </script>
 <template>
-  <section class="appearance-settings" aria-label="外观设置">
+  <section
+    class="appearance-settings"
+    :aria-label="tr('common.appearanceSettings')"
+  >
     <div class="settings-row">
       <div>
-        <h2>颜色模式</h2>
-        <p>选择明暗，或随设备设置切换。</p>
+        <h2>{{ tr('common.colorMode') }}</h2>
+        <p>{{ tr('appearance.chooseBetweenLightAndDarkOrSwitch') }}</p>
       </div>
-      <div class="mode-options" role="group" aria-label="颜色模式">
+      <div
+        class="mode-options"
+        role="group"
+        :aria-label="tr('common.colorMode')"
+      >
         <label
           v-for="mode in modes"
           :key="mode.value"
@@ -47,10 +70,10 @@ function applyHex() {
       </div>
     </div>
     <div class="theme-heading">
-      <h2>主题风格</h2>
-      <p>保留熟悉的配色，找到适合自己的记录空间。</p>
+      <h2>{{ tr('common.themeStyle') }}</h2>
+      <p>{{ tr('appearance.keepFamiliarColorsAndFindARecording') }}</p>
     </div>
-    <div class="theme-grid" role="group" aria-label="主题风格">
+    <div class="theme-grid" role="group" :aria-label="tr('common.themeStyle')">
       <label
         v-for="theme in themePresets"
         :key="theme.id"
@@ -92,20 +115,20 @@ function applyHex() {
     </div>
     <div class="settings-row accent-setting">
       <div>
-        <h2>主题色</h2>
-        <p>用于按钮、选中状态和焦点，分类颜色保持独立。</p>
+        <h2>{{ tr('common.themeColor') }}</h2>
+        <p>{{ tr('appearance.usedForButtonsSelectedStatesAndFocus') }}</p>
       </div>
       <div class="accent-controls">
         <input
           type="color"
           :value="accent"
-          aria-label="选择主题色"
+          :aria-label="tr('common.selectThemeColor')"
           @input="setColor"
         />
         <input
           v-model="hex"
           class="hex-input"
-          aria-label="主题色 HEX"
+          :aria-label="tr('common.themeColorHex')"
           :aria-invalid="invalid"
           maxlength="7"
           spellcheck="false"
@@ -118,20 +141,20 @@ function applyHex() {
           type="button"
           @click="appearance.resetAccent"
         >
-          使用预设色
+          {{ tr('common.useDefaultColor') }}
         </button>
       </div>
     </div>
     <p v-if="invalid" role="alert" class="settings-error">
-      请输入有效色值，例如 #315C4D。
+      {{ tr('appearance.pleaseEnterAValidColorValueSuch') }}
     </p>
     <p v-if="storageError" role="status" class="settings-error">
       {{ storageError }}
     </p>
     <footer class="settings-footer">
-      <p>外观仅保存在此设备，游客也可以使用。</p>
+      <p>{{ tr('appearance.appearancesAreOnlySavedOnThisDevice') }}</p>
       <button class="settings-link" type="button" @click="appearance.reset">
-        恢复默认外观
+        {{ tr('common.restoreDefaultAppearance') }}
       </button>
     </footer>
   </section>

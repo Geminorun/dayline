@@ -7,6 +7,7 @@ import { useAccount } from '../src/account';
 import { recoverMergeDraft } from '../src/merge-drafts';
 import type { EntryDraft, MergeMappings } from '@dayline/contracts';
 const user = {
+  locale: 'zh-CN',
   id: randomUUID(),
   displayName: '当前账号',
   profileVersion: 1,

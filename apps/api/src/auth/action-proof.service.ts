@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { Clock } from '../records/clock.js';
 import { Inject, Injectable } from '@nestjs/common';
 import { SignJWT, jwtVerify } from 'jose';
@@ -34,7 +35,7 @@ export class ActionProofService {
       throw new AppError(
         403,
         'ACCOUNT_PENDING_DELETION',
-        '注销期间仅可验证注销或撤销操作。',
+        msg('errors.onlyAccountDeletionOrUndoOperationsCan'),
       );
   }
   async issue(actor: Actor, action: ActionRequest) {
@@ -76,7 +77,11 @@ export class ActionProofService {
         throw new Error('proof context');
       return c;
     } catch {
-      throw new AppError(403, 'REAUTH_REQUIRED', '请为本次操作重新验证身份。');
+      throw new AppError(
+        403,
+        'REAUTH_REQUIRED',
+        msg('errors.pleaseReVerifyYourIdentityForThis'),
+      );
     }
   }
   async current(
@@ -104,9 +109,17 @@ export class ActionProofService {
         user.deletionDueAt !== null &&
         user.deletionDueAt <= this.clock.now())
     )
-      throw new AppError(401, 'SESSION_REVOKED', '请重新登录。');
+      throw new AppError(
+        401,
+        'SESSION_REVOKED',
+        msg('errors.pleaseLogInAgain'),
+      );
     if (!allowPending && user.status !== 'active')
-      throw new AppError(403, 'ACCOUNT_PENDING_DELETION', '账号正在注销中。');
+      throw new AppError(
+        403,
+        'ACCOUNT_PENDING_DELETION',
+        msg('errors.accountDeletionIsPending'),
+      );
     return user;
   }
 }

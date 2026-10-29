@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { tr, messageRef } from '../i18n/index';
+import { msg } from '@dayline/locales';
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
 import type {
   CategoryDto,
@@ -71,9 +73,9 @@ const title = ref(props.draft?.fields.title ?? props.entry?.title ?? ''),
         : props.categories[0]?.id) ??
       '',
   );
-const error = ref(''),
-  localError = ref(''),
-  status = ref(''),
+const error = messageRef(),
+  localError = messageRef(),
+  status = messageRef(),
   busy = ref(false),
   saved = ref(false),
   revision = ref(props.draft?.inputRevision ?? 0),
@@ -183,12 +185,13 @@ async function flush() {
           baseVersion.value === captured.baseEntryVersion &&
           id.value === captured.entryId
         )
-          status.value = '已暂存本机，尚未提交。';
+          status.value = msg('entryEditor.thisMachineHasBeenStagedAndHas');
       }
     } catch {
       if (active())
-        localError.value =
-          '本机草稿暂存失败，输入仍在。请重试，或手动保留输入后再离开。';
+        localError.value = msg(
+          'entryEditor.theLocalDraftTemporaryStorageFailedThe',
+        );
     }
   })();
   storageWork = work;
@@ -213,7 +216,7 @@ async function canLeave() {
   return (
     !dirty.value ||
     (durable && persisted.value === revision.value) ||
-    window.confirm('当前输入尚未保存，确定放弃并离开？')
+    window.confirm(tr('entryEditor.theCurrentInputHasNotBeenSaved'))
   );
 }
 onBeforeRouteLeave(canLeave);
@@ -235,10 +238,10 @@ const conflict = ref<EntryDto | null>(null),
   missing = ref(false);
 const comparison = computed(() => {
   const labels = {
-    title: '标题',
-    startDate: '开始日期',
-    endDate: '结束日期',
-    categoryId: '分类',
+    title: tr('common.title'),
+    startDate: tr('common.startDate'),
+    endDate: tr('common.endDate'),
+    categoryId: tr('common.category'),
   };
   return (['title', 'startDate', 'endDate', 'categoryId'] as const).map(
     (key) => {
@@ -250,15 +253,17 @@ const comparison = computed(() => {
         key: labels[key],
         cloud:
           key === 'categoryId'
-            ? (cloudCategory?.name ?? '原分类已删除，请重选')
+            ? (cloudCategory?.name ??
+              tr('entryEditor.theOriginalCategoryHasBeenDeletedPlease'))
             : key === 'endDate'
-              ? (cloud ?? '未结束')
+              ? (cloud ?? tr('common.notFinished'))
               : (cloud ?? '—'),
         mine:
           key === 'categoryId'
-            ? (mineCategory?.name ?? '原分类已删除，请重选')
+            ? (mineCategory?.name ??
+              tr('entryEditor.theOriginalCategoryHasBeenDeletedPlease'))
             : key === 'endDate'
-              ? (mine ?? '未结束')
+              ? (mine ?? tr('common.notFinished'))
               : mine,
         cloudColor: key === 'categoryId' ? cloudCategory?.color : undefined,
         mineColor: key === 'categoryId' ? mineCategory?.color : undefined,
@@ -278,7 +283,7 @@ async function readCurrent() {
     if (active()) {
       missing.value = cause instanceof ClientError && cause.status === 404;
       error.value = missing.value
-        ? '原事项已永久清理；可以保留草稿或明确另存副本。'
+        ? msg('entryEditor.theOriginalEntryHasBeenPermanentlyCleared')
         : errorMessage(cause);
     }
     return null;
@@ -313,7 +318,9 @@ async function confirmed(
   missing.value = false;
   if (revision.value === requestRevision) {
     saved.value = true;
-    status.value = props.local ? '已保存到本机。' : '已保存到云端。';
+    status.value = props.local
+      ? tr('common.savedToThisMachine')
+      : tr('common.savedToTheCloud');
     if (userId) {
       try {
         await localRepository.removeDraft(userId, draftId, requestRevision);
@@ -326,19 +333,18 @@ async function confirmed(
           );
         }
       } catch {
-        localError.value =
-          '已保存到云端，但本机草稿清理失败，可稍后核对后放弃。';
+        localError.value = msg('entryEditor.itHasBeenSavedToTheCloud');
       }
     }
     if (revision.value !== requestRevision) {
       saved.value = false;
-      status.value = '已保存到云端，仍有未提交修改。';
+      status.value = msg('entryEditor.savedToTheCloudThereAreStill');
       await flush();
       return;
     }
     if (!durable || active()) emit('saved');
   } else {
-    status.value = '已保存到云端，仍有未提交修改。';
+    status.value = msg('entryEditor.savedToTheCloudThereAreStill');
     await flush();
   }
 }
@@ -346,21 +352,21 @@ async function submit(confirmRemoval = false) {
   if (busy.value) return;
   error.value = '';
   if (durable && !active()) {
-    error.value = '账号已变化，请重新验证原账号；当前输入仍保留。';
+    error.value = msg('entryEditor.theAccountHasChangedPleaseReVerify');
     return;
   }
   const parsed = createEntrySchema.safeParse({ id: id.value, ...fields() });
   if (!parsed.success) {
-    error.value = '请检查标题（1–100 字）、有效日期和分类。';
+    error.value = msg('entryEditor.pleaseCheckTheTitle1100Words');
     return;
   }
   if (parsed.data.endDate && parsed.data.endDate < parsed.data.startDate) {
-    error.value = '结束日期不能早于开始日期。';
+    error.value = msg('errors.endDateCannotBeEarlierThanStart');
     return;
   }
   if (durable && !navigator.onLine) {
     await flush();
-    error.value = '当前离线，草稿保留；联网后请手动保存。';
+    error.value = msg('entryEditor.currentlyOfflineDraftIsRetainedPleaseSave');
     return;
   }
   const requestRevision = revision.value,
@@ -375,7 +381,7 @@ async function submit(confirmRemoval = false) {
   await flush();
   if (durable && !active()) {
     busy.value = false;
-    error.value = '账号已变化，草稿已留在原账号。';
+    error.value = msg('entryEditor.theAccountHasBeenChangedAndThe');
     return;
   }
   try {
@@ -406,7 +412,9 @@ async function submit(confirmRemoval = false) {
       !matches(result.data.entry, input)
     ) {
       await readCurrent();
-      error.value = '此稳定记录标识已存在不同内容，请核对冲突。';
+      error.value = msg(
+        'entryEditor.thisStableRecordIdentifierAlreadyHasDifferent',
+      );
       return;
     }
     await confirmed(
@@ -429,7 +437,9 @@ async function submit(confirmRemoval = false) {
       cause instanceof ClientError &&
       ['NETWORK_ERROR', 'INVALID_RESPONSE'].includes(cause.code)
     ) {
-      status.value = '保存结果待确认，正在读取云端核对。';
+      status.value = msg(
+        'entryEditor.theSavedResultsArePendingConfirmationAnd',
+      );
       const latest = await readCurrent();
       if (
         latest &&
@@ -439,7 +449,7 @@ async function submit(confirmRemoval = false) {
         await confirmed(latest, requestRevision, input);
         return;
       }
-      error.value = '保存结果待确认；已读取可用的当前内容，请核对后手动重试。';
+      error.value = msg('entryEditor.theSavingResultNeedsToBeConfirmed');
     } else {
       if (
         durable &&
@@ -456,7 +466,10 @@ async function submit(confirmRemoval = false) {
   }
 }
 async function useServer() {
-  if (!conflict.value || !window.confirm('放弃这份草稿修改，使用服务器内容？'))
+  if (
+    !conflict.value ||
+    !window.confirm(tr('entryEditor.abandonThisDraftModificationAndUseServer'))
+  )
     return;
   const e = conflict.value;
   title.value = e.title;
@@ -474,7 +487,8 @@ async function useServer() {
 }
 async function reviewedSave() {
   if (!conflict.value || conflict.value.deletedAt) return;
-  if (!window.confirm('已核对服务器字段，将按当前版本保存我的修改？')) return;
+  if (!window.confirm(tr('entryEditor.serverFieldsCheckedWillMyChangesBe')))
+    return;
   base.value = conflict.value;
   baseVersion.value = conflict.value.version;
   revision.value++;
@@ -482,7 +496,7 @@ async function reviewedSave() {
   await submit();
 }
 async function copyEntry() {
-  if (!window.confirm('将当前输入另存为一条新事项，保留原事项？')) return;
+  if (!window.confirm(tr('entryEditor.saveTheCurrentEntryAsANew'))) return;
   id.value = crypto.randomUUID();
   base.value = null;
   baseVersion.value = null;
@@ -498,34 +512,40 @@ async function copyEntry() {
     <div class="modal-header">
       <div>
         <span class="eyebrow">A LITTLE CHAPTER</span>
-        <h2 id="editor-title">{{ entry ? '编辑事项' : '新建事项' }}</h2>
+        <h2 id="editor-title">
+          {{ entry ? tr('common.editEntry') : tr('common.newEntry2') }}
+        </h2>
       </div>
       <button
         class="icon-btn"
         type="button"
-        aria-label="关闭编辑"
+        :aria-label="tr('common.closeEditing')"
         @click="emit('close')"
       >
         <PlannerIcon name="close" />
       </button>
     </div>
     <p v-if="draft" class="editor-recovery-note" role="status">
-      已恢复上次未提交的修改，保存后才会上传。
+      {{ tr('entryEditor.theLastUncommittedModificationHasBeenRestored') }}
     </p>
     <p v-if="status" role="status" class="notice">{{ status }}</p>
     <p v-if="localError" role="alert" class="error">{{ localError }}</p>
-    <section v-if="conflict || missing" class="notice" aria-label="冲突核对">
-      <h3>服务器与草稿核对</h3>
+    <section
+      v-if="conflict || missing"
+      class="notice"
+      :aria-label="tr('common.conflictReconciliation')"
+    >
+      <h3>{{ tr('common.serverAndDraftCheck') }}</h3>
       <p v-if="conflict?.deletedAt">
-        原事项在回收站，恢复须单独操作；不会自动恢复。
+        {{ tr('entryEditor.theOriginalEntryIsInTrashRecovery') }}
       </p>
       <table v-if="conflict">
         <thead>
           <tr>
-            <th>字段</th>
-            <th>云端当前内容</th>
-            <th>我的草稿</th>
-            <th>差异</th>
+            <th>{{ tr('common.field') }}</th>
+            <th>{{ tr('common.currentContentInTheCloud') }}</th>
+            <th>{{ tr('common.myDraft') }}</th>
+            <th>{{ tr('common.difference') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -545,7 +565,9 @@ async function copyEntry() {
                 :style="{ backgroundColor: row.mineColor }"
               />{{ row.mine }}
             </td>
-            <td>{{ row.different ? '不同' : '相同' }}</td>
+            <td>
+              {{ row.different ? tr('common.different') : tr('common.same') }}
+            </td>
           </tr>
         </tbody>
       </table>
@@ -555,7 +577,7 @@ async function copyEntry() {
         type="button"
         @click="useServer"
       >
-        放弃草稿，使用服务器内容
+        {{ tr('entryEditor.abandonDraftAndUseServerContent') }}
       </button>
       <button
         class="button primary"
@@ -564,7 +586,7 @@ async function copyEntry() {
         :disabled="busy"
         @click="reviewedSave"
       >
-        核对后按当前版本保存
+        {{ tr('entryEditor.afterVerificationSaveAccordingToTheCurrent') }}
       </button>
       <button
         class="button primary"
@@ -572,7 +594,7 @@ async function copyEntry() {
         :disabled="busy"
         @click="copyEntry"
       >
-        另存一份
+        {{ tr('common.saveAnotherCopy') }}
       </button>
       <button
         type="button"
@@ -582,29 +604,34 @@ async function copyEntry() {
           missing = false;
         "
       >
-        暂不处理
+        {{ tr('common.notProcessedYet') }}
       </button>
     </section>
     <p v-if="draft" class="muted">
-      原草稿仍保留；提交当前输入后，可在草稿列表核对并明确放弃原稿。
+      {{ tr('entryEditor.theOriginalDraftIsStillRetainedAfter') }}
     </p>
     <form @submit.prevent="submit()" @focusout="flush">
       <label
-        >标题（{{ [...title].length }} / 100 字）<input
+        >{{ tr('entryEditor.title100Words', { value0: [...title].length })
+        }}<input
           v-model="title"
-          placeholder="例如：玩《文明 VI》、阅读《置身事内》"
+          :placeholder="
+            tr('entryEditor.forExamplePlayingCivilizationViReadingInside')
+          "
           required
       /></label>
       <div class="form-grid">
         <label
-          >开始日期<input
+          >{{ tr('common.startDate')
+          }}<input
             v-model="startDate"
             type="date"
             required
             min="0001-01-01"
             max="9999-12-31" /></label
         ><label
-          >结束日期（留空表示未结束）<input
+          >{{ tr('entryEditor.endDateLeaveBlankToIndicateNot')
+          }}<input
             v-model="endDate"
             type="date"
             min="0001-01-01"
@@ -612,7 +639,8 @@ async function copyEntry() {
         /></label>
       </div>
       <label
-        >分类<select v-model="categoryId" required>
+        >{{ tr('common.category')
+        }}<select v-model="categoryId" required>
           <option
             v-for="category in categories"
             :key="category.id"
@@ -624,7 +652,7 @@ async function copyEntry() {
       >
       <p v-if="error" role="alert" class="error">{{ error }}</p>
       <div v-if="acknowledgement" class="notice">
-        <p>将取消以下日期的重点：</p>
+        <p>{{ tr('entryEditor.highlightsWillBeRemovedFromTheFollowing') }}</p>
         <ul>
           <li
             v-for="focus in acknowledgement.slice(0, acknowledgementLimit)"
@@ -633,14 +661,18 @@ async function copyEntry() {
             {{ focus.date }}
           </li>
         </ul>
-        <p>共 {{ acknowledgement.length }} 个重点日。</p>
+        <p>
+          {{
+            tr('entryEditor.totalFocusDays', { value0: acknowledgement.length })
+          }}
+        </p>
         <button
           v-if="acknowledgement.length > acknowledgementLimit"
           type="button"
           class="button subtle"
           @click="acknowledgementLimit += 100"
         >
-          显示更多受影响日期
+          {{ tr('entryEditor.showMoreAffectedDates') }}
         </button>
         <button
           class="button primary"
@@ -648,19 +680,19 @@ async function copyEntry() {
           :disabled="busy"
           @click="submit(true)"
         >
-          确认移除这些重点并保存</button
+          {{ tr('entryEditor.confirmToRemoveTheseHighlightsAndSave') }}</button
         ><button
           type="button"
           class="button subtle"
           @click="acknowledgement = null"
         >
-          取消确认
+          {{ tr('common.cancelConfirmation') }}
         </button>
       </div>
       <button class="button primary" type="submit" :disabled="busy">
-        {{ busy ? '正在保存…' : '保存' }}</button
+        {{ busy ? tr('common.saving') : tr('common.save') }}</button
       ><button type="button" class="button subtle" @click="emit('close')">
-        取消
+        {{ tr('common.cancel') }}
       </button>
     </form>
   </section>

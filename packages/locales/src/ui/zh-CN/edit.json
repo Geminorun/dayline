@@ -1,0 +1,14 @@
+{
+  "edit.entryDetailsEdit": "事项详情 / 编辑",
+  "edit.guestItWillBeConsideredSavedOnly": "游客 · 保存到本机成功后才算已保存。",
+  "edit.onlineSavingTheCurrentInputIsOnly": "在线保存 · 当前输入仅留在内存，离开前请手动提交。",
+  "edit.anExperienceWorthRecording": "一段值得记录的经历",
+  "edit.startDateYyyyMmDd": "开始日期 YYYY-MM-DD",
+  "edit.endDateYyyyMmDd": "结束日期 YYYY-MM-DD",
+  "edit.originalRecord": "原记录：{value0}",
+  "edit.focusDaysWillBeCancelled": "将取消 {value0} 个重点日：",
+  "edit.specifyFocusDatesNotSavedWithThe": "指定重点日期（不随事项表单一起保存）",
+  "edit.focusDatesYyyyMmDd": "重点日期 YYYY-MM-DD",
+  "edit.setCancelHighlightsForTheDay": "设置 / 取消该日重点",
+  "edit.leavingWillDiscardUnsavedInput": "离开将放弃尚未保存的输入。"
+}

@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { realEmailSchema } from '@dayline/contracts';
 import { Inject, Injectable } from '@nestjs/common';
 import { AUTH_INSTANCE } from '../create-auth.js';
@@ -37,7 +38,7 @@ export class AuthAdapter {
       throw new AppError(
         503,
         'AUTH_UNAVAILABLE',
-        '登录会话创建失败，请重新登录或扫码。',
+        msg('errors.loginSessionCreationFailedPleaseLogIn'),
       );
     }
   }
@@ -52,7 +53,11 @@ export class AuthAdapter {
   }
   async hashPassword(password: string) {
     if (password.length < 8 || password.length > 128)
-      throw new AppError(422, 'VALIDATION_ERROR', '密码须为 8–128 字符。');
+      throw new AppError(
+        422,
+        'VALIDATION_ERROR',
+        msg('errors.passwordMustBe8128Characters'),
+      );
     return (await this.auth.$context).password.hash(password);
   }
   async bindEmail(
@@ -93,7 +98,7 @@ export class AuthAdapter {
         throw new AppError(
           409,
           'IDENTITY_COMBINATION_UNSUPPORTED',
-          '首版只支持一个邮箱和一个微信；双方账号保持独立。',
+          msg('errors.theFirstVersionOnlySupportsOneEmail'),
         );
       await tx.user.update({
         where: { id: sourceId },
@@ -145,7 +150,11 @@ export class AuthAdapter {
       password.length > 128 ||
       !normalizedEmail.success
     ) {
-      throw new AppError(400, 'INVALID_CREDENTIAL', '邮箱或密码不符合要求。');
+      throw new AppError(
+        400,
+        'INVALID_CREDENTIAL',
+        msg('errors.emailOrPasswordDoesNotMeetThe'),
+      );
     }
     const context = await this.auth.$context;
     const hash = await context.password.hash(password);
@@ -161,13 +170,21 @@ export class AuthAdapter {
           },
         });
         if (updated.count !== 1)
-          throw new AppError(409, 'IDENTITY_CONFLICT', '账号身份已变化。');
+          throw new AppError(
+            409,
+            'IDENTITY_CONFLICT',
+            msg('errors.theAccountIdentityHasChanged'),
+          );
         if (
           await transaction.account.count({
             where: { userId, providerId: 'credential' },
           })
         )
-          throw new AppError(409, 'IDENTITY_CONFLICT', '账号已具有密码凭据。');
+          throw new AppError(
+            409,
+            'IDENTITY_CONFLICT',
+            msg('errors.theAccountAlreadyHasPasswordCredentials'),
+          );
         await transaction.account.create({
           data: {
             userId,
@@ -183,7 +200,11 @@ export class AuthAdapter {
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
       )
-        throw new AppError(409, 'IDENTITY_CONFLICT', '邮箱已被其他账号使用。');
+        throw new AppError(
+          409,
+          'IDENTITY_CONFLICT',
+          msg('errors.theEmailAddressIsAlreadyUsedBy'),
+        );
       throw error;
     }
   }

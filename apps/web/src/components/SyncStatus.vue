@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/index';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useWorkspace } from '../records/workspace';
 import PlannerIcon from './PlannerIcon.vue';
@@ -63,13 +64,13 @@ const label = computed(
     workspace.error.value ||
     (working.value
       ? workspace.busy.value
-        ? '正在保存更改'
-        : '正在更新记录'
+        ? tr('common.savingChanges')
+        : tr('common.updatingRecord')
       : phase.value === 'done'
-        ? '记录已更新'
+        ? tr('common.recordUpdated')
         : workspace.mode.value === 'guest'
-          ? '记录保存在此设备，点击刷新'
-          : '点击更新云端记录'),
+          ? tr('syncStatus.recordsAreSavedOnThisDeviceClick')
+          : tr('common.clickToUpdateCloudRecords')),
 );
 function refresh() {
   if (workspace.retrySeconds.value > 0) return;
@@ -86,7 +87,7 @@ onBeforeUnmount(() => {
     <button
       class="sync-button"
       :class="`sync-${phase}`"
-      aria-label="刷新记录"
+      :aria-label="tr('common.refreshRecord')"
       :title="label"
       :aria-busy="working"
       :disabled="working || workspace.retrySeconds.value > 0"
@@ -121,10 +122,16 @@ onBeforeUnmount(() => {
         >
           {{
             workspace.retrySeconds.value
-              ? `${workspace.retrySeconds.value} 秒后重试`
-              : '重试'
+              ? tr('syncStatus.retryInSeconds', {
+                  value0: workspace.retrySeconds.value,
+                })
+              : tr('common.tryAgain')
           }}</button
-        ><button class="icon-btn" aria-label="关闭提示" @click="toast = null">
+        ><button
+          class="icon-btn"
+          :aria-label="tr('common.closePrompt')"
+          @click="toast = null"
+        >
           ×
         </button>
       </div></Teleport

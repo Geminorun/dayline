@@ -1,5 +1,8 @@
 import { realEmailSchema } from './email.js';
 import { z } from 'zod';
+import { SUPPORTED_LOCALES } from '@dayline/locales';
+export const localeSchema = z.enum(SUPPORTED_LOCALES);
+export type LocalePreference = z.infer<typeof localeSchema>;
 
 export const EXPECTED_USER_HEADER = 'x-dayline-expected-user';
 export const USER_STATUSES = ['active', 'pending_deletion', 'merged'] as const;
@@ -14,6 +17,7 @@ export const displayNameSchema = z
   );
 
 export interface UserDto {
+  locale: LocalePreference;
   id: string;
   displayName: string;
   profileVersion: number;
@@ -38,7 +42,13 @@ export interface ApiResult<T> {
 }
 
 export interface ApiErrorResult {
-  error: { code: string; message: string; details?: unknown };
+  error: {
+    code: string;
+    message: string;
+    messageKey?: string;
+    params?: Readonly<Record<string, number>>;
+    details?: unknown;
+  };
   meta: ApiMeta;
 }
 
@@ -105,6 +115,7 @@ export interface WechatLoginDto {
 export { realEmailSchema } from './email.js';
 export const userDtoSchema: z.ZodType<UserDto> = z
   .object({
+    locale: localeSchema.default('zh-CN'),
     id: z.uuid(),
     displayName: displayNameSchema,
     profileVersion: z.number().int().positive(),
@@ -181,10 +192,14 @@ export const apiMetaSchema = z
 export * from './guest.js';
 export const patchProfileSchema = z
   .object({
-    displayName: displayNameSchema,
+    displayName: displayNameSchema.optional(),
+    locale: localeSchema.optional(),
     expectedProfileVersion: z.number().int().min(1).max(2147483647),
   })
-  .strict();
+  .strict()
+  .refine(
+    (value) => value.displayName !== undefined || value.locale !== undefined,
+  );
 export type PatchProfileInput = z.infer<typeof patchProfileSchema>;
 
 export * from './guest-manifest.js';

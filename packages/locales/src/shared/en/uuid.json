@@ -1,0 +1,4 @@
+{
+  "uuid.theCurrentWechatVersionDoesNotSupport": "The current WeChat version does not support secure random numbers. Please update WeChat and try again.",
+  "uuid.unableToGenerateRecordIdPleaseTry": "Unable to generate record ID, please try again."
+}

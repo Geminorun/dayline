@@ -1,0 +1,11 @@
+{
+  "common.displayNameSaved": "Display name saved.",
+  "common.signedOut": "Signed out.",
+  "common.fileNotGenerated2": "File not generated.",
+  "common.unableToReadAccount": "Unable to read account.",
+  "common.theLocalSpaceHasChanged": "The local space has changed.",
+  "common.savedToThisMachine": "Saved to this machine.",
+  "common.savedToTheCloud": "Saved to the cloud.",
+  "common.theAccountHasChanged": "The account has changed.",
+  "common.joinMessages": "{value0} {value1}"
+}

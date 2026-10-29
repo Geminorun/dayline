@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { tr, messageRef } from './i18n/index';
+import { msg } from '@dayline/locales';
 import { onMounted, ref, watch } from 'vue';
 import { patchProfileSchema, userDtoSchema } from '@dayline/contracts';
 import { api } from './api';
@@ -6,6 +8,7 @@ import { useAccount } from './account';
 import { useWorkspace } from './records/workspace';
 import { errorMessage } from './records/record-service';
 import AppearanceSettings from './appearance/AppearanceSettings.vue';
+import LanguageSettings from './i18n/LanguageSettings.vue';
 const account = useAccount(),
   workspace = useWorkspace();
 const { current } = account;
@@ -14,8 +17,8 @@ const name = ref(''),
   base = ref(0),
   editingName = ref(false),
   busy = ref(false),
-  error = ref(''),
-  notice = ref('');
+  error = messageRef(),
+  notice = messageRef();
 function useCurrentProfile() {
   name.value = current.value?.displayName ?? '';
   base.value = current.value?.profileVersion ?? 0;
@@ -33,6 +36,15 @@ onMounted(async () => {
   await workspace.ensure();
   if (!editingName.value) useCurrentProfile();
 });
+watch(current, (next, previous) => {
+  if (
+    next &&
+    previous &&
+    next.id === previous.id &&
+    next.displayName === previous.displayName
+  )
+    base.value = next.profileVersion;
+});
 function selectTab(event: KeyboardEvent) {
   if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
   event.preventDefault();
@@ -46,7 +58,7 @@ async function save() {
     expectedProfileVersion: base.value,
   });
   if (!input.success) {
-    error.value = '显示名须为 1–40 字。';
+    error.value = msg('account.displayNameMustBe140Characters');
     return;
   }
   busy.value = true;
@@ -64,7 +76,7 @@ async function save() {
     await account.refresh();
     if (generation !== api.getGeneration()) return;
     useCurrentProfile();
-    notice.value = '显示名已保存。';
+    notice.value = msg('common.displayNameSaved');
   } catch (cause) {
     error.value = errorMessage(cause);
   } finally {
@@ -75,13 +87,13 @@ async function save() {
 <template>
   <section class="settings-page">
     <header class="settings-heading">
-      <h1>设置</h1>
-      <p>调整外观，管理你的账号。</p>
+      <h1>{{ tr('common.settings') }}</h1>
+      <p>{{ tr('account.personalizeDaylineAndManageYourAccount') }}</p>
     </header>
     <nav
       class="settings-tabs"
       role="tablist"
-      aria-label="设置分类"
+      :aria-label="tr('common.settingsSections')"
       @keydown="selectTab"
     >
       <button
@@ -92,7 +104,7 @@ async function save() {
         aria-controls="settings-appearance"
         @click="tab = 'appearance'"
       >
-        外观
+        {{ tr('common.appearance') }}
       </button>
       <button
         id="settings-tab-account"
@@ -102,7 +114,7 @@ async function save() {
         aria-controls="settings-account"
         @click="tab = 'account'"
       >
-        账号与安全
+        {{ tr('common.accountSecurity') }}
       </button>
     </nav>
     <div
@@ -111,7 +123,7 @@ async function save() {
       role="tabpanel"
       aria-labelledby="settings-tab-appearance"
     >
-      <AppearanceSettings />
+      <LanguageSettings /><AppearanceSettings />
     </div>
     <section
       v-else
@@ -125,7 +137,7 @@ async function save() {
         <p v-if="notice" role="status" class="settings-success">{{ notice }}</p>
         <div class="settings-row">
           <div>
-            <h2>显示名</h2>
+            <h2>{{ tr('common.displayName') }}</h2>
             <p>{{ current.displayName }}</p>
           </div>
           <button
@@ -137,10 +149,12 @@ async function save() {
               editingName = true;
             "
           >
-            编辑
+            {{ tr('common.edit') }}
           </button>
           <form v-else class="profile-edit" @submit.prevent="save">
-            <label class="sr-only" for="profile-name">显示名</label
+            <label class="sr-only" for="profile-name">{{
+              tr('common.displayName')
+            }}</label
             ><input
               id="profile-name"
               v-model="name"
@@ -148,24 +162,27 @@ async function save() {
               maxlength="40"
               :disabled="busy"
             />
-            <button class="settings-primary" :disabled="busy">保存</button
+            <button class="settings-primary" :disabled="busy">
+              {{ tr('common.save') }}</button
             ><button
               type="button"
               class="settings-link"
               :disabled="busy"
               @click="useCurrentProfile"
             >
-              取消
+              {{ tr('common.cancel') }}
             </button>
           </form>
         </div>
         <div class="settings-row">
           <div>
-            <h2>邮箱</h2>
+            <h2>{{ tr('common.email') }}</h2>
             <p>
-              {{ current.email ?? '尚未绑定邮箱'
+              {{ current.email ?? tr('common.emailHasNotBeenBoundYet')
               }}<span v-if="current.email" class="settings-badge">{{
-                current.emailVerified ? '已验证' : '待验证'
+                current.emailVerified
+                  ? tr('common.verified')
+                  : tr('common.pendingVerification')
               }}</span>
             </p>
           </div>
@@ -173,31 +190,39 @@ async function save() {
             v-if="current.status === 'active'"
             class="settings-link"
             to="/identity"
-            >管理</RouterLink
+            >{{ tr('common.manage') }}</RouterLink
           >
         </div>
         <div class="settings-row">
           <div>
-            <h2>微信</h2>
+            <h2>{{ tr('common.wechat') }}</h2>
             <p>
-              {{ current.wechatBound ? '已关联微信账号' : '尚未关联微信账号' }}
+              {{
+                current.wechatBound
+                  ? tr('common.wechatAccountHasBeenAssociated')
+                  : tr('common.wechatAccountNotYetAssociated')
+              }}
             </p>
           </div>
           <RouterLink
             v-if="current.status === 'active'"
             class="settings-link"
             to="/identity"
-            >{{ current.wechatBound ? '管理' : '关联' }}</RouterLink
+            >{{
+              current.wechatBound
+                ? tr('common.manage')
+                : tr('common.association')
+            }}</RouterLink
           >
         </div>
         <div class="settings-row">
           <div>
-            <h2>登录密码</h2>
+            <h2>{{ tr('common.password') }}</h2>
             <p>
               {{
                 current.passwordEnabled
-                  ? '使用邮箱和密码登录。'
-                  : '绑定邮箱后，可设置登录密码。'
+                  ? tr('account.logInUsingEmailAndPassword')
+                  : tr('account.afterBindingTheEmailAddressYouCan')
               }}
             </p>
           </div>
@@ -205,16 +230,17 @@ async function save() {
             v-if="current.passwordEnabled && current.status === 'active'"
             class="settings-link"
             to="/change-password"
-            >修改密码</RouterLink
+            >{{ tr('common.changePassword') }}</RouterLink
           >
         </div>
         <details class="settings-advanced">
-          <summary>更多账号操作</summary>
+          <summary>{{ tr('common.moreAccountOptions') }}</summary>
           <RouterLink class="settings-detail-link" to="/identity"
             ><span
-              >关联或合并账号<small
-                >确认邮箱或微信身份后，管理两个账号的记录。</small
-              ></span
+              >{{ tr('common.linkOrMergeAccounts')
+              }}<small>{{
+                tr('account.afterConfirmingTheIdentityOfTheEmail')
+              }}</small></span
             ><span aria-hidden="true">›</span></RouterLink
           >
           <RouterLink
@@ -223,17 +249,21 @@ async function save() {
             ><span
               >{{
                 current.status === 'pending_deletion'
-                  ? '查看或撤销账号注销'
-                  : '注销账号'
-              }}<small>查看注销规则与恢复期限。</small></span
+                  ? tr('account.viewOrCancelAccountAccountDeletion')
+                  : tr('common.cancelAccount')
+              }}<small>{{
+                tr('account.checkTheAccountDeletionRulesAndRecovery')
+              }}</small></span
             ><span aria-hidden="true">›</span></RouterLink
           >
         </details>
       </template>
       <div v-else class="settings-empty">
-        <h2>登录后管理账号</h2>
-        <p>登录后可以修改资料、关联微信和管理密码。外观设置随时可用。</p>
-        <RouterLink class="settings-primary" to="/login">登录·注册</RouterLink>
+        <h2>{{ tr('common.manageYourAccount') }}</h2>
+        <p>{{ tr('account.afterLoggingInYouCanModifyInformation') }}</p>
+        <RouterLink class="settings-primary" to="/login">{{
+          tr('common.signInSignUp')
+        }}</RouterLink>
       </div>
     </section>
   </section>

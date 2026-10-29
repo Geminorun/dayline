@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/index';
 import { computed } from 'vue';
 import { durationDays, entryStatus } from '@dayline/core';
 import type { CategoryDto, EntryDto, FocusDayDto } from '@dayline/contracts';
@@ -23,7 +24,7 @@ const dates = computed(() =>
 );
 </script>
 <template>
-  <section class="entry-details" aria-label="事项详情">
+  <section class="entry-details" :aria-label="tr('common.entryDetails')">
     <div class="modal-header">
       <span class="category-badge"
         ><i class="category-dot" :style="{ background: category?.color }"></i
@@ -33,50 +34,61 @@ const dates = computed(() =>
         <IconButton
           v-if="!readonly"
           icon="edit"
-          label="编辑事项"
+          :label="tr('common.editEntry')"
           @click="emit('edit')"
-        /><IconButton icon="close" label="关闭详情" @click="emit('close')" />
+        /><IconButton
+          icon="close"
+          :label="tr('common.closeDetails')"
+          @click="emit('close')"
+        />
       </div>
     </div>
     <div class="entry-detail-title">
       <h2>{{ entry.title }}</h2>
       <span class="detail-status">{{
-        entryStatus(entry, today) === 'ongoing' ? '进行中' : '已结束'
+        entryStatus(entry, today) === 'ongoing'
+          ? tr('common.ongoing')
+          : tr('common.ended')
       }}</span>
     </div>
     <dl class="entry-detail-fields">
       <div class="entry-detail-range">
-        <dt>起止日期</dt>
+        <dt>{{ tr('common.dates') }}</dt>
         <dd>
           {{ entry.startDate }} <span aria-hidden="true">—</span>
-          {{ entry.endDate ?? (entry.startDate > today ? '结束未定' : '至今') }}
+          {{
+            entry.endDate ??
+            (entry.startDate > today
+              ? tr('common.endingPending')
+              : tr('common.present'))
+          }}
         </dd>
       </div>
       <div>
         <dt>
           {{
             entry.startDate > today
-              ? '计划跨度'
+              ? tr('common.planningHorizon')
               : entry.endDate
-                ? '持续时间'
-                : '已持续'
+                ? tr('common.duration')
+                : tr('common.duration2')
           }}
         </dt>
         <dd>
           {{
             entry.startDate > today && !entry.endDate
-              ? '待开始'
-              : `${durationDays(entry, today)} 天`
+              ? tr('common.toBeStarted')
+              : tr('data.days', { value0: durationDays(entry, today) })
           }}
         </dd>
       </div>
       <div>
-        <dt>重点日期</dt>
-        <dd>{{ dates.length }} 天</dd>
+        <dt>{{ tr('common.focusDates') }}</dt>
+        <dd>{{ tr('data.days', { value0: dates.length }) }}</dd>
       </div>
     </dl>
     <details v-if="dates.length" class="detail-focus-dates">
-      <summary>查看重点日期</summary>
+      <summary>{{ tr('common.viewFocusDates') }}</summary>
       <p>{{ dates.join('、') }}</p>
     </details>
   </section>

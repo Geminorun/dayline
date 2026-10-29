@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { locale, monthYearLabel, tickLabel } from '../i18n';
+import { tr } from '../i18n/index';
 import {
   computed,
   nextTick,
@@ -225,8 +227,10 @@ const axisGroups = computed(() => {
     groups.push({
       key,
       label: yearOnly
-        ? `${Number(key)}年`
-        : `${Number(date.slice(0, 4))}年${Number(date.slice(5, 7))}月`,
+        ? locale.value === 'en'
+          ? String(Number(key))
+          : Number(key) + '年'
+        : monthYearLabel(Number(date.slice(0, 4)), Number(date.slice(5, 7))),
       left: tick.x,
       width: window.value.width - tick.x,
     });
@@ -336,8 +340,13 @@ const focusTitle = computed(
 function focusLabel(group: TimelineFocusGroup) {
   const title = props.entries.find((e) => e.id === group.entryId)?.title ?? '';
   return group.dates.length === 1
-    ? `${title} · ${group.dates[0]} · 重点日`
-    : `${title} · ${group.dates.length} 个重点日 · ${group.dates.slice(0, 3).join('、')}${group.dates.length > 3 ? '…' : ''}`;
+    ? tr('timelineView.focusDay', { value0: title, value1: group.dates[0] })
+    : tr('timelineView.focusDays', {
+        value0: title,
+        value1: group.dates.length,
+        value2: group.dates.slice(0, 3).join('、'),
+        value3: group.dates.length > 3 ? '…' : '',
+      });
 }
 async function openFocus(group: TimelineFocusGroup, event: MouseEvent) {
   if (!(event.currentTarget instanceof HTMLButtonElement)) return;
@@ -579,22 +588,28 @@ defineExpose({ locateToday });
     :style="{ '--timeline-body-height': bodyHeight + 'px' }"
     @pointerleave="highlighted = null"
   >
-    <aside class="timeline-entry-column" aria-label="当前范围事项">
+    <aside
+      class="timeline-entry-column"
+      :aria-label="tr('common.currentScopeEntry')"
+    >
       <div class="gantt-heading-label">
         <strong
-          >事项 <span>{{ entries.length }}</span></strong
+          >{{ tr('common.entry') }}<span>{{ entries.length }}</span></strong
         >
-        <small
-          >当前范围 · 按开始日期{{
-            sort === 'asc' ? '从早到晚' : '从晚到早'
-          }}</small
-        >
+        <small>{{
+          tr('timelineView.currentScopeByStartDate', {
+            value0:
+              sort === 'asc'
+                ? tr('common.fromMorningToNight')
+                : tr('common.fromNightToMorning'),
+          })
+        }}</small>
       </div>
       <div
         ref="listViewport"
         class="timeline-entry-list"
         tabindex="0"
-        aria-label="滚动浏览事项列表"
+        :aria-label="tr('common.scrollThroughEntryList')"
         @scroll="listScrollTop = listViewport?.scrollTop ?? 0"
       >
         <div :style="{ height: listRows.before + 'px' }"></div>
@@ -621,8 +636,8 @@ defineExpose({ locateToday });
               "
               class="gantt-finish icon-btn"
               :disabled="busy"
-              :aria-label="`结束${entry.title}`"
-              title="结束于今天"
+              :aria-label="tr('timelineView.end', { value0: entry.title })"
+              :title="tr('common.endsToday')"
               @click="emit('finish', entry)"
             >
               <PlannerIcon name="check" />
@@ -630,13 +645,21 @@ defineExpose({ locateToday });
           </div>
           <div class="gantt-row-meta">
             <span class="event-status">{{
-              entryStatus(entry, today) === 'ongoing' ? '进行中' : '已结束'
+              entryStatus(entry, today) === 'ongoing'
+                ? tr('common.ongoing')
+                : tr('common.ended')
             }}</span>
-            <span>{{ durationDays(entry, today) }} 天</span>
+            <span>{{
+              tr('data.days', { value0: durationDays(entry, today) })
+            }}</span>
             <span
               class="gantt-focus-total"
               :class="{ 'has-focus': focusTotals.get(entry.id) }"
-              >累计重点 {{ focusTotals.get(entry.id) ?? 0 }} 天</span
+              >{{
+                tr('timelineView.cumulativeFocusDays', {
+                  value0: focusTotals.get(entry.id) ?? 0,
+                })
+              }}</span
             >
           </div>
         </div>
@@ -648,7 +671,7 @@ defineExpose({ locateToday });
       class="timeline-viewport gantt-scroll"
       :class="{ 'is-dragging': dragging }"
       tabindex="0"
-      aria-label="时间轴，滚轮缩放，拖动空白区域或方向键左右浏览"
+      :aria-label="tr('timelineView.timelineScrollWheelToZoomDragThe')"
       @pointerdown="pointerDown"
       @pointermove="pointerMove"
       @pointerup="pointerEnd"
@@ -688,10 +711,18 @@ defineExpose({ locateToday });
                 <b>{{
                   window.focusUnit === 'day'
                     ? Number(ordinalDate(tick.day).slice(8))
-                    : tick.label
+                    : tickLabel(tick.label)
                 }}</b>
                 <small v-if="window.focusUnit === 'day'">{{
-                  ['一', '二', '三', '四', '五', '六', '日'][(tick.day - 1) % 7]
+                  [
+                    tr('common.mon'),
+                    tr('common.tue'),
+                    tr('common.wed'),
+                    tr('common.thu'),
+                    tr('common.fri'),
+                    tr('common.sat'),
+                    tr('common.sun'),
+                  ][(tick.day - 1) % 7]
                 }}</small>
               </span>
             </div>
@@ -702,7 +733,7 @@ defineExpose({ locateToday });
             v-if="window.todayX !== null"
             class="today-line"
             :style="{ left: window.todayX + 'px' }"
-            aria-label="今天"
+            :aria-label="tr('common.today')"
           ></span>
           <div :style="{ height: rows.before + 'px' }"></div>
           <div
@@ -732,16 +763,31 @@ defineExpose({ locateToday });
                   'is-short': placement.bar.width < 24,
                 }"
                 :style="barStyle(placement)"
-                :title="`${placement.entry.title} · ${placement.entry.startDate} — ${placement.entry.endDate ?? (placement.entry.startDate > today ? '结束未定' : '至今')}`"
-                :aria-label="`${placement.entry.title}，${placement.entry.startDate} 至 ${placement.entry.endDate ?? (placement.entry.startDate > today ? '结束未定' : '今天')}，${entryStatus(placement.entry, today) === 'ongoing' ? '进行中' : '已结束'}`"
+                :title="`${placement.entry.title} · ${placement.entry.startDate} — ${placement.entry.endDate ?? (placement.entry.startDate > today ? tr('common.endingPending') : tr('common.present'))}`"
+                :aria-label="
+                  tr('timelineView.to', {
+                    value0: placement.entry.title,
+                    value1: placement.entry.startDate,
+                    value2:
+                      placement.entry.endDate ??
+                      (placement.entry.startDate > today
+                        ? tr('common.endingPending')
+                        : tr('common.today')),
+                    value3:
+                      entryStatus(placement.entry, today) === 'ongoing'
+                        ? tr('common.ongoing')
+                        : tr('common.ended'),
+                  })
+                "
                 @click="emit('view', placement.entry)"
               >
                 <span class="gantt-bar-title"
                   >{{ placement.bar.continuesBefore ? '‹ ' : ''
                   }}{{ placement.entry.title }}</span
                 >
-                <span v-if="!placement.entry.endDate" class="gantt-bar-live"
-                  >至今</span
+                <span v-if="!placement.entry.endDate" class="gantt-bar-live">{{
+                  tr('common.present')
+                }}</span
                 >{{ placement.bar.continuesAfter ? '›' : '' }}
               </button>
               <button
@@ -786,12 +832,14 @@ defineExpose({ locateToday });
       @pointerenter="keepTip"
       @pointerleave="hideTip"
     >
-      <strong>{{ tipGroup.dates.length }} 个重点日</strong>
+      <strong>{{
+        tr('timelineView.focusDays2', { value0: tipGroup.dates.length })
+      }}</strong>
       <span
         >{{ tipGroup.dates.slice(0, 3).join('、')
         }}{{ tipGroup.dates.length > 3 ? '…' : '' }}</span
       >
-      <small>点击色块查看日期</small>
+      <small>{{ tr('common.clickOnTheColorBlockToView') }}</small>
     </div>
     <div
       :id="panelId"
@@ -808,24 +856,30 @@ defineExpose({ locateToday });
         <div class="focus-popover-heading">
           <div>
             <h2 :id="panelId + '-heading'">
-              重点日期 · {{ details.dates.length }} 天
+              {{
+                tr('timelineView.focusDatesDays', {
+                  value0: details.dates.length,
+                })
+              }}
             </h2>
             <p>{{ focusTitle }}</p>
           </div>
           <IconButton
             icon="close"
-            label="关闭重点详情"
+            :label="tr('common.closeKeyDetails')"
             @click="closeFocus(true)"
           />
         </div>
-        <p class="focus-popover-hint">当前标记包含的日期，点击进入每日回看。</p>
+        <p class="focus-popover-hint">
+          {{ tr('timelineView.theDateContainedInTheCurrentMark') }}
+        </p>
         <div class="date-list focus-date-list">
           <button
             v-for="date in details.dates.slice(detailOffset, detailOffset + 50)"
             :key="date"
             type="button"
             data-focus-date
-            :aria-label="`回看 ${date}`"
+            :aria-label="tr('timelineView.review', { value0: date })"
             @click="visitFocus(date)"
           >
             <span class="focus-date-dot" aria-hidden="true"></span
@@ -837,7 +891,7 @@ defineExpose({ locateToday });
           <IconButton
             icon="chevron"
             class="flip"
-            label="上一页重点日期"
+            :label="tr('common.previousPageFocusDates')"
             :disabled="detailOffset === 0"
             @click="pageFocus(-1)"
           /><span
@@ -845,7 +899,7 @@ defineExpose({ locateToday });
             {{ Math.ceil(details.dates.length / 50) }}</span
           ><IconButton
             icon="chevron"
-            label="下一页重点日期"
+            :label="tr('common.nextPageFocusDates')"
             :disabled="detailOffset + 50 >= details.dates.length"
             @click="pageFocus(1)"
           />

@@ -16,6 +16,7 @@ import { ApiResultInterceptor } from './common/api-result.interceptor.js';
 import { createStaticSite } from './web/static-site.js';
 import { ApplicationLogger } from './common/application-logger.js';
 import { requestLogging } from './common/request-logging.js';
+import { normalizeLocale } from '@dayline/locales';
 
 export async function createApp(
   config: AppConfig,
@@ -46,6 +47,12 @@ export async function createApp(
     )
       request.method = 'PATCH';
     request.requestId = randomUUID();
+    request.daylineLocale = normalizeLocale(
+      request
+        .acceptsLanguages()
+        .find((language) => /^(?:zh|en)(?:-|$)/i.test(language)),
+    );
+    response.setHeader('Content-Language', request.daylineLocale);
     response.setHeader('X-Request-ID', request.requestId);
     response.setHeader('Cache-Control', 'no-store');
     if (config.releaseRevision)
@@ -65,6 +72,7 @@ export async function createApp(
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
       'Content-Type',
+      'Accept-Language',
       'Authorization',
       'X-Dayline-Expected-User',
       'If-None-Match',
@@ -79,6 +87,7 @@ export async function createApp(
       'ETag',
       'Retry-After',
       'Content-Disposition',
+      'Content-Language',
     ],
   });
   if (config.webDistDirectory)

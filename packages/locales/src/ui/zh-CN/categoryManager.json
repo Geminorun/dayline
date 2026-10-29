@@ -1,0 +1,8 @@
+{
+  "categoryManager.maximum20AtLeastOneDragThe": "最多 20 个、至少一个。在记录页拖动分类标签可调整顺序。",
+  "categoryManager.rename": "重命名{value0}",
+  "categoryManager.records": "{value0} 条记录",
+  "categoryManager.deleteCategory": "删除{value0}分类",
+  "categoryManager.recordsAfterDeletingACategoryTheRecords": "条记录。删除分类后，记录将进入回收站，是否删除？",
+  "categoryManager.confirmDeletionOfCategory": "确认删除{value0}分类"
+}

@@ -1,3 +1,4 @@
+import { tr } from '../i18n/index';
 export type ColorMode = 'light' | 'dark';
 export type AppearanceMode = ColorMode | 'system';
 export interface Palette {
@@ -21,8 +22,12 @@ function palette(
 export const themePresets = [
   {
     id: 'dayline',
-    name: '日序青绿',
-    description: '熟悉的纸白与青绿',
+    get name() {
+      return tr('common.daylineGreen');
+    },
+    get description() {
+      return tr('common.familiarPaperWhiteAndGreen');
+    },
     light: palette(
       '#f6f7f4',
       '#ffffff',
@@ -43,7 +48,9 @@ export const themePresets = [
   {
     id: 'github',
     name: 'GitHub',
-    description: '清爽、清晰的蓝色强调',
+    get description() {
+      return tr('presets.crispClearBlueAccents');
+    },
     light: palette(
       '#f6f8fa',
       '#ffffff',
@@ -64,7 +71,9 @@ export const themePresets = [
   {
     id: 'vscode',
     name: 'VS Code',
-    description: '中性灰与经典蓝',
+    get description() {
+      return tr('common.neutralGrayAndClassicBlue');
+    },
     light: palette(
       '#f3f3f3',
       '#ffffff',
@@ -85,7 +94,9 @@ export const themePresets = [
   {
     id: 'cursor',
     name: 'Cursor',
-    description: '低饱和的柔白与石墨',
+    get description() {
+      return tr('presets.lowSaturationSoftWhiteAndGraphite');
+    },
     light: palette(
       '#f7f7f5',
       '#ffffff',
@@ -106,7 +117,9 @@ export const themePresets = [
   {
     id: 'notion',
     name: 'Notion',
-    description: '安静的纸张与墨色',
+    get description() {
+      return tr('common.quietPaperAndInk');
+    },
     light: palette(
       '#f7f7f5',
       '#ffffff',
@@ -126,8 +139,12 @@ export const themePresets = [
   },
   {
     id: 'eyecare',
-    name: '护眼',
-    description: '柔和浅绿，降低背景饱和度',
+    get name() {
+      return tr('common.eyeProtection');
+    },
+    get description() {
+      return tr('presets.softLightGreenDesaturatedBackground');
+    },
     light: palette(
       '#e8f0e3',
       '#f2f6ee',
@@ -147,8 +164,12 @@ export const themePresets = [
   },
   {
     id: 'beige',
-    name: '米黄',
-    description: '温暖的米纸与棕色强调',
+    get name() {
+      return tr('common.beige');
+    },
+    get description() {
+      return tr('presets.warmRicePaperWithBrownAccents');
+    },
     light: palette(
       '#f6eedd',
       '#fff9ec',

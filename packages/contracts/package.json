@@ -22,7 +22,8 @@
     "@dayline/core": "workspace:*",
     "@noble/hashes": "2.0.1",
     "papaparse": "5.5.3",
-    "zod": "^4.0.0"
+    "zod": "^4.0.0",
+    "@dayline/locales": "workspace:*"
   },
   "devDependencies": {
     "@types/papaparse": "5.3.16"

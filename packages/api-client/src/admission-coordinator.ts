@@ -1,3 +1,5 @@
+import { msg } from '@dayline/locales';
+import type { UiText } from '@dayline/locales';
 import { guestPackageSchema, isDefaultGuestEmpty } from '@dayline/contracts';
 import type {
   AdmissionOperation,
@@ -15,7 +17,7 @@ export interface AdmissionRepository {
 export interface AdmissionState {
   job: ImportJobDto | null;
   operation: AdmissionOperation | null;
-  error: string;
+  error: UiText;
   busy: boolean;
 }
 /** Explicit import recovery, not a background upload queue. All I/O is injected. */
@@ -58,7 +60,10 @@ export class AdmissionCoordinator {
     const operation = this.state.operation;
     if (!operation || !this.active(generation, userId)) return;
     if (next.clientOperationId !== operation.clientOperationId)
-      throw new ClientError('INVALID_RESPONSE', '无法确认接入任务归属。');
+      throw new ClientError(
+        'INVALID_RESPONSE',
+        msg('errors.unableToConfirmAccessTaskOwnership'),
+      );
     const frozen: AdmissionOperation = {
       ...operation,
       jobId: next.id,
@@ -105,8 +110,7 @@ export class AdmissionCoordinator {
         if (this.active(generation, userId)) {
           this.state.operation = missing;
           this.state.job = null;
-          this.state.error =
-            '服务器未找到原任务。原冻结包与回执保留，请核对云端后明确重新预览。';
+          this.state.error = msg('errors.theServerDidNotFindTheOriginal');
           this.publish();
         }
         return;
@@ -182,8 +186,8 @@ export class AdmissionCoordinator {
       if (this.active(generation, userId)) {
         this.state.error =
           cause instanceof ClientError
-            ? cause.message
-            : '接入准备或结果确认未完成。原冻结包保留，请查询原任务后重试。';
+            ? (cause.localized ?? cause.message)
+            : msg('errors.accessPreparationOrResultConfirmationIsNot');
       }
     } finally {
       if (this.active(generation, userId)) {
@@ -224,8 +228,8 @@ export class AdmissionCoordinator {
       if (this.active(generation, userId)) {
         this.state.error =
           cause instanceof ClientError
-            ? cause.message
-            : '操作结果待确认，请查询原任务。';
+            ? (cause.localized ?? cause.message)
+            : msg('errors.theOperationResultNeedsToBeConfirmed');
         if (kind === 'commit')
           try {
             await this.recover(generation, userId);

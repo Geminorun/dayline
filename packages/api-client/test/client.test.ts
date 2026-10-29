@@ -4,6 +4,42 @@ import { ApiClient, ClientError } from '../src/index.js';
 import type { TransportResponse } from '../src/index.js';
 
 describe('platform-free account-aware transport', () => {
+  it('keeps allowlisted public message keys and numeric parameters without accepting raw upstream text', async () => {
+    const client = new ApiClient(async () => ({
+      status: 422,
+      headers: {},
+      body: {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'internal-secret',
+          messageKey: 'errors.batchAcknowledgmentContainsAtMostItems',
+          params: { value0: 42, secret: 'internal-secret' },
+        },
+      },
+    }));
+    await expect(client.request('/write')).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      localized: {
+        key: 'errors.batchAcknowledgmentContainsAtMostItems',
+        params: { value0: 42 },
+      },
+    });
+    const untrusted = new ApiClient(async () => ({
+      status: 422,
+      headers: {},
+      body: {
+        error: {
+          code: 'UNKNOWN',
+          message: 'internal-secret',
+          messageKey: 'private.secret',
+          params: { value0: 42 },
+        },
+      },
+    }));
+    await expect(untrusted.request('/write')).rejects.not.toThrow(
+      'internal-secret',
+    );
+  });
   it('sends the expected user and preserves empty 304 responses', async () => {
     const client = new ApiClient(async (request) => {
       expect(request.headers['x-dayline-expected-user']).toBe('A');

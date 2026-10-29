@@ -1,0 +1,11 @@
+{
+  "drafts.pleaseClearlyEnterTheVerifiedAccountSpace": "请先明确进入已验证账号空间后查看草稿。",
+  "drafts.pleaseGoOnlineToReVerifyYour": "请联网重新验证所属账号后查看草稿；原草稿保留。",
+  "drafts.pleaseCheckOnlineToCheckThatThe": "请联网查询已完成合并。",
+  "drafts.theBackendIsAuthorizedToReadThe": "已获后端授权读取来源草稿。原稿保留；请逐份复制为待核对草稿，之后手动保存。",
+  "drafts.thisDeviceDoesNotHaveADraft": "此设备没有该来源账号的草稿。",
+  "drafts.unableToAuthorizeRecoveryPleaseReVerify": "无法授权恢复；请重新验证统一账号。原草稿保留。",
+  "drafts.copiedToTheTargetAccountDraftRetaining": "已复制为目标账号草稿，保留原始基准；继续编辑时读取最新记录并核对版本。尚未提交云端。",
+  "drafts.theReliableOriginalBaselineIsMissingAnd": "缺少可靠原始基准，已复制为待核对的新建草稿；请选择字段后手动另存。原稿保留。",
+  "drafts.copyIsNotAvailablePleaseDownloadDraft": "复制不可用，请下载草稿。"
+}

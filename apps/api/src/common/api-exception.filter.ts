@@ -5,6 +5,8 @@ import type { ApiErrorResult } from '@dayline/contracts';
 import { AppError } from './app-error.js';
 import { errorDiagnostics } from './error-diagnostics.js';
 import { requestLogRoute } from './request-logging.js';
+import { serverText } from '../i18n/server-text.js';
+import { msg } from '@dayline/locales';
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
@@ -16,18 +18,26 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const response = context.getResponse<Response>();
     let status = 500;
     let code = 'INTERNAL_ERROR';
-    let message = '服务暂时不可用，请稍后重试。';
+    let message = serverText(msg('errors.internal'), request.daylineLocale);
     let details: unknown;
 
     if (exception instanceof AppError) {
       status = exception.getStatus();
       code = exception.code;
-      message = exception.message;
+      message = exception.localized
+        ? serverText(exception.localized, request.daylineLocale)
+        : exception.message;
       details = exception.details;
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       code = status === 404 ? 'RESOURCE_NOT_FOUND' : 'HTTP_ERROR';
-      message = status < 500 ? exception.message : message;
+      message =
+        status < 500
+          ? serverText(
+              msg(status === 404 ? 'errors.notFound' : 'errors.invalidRequest'),
+              request.daylineLocale,
+            )
+          : message;
     } else if (
       exception instanceof Error &&
       'status' in exception &&
@@ -36,7 +46,10 @@ export class ApiExceptionFilter implements ExceptionFilter {
       if ([400, 413, 415].includes(exception.status)) {
         status = exception.status;
         code = 'INVALID_REQUEST';
-        message = '请求格式或大小不符合要求。';
+        message = serverText(
+          msg('errors.invalidRequest'),
+          request.daylineLocale,
+        );
       }
     }
 
@@ -52,7 +65,22 @@ export class ApiExceptionFilter implements ExceptionFilter {
       });
     }
     const body: ApiErrorResult = {
-      error: { code, message, ...(details === undefined ? {} : { details }) },
+      error: {
+        code,
+        message,
+        ...(exception instanceof AppError && exception.localized
+          ? {
+              messageKey: exception.localized.key,
+              params: Object.fromEntries(
+                Object.entries(exception.localized.params).filter(
+                  (pair): pair is [string, number] =>
+                    typeof pair[1] === 'number' && Number.isFinite(pair[1]),
+                ),
+              ),
+            }
+          : {}),
+        ...(details === undefined ? {} : { details }),
+      },
       meta: {
         requestId: request.requestId,
         serverTime: new Date().toISOString(),

@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { DeletionResult } from '@dayline/contracts';
 import { PrismaService } from '../database/prisma.service.js';
@@ -43,7 +44,7 @@ export class DeletionService {
             throw new AppError(
               410,
               'DELETION_EXPIRED',
-              '注销撤销期限已过，账号不能恢复。',
+              msg('errors.theCancellationPeriodHasExpiredAndThe'),
             );
           await tx.user.update({
             where: { id: user.id },

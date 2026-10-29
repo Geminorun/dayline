@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { Clock } from '../records/clock.js';
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
@@ -5,6 +6,7 @@ import { PrismaService } from '../database/prisma.service.js';
 import { AppError } from '../common/app-error.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import type { WechatIdentityProof } from './wechat-adapter.js';
+import { requestLocale } from '../i18n/server-text.js';
 
 @Injectable()
 export class WechatService {
@@ -36,12 +38,17 @@ export class WechatService {
           existing.user.deletionDueAt &&
           existing.user.deletionDueAt <= this.clock.now())
       )
-        throw new AppError(403, 'ACCOUNT_UNAVAILABLE', '账号暂不可登录。');
+        throw new AppError(
+          403,
+          'ACCOUNT_UNAVAILABLE',
+          msg('errors.theAccountIsTemporarilyUnavailableForLogin'),
+        );
       return existing.userId;
     }
     const user = await transaction.user.create({
       data: {
         name: '微信用户',
+        locale: requestLocale(),
         email: `wx-${randomUUID()}@identity.dayline.invalid`,
         emailKind: 'internal',
         emailVerified: false,

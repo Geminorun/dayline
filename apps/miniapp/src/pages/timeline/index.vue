@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { tickLabel } from '../../i18n';
+import { tr } from '../../i18n/index';
 import { computed, nextTick, ref, watch } from 'vue';
 import { onShow } from '@dcloudio/uni-app';
 import {
@@ -25,7 +27,12 @@ const filter = ref(emptyFilter()),
   scrollTop = ref(0),
   scrollLeft = ref(0),
   details = ref<{ entryId: string; dates: string[] } | null>(null);
-const scales = ['月', '季度', '年', '全部时间'],
+const scales = computed(() => [
+    tr('common.month2'),
+    tr('common.quarter2'),
+    tr('common.year2'),
+    tr('common.allTime'),
+  ]),
   scaleValues = ['month', 'quarter', 'year', 'all'] as const;
 const today = computed(() => snapshot.value?.businessToday ?? '');
 const filtered = computed(() =>
@@ -165,14 +172,20 @@ onShow(async () => {
 <template>
   <view class="page timeline-page"
     ><text class="subtitle"
-      >DAYLINE · {{ mode === 'guest' ? '游客 · 仅本机保存' : '云端记录' }}</text
-    ><text class="title">完整时间轴</text
-    ><text v-if="loading" class="text">正在完整读取…</text
+      >DAYLINE ·
+      {{
+        mode === 'guest'
+          ? tr('recordsScreen.guestSaveLocallyOnly')
+          : tr('common.cloudRecording')
+      }}</text
+    ><text class="title">{{ tr('common.completeTimeline') }}</text
+    ><text v-if="loading" class="text">{{ tr('common.loadingRecords2') }}</text
     ><text v-if="error" class="text error">{{ error }}</text
     ><text v-if="notice" class="text notice">{{ notice }}</text
-    ><button class="secondary" @click="load">重新完整读取</button
+    ><button class="secondary" @click="load">
+      {{ tr('common.completeReadAgain') }}</button
     ><template v-if="snapshot"
-      ><button @click="create">＋ 新建事项</button
+      ><button @click="create">{{ tr('common.createNewEntry') }}</button
       ><Filters v-model="filter" :categories="snapshot.categories" /><view
         class="card"
         ><picker
@@ -181,13 +194,14 @@ onShow(async () => {
           ><view class="picker"
             >{{ scales[scaleValues.indexOf(scale)] }} ▾</view
           ></picker
-        ><text class="text">浏览锚点</text
+        ><text class="text">{{ tr('common.dateToView') }}</text
         ><input
           v-model="anchor"
-          aria-label="时间轴锚点 YYYY-MM-DD"
+          :aria-label="tr('mini.timelineAnchorYyyyMmDd')"
           placeholder="YYYY-MM-DD"
-        /><text v-if="!isCalendarDate(anchor)" class="text error"
-          >请输入合法日期。</text
+        /><text v-if="!isCalendarDate(anchor)" class="text error">{{
+          tr('common.pleaseEnterAValidDate')
+        }}</text
         ><view class="actions"
           ><button
             class="secondary"
@@ -198,8 +212,9 @@ onShow(async () => {
             "
             @click="move(-1)"
           >
-            上一段</button
-          ><button class="secondary" @click="locate">定位今天</button
+            {{ tr('common.previousPeriod') }}</button
+          ><button class="secondary" @click="locate">
+            {{ tr('common.goToToday') }}</button
           ><button
             class="secondary"
             :disabled="
@@ -209,22 +224,29 @@ onShow(async () => {
             "
             @click="move(1)"
           >
-            下一段
+            {{ tr('common.nextPeriod') }}
           </button></view
-        ><text class="text muted"
-          >横向滑动日期，纵向浏览事项。点击横条编辑，点击 ★ 查看重点日。</text
-        ><text class="text"
-          >所选整段范围事项 {{ summary.count }} · 今天仍在进行
-          {{ summary.ongoing }} · 分类 {{ summary.categoryCount }}</text
-        ><text class="text muted">分类分布 · 按事项数量</text
+        ><text class="text muted">{{
+          tr('mini.slideTheDateHorizontallyAndBrowseThe')
+        }}</text
+        ><text class="text">{{
+          tr('mini.selectedEntireRangeEntryStillInProgress', {
+            value0: summary.count,
+            value1: summary.ongoing,
+            value2: summary.categoryCount,
+          })
+        }}</text
+        ><text class="text muted">{{
+          tr('recordsScreen.categoryDistributionByNumberOfEntries')
+        }}</text
         ><text v-for="(count, id) in summary.categories" :key="id" class="text"
           >{{ snapshot.categories.find((c) => c.id === id)?.name }}
           {{ count }}</text
         ></view
       ><text v-if="!entries.length" class="text empty">{{
         filter.search || filter.categoryId || filter.status !== 'all'
-          ? '筛选后无结果，请调整或清除筛选。'
-          : '当前时间范围没有事项。'
+          ? tr('recordsScreen.noResultsAfterFilteringPleaseAdjustOr')
+          : tr('mini.thereIsNoEntryInTheCurrent')
       }}</text>
       <view
         v-if="isCalendarDate(anchor)"
@@ -232,7 +254,7 @@ onShow(async () => {
         @touchstart="touchStart"
         @touchmove="touchMove"
         ><view class="timeline-head"
-          ><view class="name-heading">事项 / 日期</view
+          ><view class="name-heading">{{ tr('common.entryDate') }}</view
           ><scroll-view
             scroll-x
             :scroll-left="scrollLeft"
@@ -244,7 +266,7 @@ onShow(async () => {
                 :key="tick.day"
                 class="tick"
                 :style="{ left: tick.x + 'px' }"
-                >{{ tick.label }}</text
+                >{{ tickLabel(tick.label) }}</text
               ></view
             ></scroll-view
           ></view
@@ -298,12 +320,24 @@ onShow(async () => {
                       borderColor: color(entry),
                     }"
                     role="button"
-                    :aria-label="`${entry.title} ${entry.startDate} 至 ${entry.endDate ?? (entry.startDate > today ? '结束未定' : '今天')}`"
+                    :aria-label="
+                      tr('mini.to', {
+                        value0: entry.title,
+                        value1: entry.startDate,
+                        value2:
+                          entry.endDate ??
+                          (entry.startDate > today
+                            ? tr('common.endingPending')
+                            : tr('common.today')),
+                      })
+                    "
                     @click="edit(entry)"
                     ><text
                       >{{ bar(entry)?.continuesBefore ? '‹' : ''
                       }}{{ bar(entry)?.continuesAfter ? '›' : ''
-                      }}{{ entry.startDate > today ? '未开始' : '' }}</text
+                      }}{{
+                        entry.startDate > today ? tr('common.notStarted') : ''
+                      }}</text
                     ></view
                   ><view
                     v-for="group in groups.filter(
@@ -313,7 +347,11 @@ onShow(async () => {
                     class="focus"
                     :style="{ left: group.left + 'px' }"
                     role="button"
-                    :aria-label="`${group.dates.length} 个重点日`"
+                    :aria-label="
+                      tr('timelineView.focusDays2', {
+                        value0: group.dates.length,
+                      })
+                    "
                     @click.stop="focusDetail(group)"
                     >★{{
                       group.dates.length > 1 ? group.dates.length : ''
@@ -324,9 +362,12 @@ onShow(async () => {
                 ></view></view></scroll-view></view></scroll-view
       ></view>
       <view v-if="details" class="card"
-        ><text class="heading"
-          >{{ entries.find((e) => e.id === details?.entryId)?.title }} ·
-          {{ details.dates.length }} 个重点日</text
+        ><text class="heading">{{
+          tr('mini.focusDays', {
+            value0: entries.find((e) => e.id === details?.entryId)?.title,
+            value1: details.dates.length,
+          })
+        }}</text
         ><scroll-view scroll-y class="dates-scroll"
           ><button
             v-for="date in details.dates.slice(
@@ -337,32 +378,37 @@ onShow(async () => {
             class="secondary"
             @click="day(date)"
           >
-            {{ date }} · 回看
+            {{ tr('mini.review', { value0: date }) }}
           </button></scroll-view
-        ><text class="text"
-          >第 {{ Math.floor(detailOffset / 100) + 1 }} /
-          {{ Math.ceil(details.dates.length / 100) }} 页</text
+        ><text class="text">{{
+          tr('mini.page', {
+            value0: Math.floor(detailOffset / 100) + 1,
+            value1: Math.ceil(details.dates.length / 100),
+          })
+        }}</text
         ><view class="actions"
           ><button
             class="secondary"
             :disabled="detailOffset === 0"
             @click="detailOffset -= 100"
           >
-            上一页重点日期</button
+            {{ tr('common.previousPageFocusDates') }}</button
           ><button
             class="secondary"
             :disabled="detailOffset + 100 >= details.dates.length"
             @click="detailOffset += 100"
           >
-            下一页重点日期
+            {{ tr('common.nextPageFocusDates') }}
           </button></view
         ><button class="secondary" @click="details = null">
-          关闭重点详情
+          {{ tr('common.closeKeyDetails') }}
         </button></view
       >
       <view class="card"
-        ><text class="heading">日期与跨度明细</text
-        ><text class="text muted">图表外的等价信息，点击可进入事项详情。</text
+        ><text class="heading">{{ tr('common.dateAndSpanDetails') }}</text
+        ><text class="text muted">{{
+          tr('mini.equivalentInformationOutsideTheChartClickTo')
+        }}</text
         ><view
           v-for="entry in visible"
           :key="entry.id"
@@ -370,15 +416,20 @@ onShow(async () => {
           role="button"
           @click="edit(entry)"
           >{{ entry.title }} · {{ entry.startDate }} →
-          {{ entry.endDate ?? (entry.startDate > today ? '结束未定' : '至今') }}
+          {{
+            entry.endDate ??
+            (entry.startDate > today
+              ? tr('common.endingPending')
+              : tr('common.present'))
+          }}
           ·
           {{
             entry.startDate > today
-              ? '未开始'
+              ? tr('common.notStarted')
               : dateOrdinal(entry.endDate ?? today) -
                 dateOrdinal(entry.startDate) +
                 1 +
-                ' 天'
+                tr('common.days')
           }}</view
         ></view
       ></template

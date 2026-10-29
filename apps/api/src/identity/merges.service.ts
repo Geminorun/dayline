@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import {
   categoryOrder,
   nextCategoryPosition,
@@ -6,9 +7,14 @@ import { Clock } from '../records/clock.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { mergePlanSchema } from '@dayline/contracts';
-import type { MergePlan, MergeMappings } from '@dayline/contracts';
+import type {
+  MergePlan,
+  MergeMappings,
+  mergeReviewSchema,
+  mergeCommitSchema,
+} from '@dayline/contracts';
 import type { z } from 'zod';
-import type { mergeReviewSchema, mergeCommitSchema } from '@dayline/contracts';
+
 import { PrismaService } from '../database/prisma.service.js';
 import type {
   Prisma,
@@ -22,7 +28,11 @@ import { AuthAdapter } from '../auth/adapter/auth-adapter.js';
 import { categoryDto, entryDto, focusDto } from '../records/record-dto.js';
 import { identityJson } from './identity.service.js';
 const stale = () =>
-  new AppError(409, 'PREVIEW_STALE', '合并依据已变化，请重新验证双方并预览。');
+  new AppError(
+    409,
+    'PREVIEW_STALE',
+    msg('errors.theMergingBasisHasChangedPleaseRe'),
+  );
 type Tx = Prisma.TransactionClient;
 @Injectable()
 export class MergesService {
@@ -66,7 +76,7 @@ export class MergesService {
       throw new AppError(
         403,
         'REAUTH_REQUIRED',
-        '请重新验证双方身份；原预览和账号仍保留。',
+        msg('errors.pleaseReVerifyTheIdentitiesOfBoth'),
       );
     const [a, b] = await Promise.all([
       tx.user.findUnique({ where: { id: row.initiatorUserId } }),
@@ -85,7 +95,7 @@ export class MergesService {
       throw new AppError(
         503,
         'ACCOUNT_NOT_INITIALIZED',
-        '账号业务结构尚未准备完成。',
+        msg('errors.theAccountBusinessStructureIsNotReady'),
       );
     return { row, a, b };
   }
@@ -108,7 +118,7 @@ export class MergesService {
       throw new AppError(
         409,
         'IDENTITY_COMBINATION_UNSUPPORTED',
-        '首版仅支持一个真实邮箱和一个微信；双方账号及登录方式保持独立。',
+        msg('errors.theFirstVersionOnlySupportsOneReal'),
       );
   }
   private async cloud(tx: Tx, userId: string) {
@@ -162,7 +172,7 @@ export class MergesService {
           throw new AppError(
             404,
             'RESOURCE_NOT_FOUND',
-            '已验证的合并上下文不存在。',
+            msg('errors.authenticatedMergeContextDoesNotExist'),
           );
         await this.lock(tx, [initial.initiatorUserId, initial.otherUserId]);
         const { row, a, b } = await this.context(
@@ -185,7 +195,7 @@ export class MergesService {
             throw new AppError(
               409,
               'IDEMPOTENCY_KEY_REUSED',
-              '此操作已绑定另一账号。',
+              msg('errors.thisOperationHasBeenBoundToAnother'),
             );
           const plan = mergePlanSchema.parse(old.plan);
           if (old.status !== 'preview') return plan;
@@ -196,7 +206,7 @@ export class MergesService {
             throw new AppError(
               403,
               'REAUTH_REQUIRED',
-              '请在原合并会话继续，或为新会话重新建立操作。',
+              msg('errors.pleaseContinueInTheOriginalMergeSession'),
             );
           if (
             old.sourceDataVersion !== b.dataVersion ||
@@ -301,7 +311,12 @@ export class MergesService {
     const row = await tx.accountMerge.findFirst({
       where: { id, targetUserId: actor.userId },
     });
-    if (!row) throw new AppError(404, 'RESOURCE_NOT_FOUND', '合并任务不存在。');
+    if (!row)
+      throw new AppError(
+        404,
+        'RESOURCE_NOT_FOUND',
+        msg('errors.theMergeTaskDoesNotExist'),
+      );
     await this.lock(tx, [row.sourceUserId, row.targetUserId]);
     await this.proofs.current(tx, actor);
     await tx.$queryRaw`SELECT id FROM account_merges WHERE id=${id}::uuid FOR UPDATE`;
@@ -419,7 +434,11 @@ export class MergesService {
         where: { id, targetUserId: actor.userId },
       });
       if (!row)
-        throw new AppError(404, 'RESOURCE_NOT_FOUND', '合并任务不存在。');
+        throw new AppError(
+          404,
+          'RESOURCE_NOT_FOUND',
+          msg('errors.theMergeTaskDoesNotExist'),
+        );
       await this.lock(tx, [row.sourceUserId, row.targetUserId]);
       await this.proofs.current(tx, actor);
       const changed = await tx.accountMerge.updateMany({
@@ -583,7 +602,11 @@ export class MergesService {
         where: { id, status: 'committed' },
       });
       if (!row)
-        throw new AppError(404, 'RESOURCE_NOT_FOUND', '授权映射不存在。');
+        throw new AppError(
+          404,
+          'RESOURCE_NOT_FOUND',
+          msg('errors.authorizationMappingDoesNotExist'),
+        );
       const source = await tx.user.findFirst({
         where: {
           id: row.sourceUserId,
@@ -592,7 +615,11 @@ export class MergesService {
         },
       });
       if (!source)
-        throw new AppError(404, 'RESOURCE_NOT_FOUND', '授权映射不存在。');
+        throw new AppError(
+          404,
+          'RESOURCE_NOT_FOUND',
+          msg('errors.authorizationMappingDoesNotExist'),
+        );
       const mapping = await tx.mergeRecordMapping.findUniqueOrThrow({
         where: { mergeId: id },
       });

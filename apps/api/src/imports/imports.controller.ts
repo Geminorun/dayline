@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import {
   Body,
   Controller,
@@ -28,16 +29,22 @@ import { ImportsService } from './imports.service.js';
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success)
-    throw new AppError(422, 'IMPORT_INVALID', '接入格式、数量或引用不正确。', {
-      issues: result.error.issues.map((i) => ({
-        path: i.path,
-        message: i.message,
-      })),
-    });
+    throw new AppError(
+      422,
+      'IMPORT_INVALID',
+      msg('errors.incorrectAccessFormatQuantityOrReference'),
+      {
+        issues: result.error.issues.map((i) => ({
+          path: i.path,
+          message: i.message,
+        })),
+      },
+    );
   return result.data;
 }
 function actor(request: Request) {
-  if (!request.actor) throw new AppError(401, 'UNAUTHENTICATED', '请先登录。');
+  if (!request.actor)
+    throw new AppError(401, 'UNAUTHENTICATED', msg('errors.pleaseLogInFirst'));
   return request.actor;
 }
 @ApiTags('imports')
@@ -67,7 +74,11 @@ export class ImportsController {
         'Retry-After',
         String(Math.max(1, Math.ceil((60000 - (now - bucket.start)) / 1000))),
       );
-      throw new AppError(429, 'RATE_LIMITED', '预览过于频繁，请稍后重试。');
+      throw new AppError(
+        429,
+        'RATE_LIMITED',
+        msg('errors.previewingTooFrequentlyPleaseTryAgainLater'),
+      );
     }
     bucket.count++;
     this.previewBuckets.set(key, bucket);
@@ -108,12 +119,20 @@ export class ImportsController {
     );
     const operation = parse(z.uuid(), request.get('X-Dayline-Operation-ID'));
     if (!Buffer.isBuffer(body))
-      throw new AppError(422, 'IMPORT_INVALID', '请选择 UTF-8 文件。');
+      throw new AppError(
+        422,
+        'IMPORT_INVALID',
+        msg('errors.pleaseSelectAUtf8File'),
+      );
     let text: string;
     try {
       text = new TextDecoder('utf-8', { fatal: true }).decode(body);
     } catch {
-      throw new AppError(422, 'IMPORT_INVALID', '文件必须是有效 UTF-8。');
+      throw new AppError(
+        422,
+        'IMPORT_INVALID',
+        msg('errors.fileMustBeValidUtf8'),
+      );
     }
     try {
       const source = parseImportFile(

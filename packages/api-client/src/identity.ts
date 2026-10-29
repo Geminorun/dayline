@@ -6,13 +6,13 @@ import {
   mergeListSchema,
   successDtoSchema,
 } from '@dayline/contracts';
-import type { ActionRequest } from '@dayline/contracts';
-
 import type {
+  ActionRequest,
   MergeReviewInput,
   MergeCommitInput,
   EmailBindingCompleteInput,
 } from '@dayline/contracts';
+
 import type { ApiClient } from './index.js';
 export function createIdentityClient(api: ApiClient) {
   return {

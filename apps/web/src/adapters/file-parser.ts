@@ -1,3 +1,5 @@
+import { isMessage } from '@dayline/locales';
+import { tr } from '../i18n/index';
 import { FileError, parseImportFile } from '@dayline/contracts/files';
 import { normalizedImportSourceSchema } from '@dayline/contracts';
 import type { NormalizedImportSource } from '@dayline/contracts';
@@ -16,20 +18,31 @@ export function parseWebFile(
     worker.onerror = () => {
       worker.terminate();
       reject(
-        new FileError('IMPORT_INVALID', '文件解析未完成，请保留原文件后重试。'),
+        new FileError(
+          'IMPORT_INVALID',
+          tr('file-parser.fileParsingIsNotCompletedPleaseKeep'),
+        ),
       );
     };
     worker.onmessage = (event: MessageEvent<unknown>) => {
       worker.terminate();
       const result = event.data;
       if (typeof result !== 'object' || result === null || !('ok' in result)) {
-        reject(new FileError('IMPORT_INVALID', '文件解析响应无效。'));
+        reject(
+          new FileError(
+            'IMPORT_INVALID',
+            tr('file-parser.invalidFileParsingResponse'),
+          ),
+        );
         return;
       }
       if (result.ok === true && 'source' in result) {
         const checked = normalizedImportSourceSchema.safeParse(result.source);
         if (checked.success) resolve(checked.data);
-        else reject(new FileError('IMPORT_INVALID', '文件结构无效。'));
+        else
+          reject(
+            new FileError('IMPORT_INVALID', tr('common.invalidFileStructure')),
+          );
       } else {
         const error = result as {
           code?: unknown;
@@ -39,9 +52,9 @@ export function parseWebFile(
         reject(
           new FileError(
             typeof error.code === 'string' ? error.code : 'IMPORT_INVALID',
-            typeof error.message === 'string'
+            typeof error.message === 'string' || isMessage(error.message)
               ? error.message
-              : '文件解析未完成。',
+              : tr('common.fileParsingNotCompleted'),
             Array.isArray(error.issues)
               ? error.issues.filter(
                   (i): i is { path: string; message: string } =>

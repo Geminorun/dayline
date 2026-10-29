@@ -728,6 +728,10 @@ dayline/
 
 ## 13. 参考资料
 
+### 后续确认：多语言（2026-10-29）
+
+Web、小程序及后端公开提示优先支持简体中文与英文；用户可在设置切换，登录后同步账号偏好，邮件使用账号语言。资源按模块维护，切换不改写用户内容、CSV / JSON 格式或北京时间业务规则。实现与验收细则见 [多语言方案](i18n.md)。
+
 - 原站：[日序 Dayline](https://dayline.mindreview.me/)。
 - [uni-app 官方文档](https://uniapp.dcloud.net.cn/)。
 - [uni-app 平台差异与条件编译](https://uniapp.dcloud.net.cn/tutorial/platform.html)。

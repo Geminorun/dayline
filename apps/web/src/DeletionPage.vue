@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { formatBeijingTime, tr, messageRef } from './i18n/index';
+
+import { msg } from '@dayline/locales';
 import PlannerIcon from './components/PlannerIcon.vue';
 import IconButton from './components/IconButton.vue';
 import AccountExports from './AccountExports.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { deletionResultSchema } from '@dayline/contracts';
-import { formatBeijingTime } from '@dayline/core';
+
 import { api } from './api';
 import { useAccount } from './account';
 import { useWorkspace } from './records/workspace';
@@ -17,8 +20,8 @@ const busy = ref(false),
   confirmed = ref(false),
   proof = ref(''),
   operationId = ref(crypto.randomUUID()),
-  error = ref(''),
-  notice = ref('');
+  error = messageRef(),
+  notice = messageRef();
 const pending = computed(
   () => account.current.value?.status === 'pending_deletion',
 );
@@ -96,7 +99,8 @@ async function submit() {
   error.value = '';
   try {
     const response = await workspace.identityWrite(() => {
-      if (!current()) throw new Error('账号或操作已变化，请重新确认。');
+      if (!current())
+        throw new Error(tr('deletion.theAccountOrOperationHasChangedPlease'));
       return api.request('/api/v1/me/deletion', {
         method: cancel ? 'DELETE' : 'POST',
         account: true,
@@ -108,8 +112,10 @@ async function submit() {
     const result = response.data;
     const completion =
       result.status === 'pending_deletion'
-        ? `注销已申请，到期 ${formatBeijingTime(result.dueAt)}。普通登录不会撤销；请重新登录查看状态或撤销。`
-        : '注销已明确撤销。请重新登录并完整读取后继续，原账号草稿保留。';
+        ? tr('deletion.cancellationRequestedExpiredOrdinaryLoginWillNot', {
+            value0: formatBeijingTime(result.dueAt),
+          })
+        : tr('deletion.accountDeletionHasBeenExplicitlyRevokedPlease');
     if (result.reauthenticate) {
       account.clear();
       notice.value = completion;
@@ -120,7 +126,9 @@ async function submit() {
     }
   } catch (e) {
     if (current())
-      error.value = `${errorMessage(e)} 如网络中断或结果不明，请重新登录原身份并读取注销状态。`;
+      error.value = msg('deletion.ifTheNetworkIsInterruptedOrThe', {
+        value0: errorMessage(e),
+      });
   } finally {
     if (current()) busy.value = false;
   }
@@ -140,11 +148,17 @@ onBeforeUnmount(() => {
       <RouterLink
         class="icon-btn tool-button"
         to="/settings"
-        aria-label="返回设置"
-        title="返回设置"
+        :aria-label="tr('common.returnToSettings')"
+        :title="tr('common.returnToSettings')"
         ><PlannerIcon name="back"
       /></RouterLink>
-      <h1>{{ pending ? '注销状态与撤销' : '注销统一账号' }}</h1>
+      <h1>
+        {{
+          pending
+            ? tr('common.accountDeletionStatusAndRevocation')
+            : tr('common.cancelUnifiedAccount')
+        }}
+      </h1>
     </div>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <p v-if="notice" role="status" class="notice">{{ notice }}</p>
@@ -153,7 +167,7 @@ onBeforeUnmount(() => {
         !ready && account.current.value && workspace.mode.value === 'account'
       "
     >
-      正在确认当前账号…
+      {{ tr('deletion.confirmingCurrentAccount') }}
     </p>
     <template
       v-if="
@@ -162,29 +176,37 @@ onBeforeUnmount(() => {
     >
       <section class="record-panel">
         <h2>
-          {{ pending ? '账号处于七天撤销窗口' : '申请前请保留需要的数据' }}
+          {{
+            pending
+              ? tr('deletion.accountIsInSevenDayCancellationWindow')
+              : tr('deletion.pleaseKeepTheRequiredDataBeforeApplying')
+          }}
         </h2>
         <p v-if="pending">
-          到期：{{
-            formatBeijingTime(account.current.value.deletionDueAt)
-          }}。普通登录保持注销申请；只有服务器时间严格早于到期才可明确撤销。
+          {{
+            tr(
+              'deletion.expiredOrdinaryLoginsMaintainAccountDeletionRequests',
+              {
+                value0: formatBeijingTime(account.current.value.deletionDueAt),
+              },
+            )
+          }}
         </p>
-        <p>
-          注销作用于这个统一账号的全部事项、重点、分类、回收站和关联邮箱 /
-          微信登录方式，以及已合并来源记录。申请确认后连续 7
-          天内可重新验证并明确撤销；到期后清理且不能恢复旧账号。
-        </p>
-        <p>
-          申请和撤销均会撤销全部旧会话，需重新登录。未提交草稿仍留在原账号空间，不会自动迁移到新账号；请在到期前单独复制或下载。
-        </p>
-        <RouterLink to="/data">先导出云端 CSV / 完整 JSON</RouterLink> ·
-        <RouterLink to="/drafts">复制或下载本机草稿</RouterLink>
+        <p>{{ tr('deletion.accountDeletionAllEntriesKeyPointsCategories') }}</p>
+        <p>{{ tr('deletion.bothApplicationAndCancellationWillCancelAll') }}</p>
+        <RouterLink to="/data">{{
+          tr('deletion.exportCloudCsvCompleteJsonFirst')
+        }}</RouterLink>
+        ·
+        <RouterLink to="/drafts">{{
+          tr('deletion.copyOrDownloadLocalDraft')
+        }}</RouterLink>
       </section>
       <label
         ><input v-model="confirmed" type="checkbox" :disabled="busy" />{{
           pending
-            ? '我明确撤销本次注销，保留账号及已保存记录'
-            : '我已了解七天窗口、清理范围及会话失效，明确申请注销'
+            ? tr('deletion.iClearlyCancelThisCancellationAndRetain')
+            : tr('deletion.iUnderstandTheSevenDayWindowCleanup')
         }}</label
       >
       <ReauthForm
@@ -200,32 +222,35 @@ onBeforeUnmount(() => {
       >
         {{
           busy
-            ? '正在等待服务器确认…'
+            ? tr('deletion.waitingForServerConfirmation')
             : pending
-              ? '明确撤销注销'
-              : '确认申请七天后注销'
+              ? tr('common.explicitCancellationOfCancellation')
+              : tr('deletion.cancellationAfterSevenDaysAfterConfirmationOf')
         }}
       </button>
       <IconButton
         icon="refresh"
-        label="读取服务器注销状态"
+        :label="tr('deletion.checkAccountDeletionStatus')"
         :disabled="busy"
         @click="load"
       />
     </template>
     <template
       v-else-if="!account.current.value || workspace.mode.value !== 'account'"
-      ><p>请用原登录方式重新登录后读取注销状态。登录本身不会撤销注销。</p>
-      <RouterLink to="/auth/login?returnTo=/account-deletion"
-        >重新登录并查询</RouterLink
+      ><p>{{ tr('deletion.pleaseLogInAgainUsingTheOriginal') }}</p>
+      <RouterLink to="/auth/login?returnTo=/account-deletion">{{
+        tr('common.logInAgainAndQuery')
+      }}</RouterLink
       ><button
         v-if="account.current.value"
         class="button subtle"
         @click="workspace.switchMode('account')"
       >
-        进入已验证账号查看注销状态
+        {{ tr('deletion.enterTheVerifiedAccountToCheckThe') }}
       </button></template
     >
-    <AccountExports /><RouterLink to="/settings">返回设置</RouterLink>
+    <AccountExports /><RouterLink to="/settings">{{
+      tr('common.returnToSettings')
+    }}</RouterLink>
   </section>
 </template>

@@ -1214,6 +1214,8 @@ Bearer 由专用适配器注入，RequestTask.abort 仅用于取消，不视为�
 
 ## 21. 参考与证据
 
+中英文资源、语言切换、账号偏好与两端适配规则见 [多语言方案](i18n.md)，作为本 Spec 的后续补充。
+
 - 产品范围与验收：[requirements.md](requirements.md) v1.0。
 - API、DTO、文件格式和错误：[backend-spec.md](backend-spec.md) v0.1；本次共同细化预期账号一致性 header，不改变会话授权依据。
 - 旧站第 9 版 `public/styles.css`、`public/core.mjs`、`public/timeline.mjs` 与 `app/planner-body.html`：配色、组件方向及业务计算的源码参考；不是新项目已通过 UI 验证的证据。

@@ -1,5 +1,9 @@
+<script setup lang="ts">
+import { tr } from '../i18n';
+</script>
 <template>
   <div class="file-tool-loading" role="status" aria-live="polite">
-    <span class="file-loading-ring"></span><span>正在准备文件工具…</span>
+    <span class="file-loading-ring"></span
+    ><span>{{ tr('fileToolLoading.preparingFileTool') }}</span>
   </div>
 </template>

@@ -40,6 +40,7 @@ it('restores pending with GET me only, never mounts private cache, preserves the
         header: {},
         data: {
           data: {
+            locale: 'zh-CN',
             id: userId,
             displayName: '待注销微信',
             profileVersion: 1,

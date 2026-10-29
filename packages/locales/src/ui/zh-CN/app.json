@@ -1,0 +1,17 @@
+{
+  "app.message": "{value0}年 {value1}月",
+  "app.editCategory": "编辑分类{value0}",
+  "app.deleteCategory": "删除分类{value0}",
+  "app.makeRoomForYourDays": "时间有迹，生活有序。",
+  "app.aLittleSpaceForTheThingsThat": "为每一件小事，留一点空间。",
+  "app.recordSavedInCurrentBrowser": "记录保存在当前浏览器",
+  "app.accountRecordsCloudStorage": "账号记录 · 云端保存",
+  "app.guestLoginRegister": "游客 · 登录·注册",
+  "app.everyExperienceIsWorthRecording": "每一段经历，都值得记录",
+  "app.theUnsubmittedContentOfThisMachineCannot": "本机未提交内容暂时无法读取",
+  "app.theIdentityHasNotBeenConfirmedAnd": "身份尚未确认，私人缓存已隐藏；原账号草稿仍保留。",
+  "app.theAccountIsBeingAccountDeletionNormal": "账号正在注销中，普通登录不会撤销。业务写入已暂停。",
+  "app.viewExpirationDateExplicitCancellation": "查看到期时间 / 明确撤销",
+  "app.dayline": "日序 DAYLINE",
+  "app.oneDayAtATime": "慢慢来，每一天都算数。"
+}

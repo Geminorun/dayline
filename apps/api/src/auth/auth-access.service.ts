@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { Clock } from '../records/clock.js';
 import { Inject, Injectable } from '@nestjs/common';
 import { EXPECTED_USER_HEADER } from '@dayline/contracts';
@@ -46,7 +47,7 @@ export class AuthAccessService {
         throw new AppError(
           401,
           'UNAUTHENTICATED',
-          '登录凭据不一致，请重新登录。',
+          msg('errors.loginCredentialsAreInconsistentPleaseLogIn'),
         );
       }
     }
@@ -65,14 +66,18 @@ export class AuthAccessService {
       throw new AppError(
         401,
         'SESSION_REVOKED',
-        '登录状态已失效，请重新登录。',
+        msg('errors.loginStatusHasExpiredPleaseLogIn'),
       );
     }
     if (
       session.session.authMethod === 'email_password' &&
       (!user.emailVerified || user.emailKind !== 'real')
     ) {
-      throw new AppError(401, 'UNAUTHENTICATED', '请先完成邮箱验证。');
+      throw new AppError(
+        401,
+        'UNAUTHENTICATED',
+        msg('errors.pleaseCompleteEmailVerificationFirst'),
+      );
     }
     return {
       actor: {
@@ -93,20 +98,33 @@ export class AuthAccessService {
     allowPending = false,
   ): Promise<AuthenticatedSession> {
     const result = await this.resolve(headers);
-    if (!result) throw new AppError(401, 'UNAUTHENTICATED', '请先登录。');
+    if (!result)
+      throw new AppError(
+        401,
+        'UNAUTHENTICATED',
+        msg('errors.pleaseLogInFirst'),
+      );
     const expectedUser = headers.get(EXPECTED_USER_HEADER);
     if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && !expectedUser) {
-      throw new AppError(400, 'ACTOR_CONTEXT_REQUIRED', '请求缺少账号上下文。');
+      throw new AppError(
+        400,
+        'ACTOR_CONTEXT_REQUIRED',
+        msg('errors.theRequestIsMissingAccountContext'),
+      );
     }
     if (expectedUser && expectedUser !== result.actor.userId) {
       throw new AppError(
         409,
         'ACTOR_CONTEXT_MISMATCH',
-        '当前账号已变化，请重新确认。',
+        msg('errors.theCurrentAccountHasChangedPleaseReconfirm'),
       );
     }
     if (result.status === 'pending_deletion' && !allowPending) {
-      throw new AppError(403, 'ACCOUNT_PENDING_DELETION', '账号正在注销中。');
+      throw new AppError(
+        403,
+        'ACCOUNT_PENDING_DELETION',
+        msg('errors.accountDeletionIsPending'),
+      );
     }
     return result;
   }

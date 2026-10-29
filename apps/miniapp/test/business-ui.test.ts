@@ -120,6 +120,7 @@ describe('independent miniapp business controls', () => {
     const archived = guestSnapshot?.trashEntries[0];
     if (!archived || !guestSnapshot) throw new Error('Missing guest record');
     workspace.current.value = {
+      locale: 'zh-CN',
       id: userId,
       displayName: '云端用户',
       profileVersion: 1,

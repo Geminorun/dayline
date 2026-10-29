@@ -40,7 +40,11 @@ export function requestLogging(
     });
     // The callback preserves the transaction's completion; no early timeout response.
     requestBudget.run(
-      { requestId: request.requestId, deadline: Date.now() + timeout },
+      {
+        requestId: request.requestId,
+        deadline: Date.now() + timeout,
+        ...(request.daylineLocale ? { locale: request.daylineLocale } : {}),
+      },
       next,
     );
   };

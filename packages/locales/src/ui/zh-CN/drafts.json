@@ -1,0 +1,13 @@
+{
+  "drafts.pleaseSelectTheTargetCategoryExplicitlyThe": "请明确选择目标分类；旧草稿原文保留。",
+  "drafts.localCopyFailedTheOriginalDraftIs": "本机复制失败，原草稿保留。请检查本机存储后重试。",
+  "drafts.abandonThisLocalDraftTheCloudEntry": "放弃此本机草稿？云端事项保持不变。",
+  "drafts.theseContentsAreOnlyTemporaryOnThis": "这些内容只暂存在此设备。继续编辑并保存后，才会上传到账号。",
+  "drafts.lastBuffer": "{value0} · 最后暂存 {value1}",
+  "drafts.onlyAfterTheUnifiedAccountIsRe": "只有重新验证统一账号并取得后端映射后，才读取本机来源草稿。普通切换账号不会迁移草稿。",
+  "drafts.mergeCompleted": "{value0} · 已完成合并",
+  "drafts.explicitlySelectSaveCategoryAsWhenCategory": "缺少分类映射时，明确选择另存分类",
+  "drafts.originalDatum": "{value0} — {value1} · 原基准{value2}",
+  "drafts.keepTheOriginalAndCopyItAs": "保留原稿，复制为待核对草稿",
+  "drafts.noUnsavedChanges": "没有未提交的修改。"
+}

@@ -1,0 +1,7 @@
+{
+  "accountExports.theLocalDraftCannotBeReadTemporarily": "The local draft cannot be read temporarily, and the original data is retained. You can explicitly continue to export only cloud records, and uncommitted input will not be mixed into the backup.",
+  "accountExports.thereIsAnUncommittedDraftYouCan": "There is an uncommitted draft. You can keep them separately first, or explicitly continue to export only cloud records.",
+  "accountExports.csvContainsActivityEntriesAndTheComplete": "CSV contains activity entries, and the complete JSON contains categories, highlights, and remaining trash. Unsubmitted drafts are kept separately and are not mixed with cloud backup. Exports read directly from the server and do not rely on native full cache or plain snapshots.",
+  "accountExports.exportFullJson": "Export full JSON",
+  "accountExports.continueToExportCloudRecordsOnly": "Continue to export cloud records only"
+}

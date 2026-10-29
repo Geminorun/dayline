@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { tr, messageRef } from './i18n/index';
+import { msg } from '@dayline/locales';
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { api } from './api';
 import { useAccount } from './account';
@@ -8,10 +10,10 @@ import { errorMessage } from './records/record-service';
 const account = useAccount(),
   workspace = useWorkspace();
 const busy = ref(false),
-  error = ref(''),
-  notice = ref(''),
+  error = messageRef(),
+  notice = messageRef(),
   warning = ref(false),
-  warningText = ref(''),
+  warningText = messageRef(),
   selected = ref<'csv' | 'json'>('json');
 let intent = 0;
 onBeforeUnmount(() => {
@@ -51,16 +53,18 @@ async function download(format: 'csv' | 'json', confirmed = false) {
         drafts = await localRepository.drafts(id);
       } catch {
         if (current()) {
-          warningText.value =
-            '本机草稿暂时无法读取，原始数据保留。可明确继续只导出云端记录，未提交输入不会混入备份。';
+          warningText.value = msg(
+            'accountExports.theLocalDraftCannotBeReadTemporarily',
+          );
           warning.value = true;
         }
         return;
       }
       if (!current()) return;
       if (drafts.length) {
-        warningText.value =
-          '有未提交草稿。可先单独保留，或明确继续只导出云端记录。';
+        warningText.value = msg(
+          'accountExports.thereIsAnUncommittedDraftYouCan',
+        );
         warning.value = true;
         return;
       }
@@ -70,7 +74,8 @@ async function download(format: 'csv' | 'json', confirmed = false) {
       native: true,
       account: true,
       decode: (v: unknown) => {
-        if (typeof v !== 'string') throw new Error('文件未生成');
+        if (typeof v !== 'string')
+          throw new Error(tr('common.fileNotGenerated'));
         return v;
       },
     });
@@ -88,7 +93,7 @@ async function download(format: 'csv' | 'json', confirmed = false) {
     link.download = `dayline-${new Date().toISOString().slice(0, 10)}.${format}`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    notice.value = '文件已生成，请妥善保管。仅含云端已保存记录。';
+    notice.value = msg('accountExports.theFileHasBeenGeneratedPleaseKeep');
   } catch (e) {
     if (current()) error.value = errorMessage(e);
   } finally {
@@ -101,17 +106,14 @@ async function download(format: 'csv' | 'json', confirmed = false) {
     v-if="account.current.value && workspace.mode.value === 'account'"
     class="record-panel"
   >
-    <h2>导出已保存记录</h2>
-    <p>
-      CSV 包含活动事项，完整 JSON
-      包含分类、重点及仍保留的回收站。未提交草稿单独保留，不混入云端备份。导出直接读取服务器，不依赖本机完整缓存或普通快照。
-    </p>
+    <h2>{{ tr('common.exportingSavedRecords') }}</h2>
+    <p>{{ tr('accountExports.csvContainsActivityEntriesAndTheComplete') }}</p>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <p v-if="notice" role="status" class="notice">{{ notice }}</p>
     <button class="button primary" :disabled="busy" @click="download('csv')">
-      导出 CSV</button
+      {{ tr('common.exportCsv') }}</button
     ><button class="button primary" :disabled="busy" @click="download('json')">
-      导出完整 JSON
+      {{ tr('accountExports.exportFullJson') }}
     </button>
     <div v-if="warning" role="status">
       <p>{{ warningText }}</p>
@@ -120,8 +122,10 @@ async function download(format: 'csv' | 'json', confirmed = false) {
         :disabled="busy"
         @click="download(selected, true)"
       >
-        继续只导出云端记录</button
-      ><RouterLink to="/drafts">复制或下载草稿</RouterLink>
+        {{ tr('accountExports.continueToExportCloudRecordsOnly') }}</button
+      ><RouterLink to="/drafts">{{
+        tr('common.copyOrDownloadDraft')
+      }}</RouterLink>
     </div>
   </section>
 </template>

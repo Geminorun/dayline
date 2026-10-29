@@ -187,6 +187,7 @@ describe('minimal record interface', () => {
         if (path === '/api/v1/me')
           return Response.json({
             data: {
+              locale: 'zh-CN',
               id: userId,
               displayName: '测试用户',
               profileVersion: 1,

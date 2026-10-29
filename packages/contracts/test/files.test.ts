@@ -182,7 +182,9 @@ describe('portable CSV and complete JSON files', () => {
     );
     expect(p.canCommit).toBe(false);
     expect(p.rows[1]?.file?.location).toBe('行 3');
-    expect(p.rows[1]?.file?.errors).toContain('同一文件重复更新相同 ID');
+    expect(p.rows[1]?.file?.errors).toContain(
+      'files.repeatedUpdateOfTheSameFileWith',
+    );
     expect(() => guestFileCommit(data, p, now)).toThrow();
     for (const [text, format] of [
       ['title,start_date,other\nx,2026-10-01,y', 'csv'],

@@ -1,3 +1,4 @@
+import { msg } from '@dayline/locales';
 import { MaintenanceService } from '../maintenance/maintenance.service.js';
 import { Controller, Get, Inject } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -31,6 +32,7 @@ export class HealthController {
           select: {
             id: true,
             emailKind: true,
+            locale: true,
             authEpoch: true,
             status: true,
             deletionRequestedAt: true,
@@ -51,7 +53,7 @@ export class HealthController {
       throw new AppError(
         503,
         'DATABASE_UNAVAILABLE',
-        '数据库或基础迁移尚未就绪。',
+        msg('errors.theDatabaseOrBaseMigrationIsNot'),
         undefined,
         cause,
       );

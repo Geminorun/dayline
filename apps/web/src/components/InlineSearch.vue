@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/index';
 import { nextTick, ref, watch, onBeforeUnmount } from 'vue';
 import PlannerIcon from './PlannerIcon.vue';
 const props = defineProps<{ modelValue: string }>();
@@ -62,8 +63,8 @@ async function escape() {
       ref="trigger"
       type="button"
       class="icon-btn"
-      aria-label="搜索事项"
-      title="搜索事项"
+      :aria-label="tr('common.searchEntry')"
+      :title="tr('common.searchEntry')"
       :aria-expanded="Boolean(opened || modelValue)"
       @click="open"
     >
@@ -74,8 +75,8 @@ async function escape() {
       ref="input"
       :value="query"
       type="search"
-      aria-label="搜索事项名称"
-      placeholder="搜索事项…"
+      :aria-label="tr('common.searchEntryName')"
+      :placeholder="tr('common.searchEntry2')"
       @input="update"
       @blur="close"
       @compositionstart="compositionStart"

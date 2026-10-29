@@ -1,15 +1,23 @@
 <script setup lang="ts">
+import {
+  identityStatusLabel,
+  formatBeijingTime,
+  tr,
+  messageRef,
+  renderMessage,
+} from './i18n/index';
+
+import { msg } from '@dayline/locales';
 import ColorPicker from './components/ColorPicker.vue';
 import PasswordInput from './components/PasswordInput.vue';
 import PlannerIcon from './components/PlannerIcon.vue';
 import IconButton from './components/IconButton.vue';
-import { formatBeijingTime } from '@dayline/core';
+
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import {
   reviewSelectionKey,
   mergeReviewInput,
-  identityStatusLabel,
   emailBindingListSchema,
   qrCreatedDtoSchema,
   qrStatusDtoSchema,
@@ -48,8 +56,8 @@ const mode = ref<'bind_email' | 'bind_wechat'>('bind_email'),
   requestId = ref(''),
   password = ref(''),
   otherPassword = ref(''),
-  error = ref(''),
-  notice = ref(''),
+  error = messageRef(),
+  notice = messageRef(),
   busy = ref(false),
   ready = ref(false),
   qr = ref<QrCreatedDto | null>(null),
@@ -170,7 +178,7 @@ async function restoreEmail(item: EmailBindingItem) {
   operationId.value = item.operationId;
   email.value = item.email;
   requestId.value = item.id;
-  notice.value = '已恢复原绑定申请；请为此操作重新验证当前账号。';
+  notice.value = msg('identity.theOriginalBindingApplicationHasBeenRestored');
 }
 function clear() {
   clearTimeout(timer);
@@ -198,8 +206,7 @@ function renew() {
     email.value = e.email;
     requestId.value = e.id;
   } else mode.value = 'bind_wechat';
-  notice.value =
-    '请重新验证双方；同一操作、同一双方和未变化的计划将保留已保存核对。';
+  notice.value = msg('identity.pleaseReVerifyBothPartiesTheSame');
 }
 async function begin(next: 'bind_email' | 'bind_wechat') {
   const ownIntent = ++intent,
@@ -240,12 +247,11 @@ async function result(data: BindingResult | undefined, current: () => boolean) {
     const response = await client.preview(data.mergeContext, operationId.value);
     if (!current()) return;
     publishPlan(response.data ?? null);
-    notice.value =
-      '双方已验证。默认统一到当前账号，全部事项保留；请核对分类及资料。';
+    notice.value = msg('identity.bothPartiesHaveBeenVerifiedByDefault');
   } else if (data.status === 'bound') {
     if (data.reauthenticate) account.clear();
     else await account.refresh();
-    notice.value = '绑定已完成，请重新登录统一账号。原本机草稿保留。';
+    notice.value = msg('identity.bindingHasBeenCompletedPleaseLogIn');
   }
 }
 async function sendEmail() {
@@ -257,8 +263,7 @@ async function sendEmail() {
     });
     if (!current()) return;
     requestId.value = r.data?.id ?? '';
-    notice.value =
-      '邮件已申请。打开验证链接后回原设备继续；一分钟后可重新发送。';
+    notice.value = msg('identity.emailHasBeenRequestedAfterOpeningThe');
     await refreshJobs();
   });
 }
@@ -355,7 +360,7 @@ async function cancel() {
       });
     if (!current()) return;
     clear();
-    notice.value = '本次操作已取消，双方账号与数据保持原状。';
+    notice.value = msg('identity.thisOperationHasBeenCancelledAndThe');
     await refreshJobs();
   });
 }
@@ -386,9 +391,7 @@ async function commit() {
       !p ||
       !p.canCommit ||
       selectionNeedsReview.value ||
-      !window.confirm(
-        '合并并保留双方全部记录？双方旧会话将退出，本机草稿仍保留。',
-      )
+      !window.confirm(tr('identity.mergeAndRetainAllRecordsOfBoth'))
     )
       return;
     recoveryId.value = p.id;
@@ -401,12 +404,10 @@ async function commit() {
     if (!current()) return;
     publishPlan(r.data ?? null);
     if (r.data?.status === 'committed') {
-      notice.value =
-        '合并已完成。请用原邮箱或微信重新登录统一账号，之后到草稿页核对旧草稿。';
+      notice.value = msg('identity.mergeCompletedPleaseUseYourOriginalEmail');
       const completedId = r.data.id;
       account.clear();
-      notice.value =
-        '合并已完成。请用原邮箱或微信重新登录统一账号，之后到草稿页核对旧草稿。';
+      notice.value = msg('identity.mergeCompletedPleaseUseYourOriginalEmail');
       recoveryId.value = completedId;
     }
   });
@@ -467,7 +468,7 @@ async function initialize() {
 onMounted(async () => {
   if (isEmailCallback) {
     if (!callbackId || !callbackToken) {
-      error.value = '邮件验证参数无效。';
+      error.value = msg('identity.invalidEmailVerificationParameters');
       return;
     }
     busy.value = true;
@@ -481,8 +482,7 @@ onMounted(async () => {
         },
       );
       if (!disposed)
-        notice.value =
-          '邮箱已验证；此页面不会登录或变更身份。请回原设备、原账号继续添加邮箱。';
+        notice.value = msg('identity.emailHasBeenVerifiedThisPageWill');
     } catch (e) {
       if (!disposed) error.value = errorMessage(e);
     } finally {
@@ -504,13 +504,15 @@ onBeforeUnmount(() => {
       <RouterLink
         class="icon-btn tool-button"
         to="/settings"
-        aria-label="返回设置"
-        title="返回设置"
+        :aria-label="tr('common.returnToSettings')"
+        :title="tr('common.returnToSettings')"
         ><PlannerIcon name="back"
       /></RouterLink>
       <div>
-        <h1>登录方式与账号合并</h1>
-        <p class="muted">管理邮箱、微信与账号合并</p>
+        <h1>{{ tr('identity.mergeLoginMethodAndAccount') }}</h1>
+        <p class="muted">
+          {{ tr('identity.manageEmailWechatAndAccountMerging') }}
+        </p>
       </div>
     </div>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
@@ -518,10 +520,10 @@ onBeforeUnmount(() => {
     <RouterLink
       v-if="!isEmailCallback && !account.current.value"
       to="/auth/login"
-      >重新登录统一账号</RouterLink
+      >{{ tr('common.logInToTheUnifiedAccountAgain') }}</RouterLink
     >
     <p v-if="!isEmailCallback && !ready">
-      正在确认当前空间或恢复身份任务；请等待就绪后操作。
+      {{ tr('identity.confirmingTheCurrentSpaceOrIdentityRecovery') }}
     </p>
     <button
       v-if="!isEmailCallback && !ready && account.current.value"
@@ -529,7 +531,7 @@ onBeforeUnmount(() => {
       :disabled="busy"
       @click="initialize"
     >
-      确认当前空间并恢复任务</button
+      {{ tr('identity.confirmCurrentSpaceAndResumeTask') }}</button
     ><template
       v-if="
         !isEmailCallback &&
@@ -538,9 +540,12 @@ onBeforeUnmount(() => {
         workspace.mode.value === 'account'
       "
       ><p>
-        当前统一目标：{{ account.current.value.displayName }}（{{
-          account.current.value.email ?? '微信账号'
-        }}）。绑定与普通登录分别处理。
+        {{
+          tr('identity.currentUnifiedTargetBindingAndNormalLogin', {
+            value0: account.current.value.displayName,
+            value1: account.current.value.email ?? tr('common.wechatAccount'),
+          })
+        }}
       </p>
       <button
         class="button"
@@ -549,7 +554,7 @@ onBeforeUnmount(() => {
         :disabled="busy || !!account.current.value.email"
         @click="begin('bind_email')"
       >
-        添加邮箱</button
+        {{ tr('common.addEmail') }}</button
       ><button
         class="button"
         :class="mode === 'bind_wechat' ? 'primary' : 'subtle'"
@@ -557,14 +562,13 @@ onBeforeUnmount(() => {
         :disabled="busy"
         @click="begin('bind_wechat')"
       >
-        绑定微信
+        {{ tr('common.bindWechat') }}
       </button>
-      <p>
-        首版支持一个邮箱与一个微信；超出组合时双方保持独立。原本机草稿不会自动提交。
-      </p>
+      <p>{{ tr('identity.theFirstVersionSupportsOneEmailAnd') }}</p>
       <template v-if="!plan"
         ><label v-if="mode === 'bind_email'"
-          >待绑定邮箱<input
+          >{{ tr('common.emailToBeBound')
+          }}<input
             v-model="email"
             :disabled="busy"
             type="email"
@@ -575,23 +579,23 @@ onBeforeUnmount(() => {
           :action="action"
           @verified="
             proof = $event;
-            notice = '当前身份已重新验证，请继续本次绑定。';
+            notice = tr('identity.theCurrentIdentityHasBeenReVerified');
           "
         /><template v-if="proof"
           ><template v-if="mode === 'bind_email'"
             ><button class="button primary" :disabled="busy" @click="sendEmail">
-              发送或重发绑定邮件
+              {{ tr('identity.sendOrResendBindingEmail') }}
             </button>
             <section v-if="requestId" class="record-panel">
-              <p>
-                打开邮件验证后回来继续。未知邮箱设置新密码；如邮箱已有账号，须验证该账号当前密码后才能预览合并。
-              </p>
+              <p>{{ tr('identity.openTheEmailVerificationAndComeBack') }}</p>
               <label
-                >新邮箱设置密码<PasswordInput
+                >{{ tr('common.setPasswordForNewEmailAddress')
+                }}<PasswordInput
                   v-model="password"
                   autocomplete="new-password" /></label
               ><label
-                >已有邮箱账号的当前密码<PasswordInput
+                >{{ tr('identity.currentPasswordForAnExistingEmailAccount')
+                }}<PasswordInput
                   v-model="otherPassword"
                   autocomplete="current-password" /></label
               ><button
@@ -599,7 +603,7 @@ onBeforeUnmount(() => {
                 :disabled="busy"
                 @click="completeEmail"
               >
-                邮件验证后继续
+                {{ tr('common.continueAfterEmailVerification') }}
               </button>
             </section></template
           ><template v-else
@@ -608,14 +612,20 @@ onBeforeUnmount(() => {
               :disabled="busy"
               @click="bindWechat"
             >
-              生成绑定微信小程序码
+              {{ tr('identity.generateBindingWechatAppletCode') }}
             </button>
             <div v-if="qr">
-              <img :src="qr.miniappCode" alt="绑定微信小程序码" width="220" />
+              <img
+                :src="qr.miniappCode"
+                :alt="tr('common.bindWechatAppletCode')"
+                width="220"
+              />
               <p>
-                状态：{{
-                  identityStatusLabel(qrStatus)
-                }}。扫码者明确确认后，原网页领取绑定结果。
+                {{
+                  tr('identity.statusAfterThePersonWhoScansThe', {
+                    value0: identityStatusLabel(qrStatus),
+                  })
+                }}
               </p>
               <button
                 class="button primary"
@@ -623,22 +633,22 @@ onBeforeUnmount(() => {
                 :disabled="busy"
                 @click="consume"
               >
-                领取绑定结果
+                {{ tr('common.receiveBindingResults') }}
               </button>
             </div></template
           ></template
         ></template
       ><IconButton
         icon="close"
-        label="暂不绑定 / 取消"
+        :label="tr('identity.notBindingCancelYet')"
         :disabled="busy"
         @click="cancel"
       />
       <section class="record-panel">
-        <h2>恢复原操作</h2>
+        <h2>{{ tr('common.revertToOriginalOperation') }}</h2>
         <IconButton
           icon="refresh"
-          label="查询我的绑定与合并任务"
+          :label="tr('identity.queryMyBindingAndMergingTasks')"
           :disabled="busy"
           @click="run(refreshJobs)"
         />
@@ -649,7 +659,12 @@ onBeforeUnmount(() => {
           :disabled="busy"
           @click="restoreEmail(j)"
         >
-          继续添加 {{ j.email }}（{{ identityStatusLabel(j.status) }}）</button
+          {{
+            tr('identity.continueAdding', {
+              value0: j.email,
+              value1: identityStatusLabel(j.status),
+            })
+          }}</button
         ><button
           v-for="j in jobs"
           :key="j.id"
@@ -657,12 +672,15 @@ onBeforeUnmount(() => {
           :disabled="busy"
           @click="query(j.id)"
         >
-          查询原合并 ·
-          {{ formatBeijingTime(j.completedAt ?? j.createdAt) }} ·
-          {{ identityStatusLabel(j.status) }}</button
+          {{
+            tr('identity.queryOriginalMerge', {
+              value0: formatBeijingTime(j.completedAt ?? j.createdAt),
+              value1: identityStatusLabel(j.status),
+            })
+          }}</button
         ><IconButton
           icon="refresh"
-          label="查询本次提交结果"
+          :label="tr('common.queryTheResultsOfThisSubmission')"
           v-if="recoveryId"
           :disabled="busy"
           @click="query()"
@@ -671,7 +689,7 @@ onBeforeUnmount(() => {
           v-if="jobs.some((job) => job.status === 'committed')"
           class="settings-link"
           to="/drafts"
-          >恢复合并前的未提交修改</RouterLink
+          >{{ tr('identity.revertUncommittedChangesBeforeMerge') }}</RouterLink
         >
       </section></template
     >
@@ -679,50 +697,62 @@ onBeforeUnmount(() => {
       <h2>
         {{
           plan.status === 'committed'
-            ? '合并已完成'
-            : '合并并保留双方 · 逐项核对'
+            ? tr('common.mergeCompleted')
+            : tr('identity.mergeAndRetainBothPartiesCheckItem')
         }}
       </h2>
       <p>
-        当前目标 {{ plan.targetSummary.displayName }}：{{
-          plan.targetSummary.entries
-        }}
-        条活动、{{ plan.targetSummary.trash }} 条回收站、{{
-          plan.targetSummary.categories
-        }}
-        分类、{{ plan.targetSummary.focusDays }} 重点状态。
-      </p>
-      <p>
-        来源 {{ plan.sourceSummary.displayName }}：{{
-          plan.sourceSummary.entries
-        }}
-        条活动、{{ plan.sourceSummary.trash }} 条回收站、{{
-          plan.sourceSummary.categories
-        }}
-        分类、{{ plan.sourceSummary.focusDays }} 重点状态。
-      </p>
-      <p>
-        同标题事项全部保留；回收站删除期限和取消的重点也保留。计划有效至
         {{
-          formatBeijingTime(plan.expiresAt)
-        }}。验证到期时，点击重新验证双方，将保留已保存的核对计划。
+          tr('identity.currentTargetActivitiesTrashCategoriesFocusStatus', {
+            value0: plan.targetSummary.displayName,
+            value1: plan.targetSummary.entries,
+            value2: plan.targetSummary.trash,
+            value3: plan.targetSummary.categories,
+            value4: plan.targetSummary.focusDays,
+          })
+        }}
+      </p>
+      <p>
+        {{
+          tr('identity.sourceActivitiesTrashCategoriesKeyStatus', {
+            value0: plan.sourceSummary.displayName,
+            value1: plan.sourceSummary.entries,
+            value2: plan.sourceSummary.trash,
+            value3: plan.sourceSummary.categories,
+            value4: plan.sourceSummary.focusDays,
+          })
+        }}
+      </p>
+      <p>
+        {{
+          tr('identity.allEntriesWithTheSameTitleAre', {
+            value0: formatBeijingTime(plan.expiresAt),
+          })
+        }}
       </p>
       <p v-for="conflict in plan.conflicts" :key="conflict" class="error">
-        {{ conflict }}
+        {{ renderMessage(conflict) }}
       </p>
       <template v-if="plan.status === 'preview'"
         ><button class="button subtle" :disabled="busy" @click="renew">
-          重新验证双方并继续原计划
+          {{ tr('identity.reVerifyBothPartiesAndContinueWith') }}
         </button>
-        <h3>分类映射</h3>
+        <h3>{{ tr('common.categoryMapping2') }}</h3>
         <div v-for="(c, index) in plan.categoryMappings" :key="c.sourceId">
-          <p>来源：{{ c.sourceName }} / {{ c.sourceColor }}</p>
+          <p>
+            {{
+              tr('identity.source', {
+                value0: c.sourceName,
+                value1: c.sourceColor,
+              })
+            }}
+          </p>
           <select
             :value="c.targetId ?? ''"
             :disabled="busy"
             @change="selectTarget(index, $event)"
           >
-            <option value="">保留为新分类</option>
+            <option value="">{{ tr('common.createACategory') }}</option>
             <option
               v-for="t in plan.targetCategories"
               :key="t.id"
@@ -733,66 +763,82 @@ onBeforeUnmount(() => {
           ><input
             v-model="c.name"
             :disabled="busy || !!c.targetId"
-            aria-label="合并分类名称"
+            :aria-label="tr('common.mergeCategoryNames')"
           /><ColorPicker
             v-model="c.color"
             :disabled="busy || !!c.targetId"
-            :label="`更改${c.name}分类颜色`"
+            :label="tr('identity.changeCategoryColor', { value0: c.name })"
           />
         </div>
         <label
-          >统一账号显示名<select
-            v-model="plan.displayNameFrom"
-            :disabled="busy"
-          >
+          >{{ tr('common.unifiedAccountDisplayName')
+          }}<select v-model="plan.displayNameFrom" :disabled="busy">
             <option value="target">
-              当前目标：{{ plan.targetSummary.displayName }}
+              {{
+                tr('identity.currentTarget', {
+                  value0: plan.targetSummary.displayName,
+                })
+              }}
             </option>
             <option value="source">
-              来源：{{ plan.sourceSummary.displayName }}
+              {{
+                tr('identity.source2', {
+                  value0: plan.sourceSummary.displayName,
+                })
+              }}
             </option>
           </select></label
         ><button class="button primary" :disabled="busy" @click="review">
-          保存核对并更新预览
+          {{ tr('identity.saveCheckAndUpdatePreview') }}
         </button></template
       >
       <p v-if="selectionNeedsReview" role="status" class="notice">
-        分类或显示名选择尚未保存核对，请先保存核对并更新预览。
+        {{ tr('identity.theCategoryOrDisplayNameSelectionHas') }}
       </p>
-      <h3>来源事项（全部保留）</h3>
+      <h3>{{ tr('identity.sourceEntryReserveAll') }}</h3>
       <article
         v-for="e in plan.entries.slice(page * 50, page * 50 + 50)"
         :key="e.id"
       >
         <p>
-          {{ e.title }} · {{ e.startDate }}—{{ e.endDate ?? '未结束' }} ·
           {{
-            e.deletedAt ? `回收站至 ${formatBeijingTime(e.purgeAfter)}` : '活动'
-          }}
-          · 分类
-          {{
-            plan.categoryMappings.find((c) => c.sourceId === e.categoryId)
-              ?.sourceName
+            tr('identity.category', {
+              value0: e.title,
+              value1: e.startDate,
+              value2: e.endDate ?? tr('common.notFinished'),
+              value3: e.deletedAt
+                ? tr('identity.trashTo', {
+                    value0: formatBeijingTime(e.purgeAfter),
+                  })
+                : tr('common.activity'),
+              value4: plan.categoryMappings.find(
+                (c) => c.sourceId === e.categoryId,
+              )?.sourceName,
+            })
           }}
         </p>
         <button class="button subtle" @click="openFocus(e.id)">
-          核对 {{ groupedFocus.get(e.id)?.length ?? 0 }} 个重点状态
+          {{
+            tr('identity.checkKeyStatus', {
+              value0: groupedFocus.get(e.id)?.length ?? 0,
+            })
+          }}
         </button>
       </article>
       <IconButton
         icon="chevron"
-        label="上一页来源"
+        :label="tr('common.previousPageSource')"
         class="chevron-back"
         :disabled="page === 0"
         @click="page--"
       />
       <IconButton
         icon="chevron"
-        label="下一页来源"
+        :label="tr('common.nextPageSource')"
         :disabled="(page + 1) * 50 >= plan.entries.length"
         @click="page++"
       />
-      <h3>目标事项（全部保留）</h3>
+      <h3>{{ tr('identity.targetEntryAllReserved') }}</h3>
       <p
         v-for="e in plan.targetEntries.slice(
           targetPage * 50,
@@ -800,24 +846,35 @@ onBeforeUnmount(() => {
         )"
         :key="e.id"
       >
-        {{ e.title }} · {{ e.startDate }}—{{ e.endDate ?? '未结束' }} ·
+        {{ e.title }} · {{ e.startDate }}—{{
+          e.endDate ?? tr('common.notFinished')
+        }}
+        ·
         {{
-          e.deletedAt ? `回收站至 ${formatBeijingTime(e.purgeAfter)}` : '活动'
+          e.deletedAt
+            ? tr('identity.trashTo', {
+                value0: formatBeijingTime(e.purgeAfter),
+              })
+            : tr('common.activity')
         }}
         <button class="button subtle" @click="openFocus(e.id)">
-          核对 {{ groupedFocus.get(e.id)?.length ?? 0 }} 个重点状态
+          {{
+            tr('identity.checkKeyStatus', {
+              value0: groupedFocus.get(e.id)?.length ?? 0,
+            })
+          }}
         </button>
       </p>
       <IconButton
         icon="chevron"
-        label="上一页目标"
+        :label="tr('common.previousPageTarget')"
         class="chevron-back"
         :disabled="targetPage === 0"
         @click="targetPage--"
       />
       <IconButton
         icon="chevron"
-        label="下一页目标"
+        :label="tr('common.nextPageTarget')"
         :disabled="(targetPage + 1) * 50 >= plan.targetEntries.length"
         @click="targetPage++"
       />
@@ -827,32 +884,41 @@ onBeforeUnmount(() => {
         :disabled="busy || !plan.canCommit || selectionNeedsReview"
         @click="commit"
       >
-        {{ busy ? '正在整体处理，结果可查询…' : '确认合并并保留双方' }}
+        {{
+          busy
+            ? tr('identity.processingAsAWholeTheResultsCan')
+            : tr('identity.mergerConfirmedAndPartiesRetained')
+        }}
       </button>
       <section v-if="focusEntry">
-        <h3>重点日期核对</h3>
+        <h3>{{ tr('common.focusDateVerification') }}</h3>
         <p
           v-for="f in focusDetail.slice(focusPage * 50, focusPage * 50 + 50)"
           :key="f.date"
         >
-          {{ f.date }} · {{ f.focused ? '重点' : '已取消' }} · 保留原状态
+          {{
+            tr('identity.leaveOriginalState', {
+              value0: f.date,
+              value1: f.focused ? tr('common.focus') : tr('common.canceled'),
+            })
+          }}
         </p>
         <IconButton
           icon="chevron"
-          label="上一页日期"
+          :label="tr('common.previousPageDate')"
           class="chevron-back"
           :disabled="focusPage === 0"
           @click="focusPage--"
         />
         <IconButton
           icon="chevron"
-          label="下一页日期"
+          :label="tr('common.nextPageDate')"
           :disabled="(focusPage + 1) * 50 >= focusDetail.length"
           @click="focusPage++"
         />
       </section>
       <p v-if="plan.result">
-        合并完成，请重新登录并完整刷新，再手动核对本机草稿。
+        {{ tr('identity.theMergeIsCompletedPleaseLogIn') }}
       </p>
     </section>
   </section>

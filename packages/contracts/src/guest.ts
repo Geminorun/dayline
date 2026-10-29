@@ -1,3 +1,6 @@
+import type { Message, UiText } from '@dayline/locales';
+import { diagnosticMessage, fallbackText, msg } from '@dayline/locales';
+
 import { z } from 'zod';
 import {
   businessToday,
@@ -79,12 +82,15 @@ export const guestPackageSchema = z
   });
 export type GuestPackage = z.infer<typeof guestPackageSchema>;
 export class GuestError extends Error {
+  readonly localized?: Message;
   constructor(
     public readonly code: string,
-    message: string,
+    message: UiText,
     public readonly details?: unknown,
   ) {
-    super(message);
+    const localized = diagnosticMessage(message);
+    super(fallbackText(localized));
+    if (typeof localized !== 'string') this.localized = localized;
   }
 }
 export function readGuestPackage(value: unknown): GuestPackage {
@@ -92,7 +98,7 @@ export function readGuestPackage(value: unknown): GuestPackage {
   if (!parsed.success)
     throw new GuestError(
       'LOCAL_RECOVERY_REQUIRED',
-      '本机记录损坏或版本不兼容，原始数据已保留，请恢复后重试。',
+      msg('errors.theLocalRecordIsDamagedOrThe'),
     );
   return parsed.data;
 }
@@ -151,16 +157,16 @@ function valid<T>(schema: z.ZodType<T>, input: unknown): T {
   if (!parsed.success)
     throw new GuestError(
       'VALIDATION_ERROR',
-      '请检查名称长度、合法日期、分类和版本。',
+      msg('errors.pleaseCheckNameLengthLegalDateCategory'),
     );
   return parsed.data;
 }
-function fail(code: string, message: string, details?: unknown): never {
+function fail(code: string, message: UiText, details?: unknown): never {
   throw new GuestError(code, message, details);
 }
 function version(expected: number, current: number) {
   if (expected !== current)
-    fail('VERSION_CONFLICT', '记录已有更新，请重新读取并核对输入。', {
+    fail('VERSION_CONFLICT', msg('errors.guestVersionConflict'), {
       expectedVersion: expected,
       currentVersion: current,
     });
@@ -181,12 +187,13 @@ export function mutateGuest(
   const today = businessToday(new Date(now));
   const category = (id: string) =>
     data.categories.find((c) => c.id === id) ??
-    fail('RESOURCE_NOT_FOUND', '分类已不存在，请重新选择。');
+    fail('RESOURCE_NOT_FOUND', msg('errors.guestCategoryMissing'));
   const entry = (id: string, active = true) => {
     const found =
       data.entries.find((e) => e.id === id) ??
-      fail('RESOURCE_NOT_FOUND', '事项已不存在。');
-    if (active && found.deletedAt) fail('ENTRY_DELETED', '事项已在回收站。');
+      fail('RESOURCE_NOT_FOUND', msg('errors.guestEntryMissing'));
+    if (active && found.deletedAt)
+      fail('ENTRY_DELETED', msg('errors.entryIsInTrash'));
     return found;
   };
   const bump = (e: EntryDto) => {
@@ -199,7 +206,7 @@ export function mutateGuest(
       const input = valid(createEntrySchema, mutation.input);
       category(input.categoryId);
       if (input.endDate && input.endDate < input.startDate)
-        fail('VALIDATION_ERROR', '结束日期不能早于开始日期。');
+        fail('VALIDATION_ERROR', msg('errors.endDateCannotBeEarlierThanStart'));
       const old = data.entries.find((e) => e.id === input.id);
       if (old) {
         if (
@@ -209,7 +216,7 @@ export function mutateGuest(
           old.endDate !== input.endDate ||
           old.categoryId !== input.categoryId
         )
-          fail('IDEMPOTENCY_KEY_REUSED', '此标识已保存其他内容。');
+          fail('IDEMPOTENCY_KEY_REUSED', msg('errors.guestIdentifierUsed'));
         break;
       }
       data.entries.push({
@@ -232,7 +239,7 @@ export function mutateGuest(
       const start = input.startDate ?? e.startDate,
         end = input.endDate === undefined ? e.endDate : input.endDate;
       if (end && end < start)
-        fail('VALIDATION_ERROR', '结束日期不能早于开始日期。');
+        fail('VALIDATION_ERROR', msg('errors.endDateCannotBeEarlierThanStart'));
       const affected = data.focusDays
         .filter(
           (f) =>
@@ -256,7 +263,7 @@ export function mutateGuest(
       )
         fail(
           'FOCUS_REMOVAL_CONFIRMATION_REQUIRED',
-          '日期范围变化将移除重点，请确认具体日期。',
+          msg('errors.dateRangeChangesWillRemoveEmphasisPlease'),
           {
             currentVersion: e.version,
             affectedFocusDays: affected.map(({ date, version }) => ({
@@ -293,9 +300,16 @@ export function mutateGuest(
       const e = entry(mutation.id, mutation.kind !== 'restore');
       version(mutation.expectedVersion, e.version);
       if (mutation.kind === 'finish') {
-        if (e.startDate > today) fail('VALIDATION_ERROR', '未来事项尚未开始。');
+        if (e.startDate > today)
+          fail(
+            'VALIDATION_ERROR',
+            msg('errors.theFutureEntryHasNotYetStarted'),
+          );
         if (e.endDate && e.endDate < today)
-          fail('ENTRY_ALREADY_ENDED', '事项已在历史日期结束。');
+          fail(
+            'ENTRY_ALREADY_ENDED',
+            msg('errors.entryHasEndedAtTheHistoricalDate'),
+          );
         if (e.endDate === today) break;
         e.endDate = today;
       } else if (mutation.kind === 'remove') {
@@ -303,9 +317,12 @@ export function mutateGuest(
         e.purgeAfter = new Date(Date.parse(now) + 30 * 86400000).toISOString();
       } else {
         if (!e.deletedAt || !e.purgeAfter)
-          fail('ENTRY_NOT_DELETED', '事项不在回收站。');
+          fail('ENTRY_NOT_DELETED', msg('errors.entryIsNotInTrash'));
         if (Date.parse(e.purgeAfter) <= Date.parse(now))
-          fail('TRASH_EXPIRED', '事项已超过恢复期限。');
+          fail(
+            'TRASH_EXPIRED',
+            msg('errors.theEntryHasExceededTheRecoveryPeriod'),
+          );
         e.deletedAt = null;
         e.purgeAfter = null;
       }
@@ -327,7 +344,7 @@ export function mutateGuest(
           mutation.date < e.startDate ||
           (e.endDate && mutation.date > e.endDate))
       )
-        fail('VALIDATION_ERROR', '重点须在事项范围内且不晚于今天。');
+        fail('VALIDATION_ERROR', msg('errors.guestFocusRange'));
       if (input.focused === (old?.focused ?? false)) break;
       if (old) {
         old.focused = input.focused;
@@ -348,13 +365,13 @@ export function mutateGuest(
       const old = data.categories.find((c) => c.id === input.id);
       if (old) {
         if (old.name !== input.name || old.color !== input.color)
-          fail('IDEMPOTENCY_KEY_REUSED', '此标识已保存其他内容。');
+          fail('IDEMPOTENCY_KEY_REUSED', msg('errors.guestIdentifierUsed'));
         break;
       }
       if (data.categories.length >= 20)
-        fail('CATEGORY_LIMIT_EXCEEDED', '最多 20 个分类。');
+        fail('CATEGORY_LIMIT_EXCEEDED', msg('errors.guestCategoryLimit'));
       if (data.categories.some((c) => c.name === input.name))
-        fail('CATEGORY_NAME_EXISTS', '分类名称已存在。');
+        fail('CATEGORY_NAME_EXISTS', msg('errors.categoryNameAlreadyExists'));
       data.categories.push({
         ...input,
         seedKey: null,
@@ -374,7 +391,7 @@ export function mutateGuest(
           (other) => other.id !== c.id && other.name === (input.name ?? c.name),
         )
       )
-        fail('CATEGORY_NAME_EXISTS', '分类名称已存在。');
+        fail('CATEGORY_NAME_EXISTS', msg('errors.categoryNameAlreadyExists'));
       if (
         c.name === (input.name ?? c.name) &&
         c.color === (input.color ?? c.color)
@@ -390,21 +407,25 @@ export function mutateGuest(
     case 'reorderCategories': {
       const input = valid(reorderCategoriesSchema, mutation.input);
       if (input.expectedDataVersion !== String(data.packageRevision))
-        fail('DATA_VERSION_CONFLICT', '分类已有变化，请刷新后重新排序。');
+        fail(
+          'DATA_VERSION_CONFLICT',
+          msg('errors.theCategoryHasChangedPleaseRefreshAnd'),
+        );
       if (
         input.categoryIds.length !== data.categories.length ||
         input.categoryIds.some(
           (id) => !data.categories.some((c) => c.id === id),
         )
       )
-        fail('VALIDATION_ERROR', '请提交当前空间的全部分类。');
+        fail('VALIDATION_ERROR', msg('errors.guestCategoryOrder'));
       if (
         input.categoryIds.some((id, index) => data.categories[index]?.id !== id)
       ) {
         const byId = new Map(data.categories.map((c) => [c.id, c]));
         data.categories = input.categoryIds.map((id) => {
           const c = byId.get(id);
-          if (!c) fail('RESOURCE_NOT_FOUND', '分类不存在。');
+          if (!c)
+            fail('RESOURCE_NOT_FOUND', msg('errors.guestCategoryNotFound'));
           return c;
         });
         changed = true;
@@ -415,10 +436,13 @@ export function mutateGuest(
       const input = valid(deleteCategorySchema, mutation.input),
         c = category(mutation.id);
       if (data.categories.length <= 1)
-        fail('LAST_CATEGORY', '至少保留一个分类。');
+        fail('LAST_CATEGORY', msg('errors.keepAtLeastOneCategory'));
       if ('mode' in input) {
         if (input.expectedDataVersion !== String(data.packageRevision))
-          fail('DATA_VERSION_CONFLICT', '记录已有变化，请重新确认删除。');
+          fail(
+            'DATA_VERSION_CONFLICT',
+            msg('errors.theRecordHasChangedPleaseReconfirmThe'),
+          );
         version(input.expectedVersion, c.version);
         const affected = data.entries.filter((e) => e.categoryId === c.id);
         if (affected.length) {
@@ -427,7 +451,10 @@ export function mutateGuest(
           );
           if (!fallback) {
             if (data.categories.some((v) => v.id === input.fallbackCategoryId))
-              fail('IDEMPOTENCY_KEY_REUSED', '备用分类标识已被使用。');
+              fail(
+                'IDEMPOTENCY_KEY_REUSED',
+                msg('errors.alternateCategoryIdentifierIsAlreadyInUse'),
+              );
             fallback = {
               id: input.fallbackCategoryId,
               name: '其他',
@@ -461,7 +488,8 @@ export function mutateGuest(
       const target = category(input.transferToCategoryId);
       version(input.expectedVersion, c.version);
       version(input.expectedTargetVersion, target.version);
-      if (c.id === target.id) fail('VALIDATION_ERROR', '请选择另一个分类。');
+      if (c.id === target.id)
+        fail('VALIDATION_ERROR', msg('errors.pleaseSelectAnotherCategory'));
       for (const e of data.entries)
         if (e.categoryId === c.id) {
           e.categoryId = target.id;
@@ -488,18 +516,22 @@ export function mutateGuest(
         const input = valid(purgeTrashSchema, mutation.input);
         if ('expectedDataVersion' in input) {
           if (input.expectedDataVersion !== String(data.packageRevision))
-            fail('DATA_VERSION_CONFLICT', '本机记录已变化，请重新确认清理。');
+            fail('DATA_VERSION_CONFLICT', msg('errors.guestTrashChanged'));
           ids = new Set(
             data.entries.filter((e) => e.deletedAt).map((e) => e.id),
           );
         } else {
           ids = new Set(input.entries.map((e) => e.id));
           if (ids.size !== input.entries.length)
-            fail('VALIDATION_ERROR', '清理目标不能重复。');
+            fail(
+              'VALIDATION_ERROR',
+              msg('errors.cleanupTargetCannotBeRepeated'),
+            );
           for (const target of input.entries) {
             const e = entry(target.id, false);
             version(target.expectedVersion, e.version);
-            if (!e.deletedAt) fail('ENTRY_NOT_DELETED', '事项不在回收站。');
+            if (!e.deletedAt)
+              fail('ENTRY_NOT_DELETED', msg('errors.entryIsNotInTrash'));
           }
         }
       }

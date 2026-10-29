@@ -1,3 +1,5 @@
+import { msg } from '@dayline/locales';
+import { serverText } from '../i18n/server-text.js';
 import { requestBudget } from '../common/request-budget.js';
 import { Logger } from '@nestjs/common';
 import { errorDiagnostics } from '../common/error-diagnostics.js';
@@ -52,13 +54,17 @@ export function nativeAuthPolicy(
     } catch (error) {
       reportFailure(error);
       if (error instanceof AppError)
-        response
-          .status(error.getStatus())
-          .json({ code: error.code, message: error.message });
+        response.status(error.getStatus()).json({
+          code: error.code,
+          message: serverText(error.localized ?? error.message),
+        });
       else
-        response
-          .status(503)
-          .json({ code: 'AUTH_UNAVAILABLE', message: '认证服务暂时不可用。' });
+        response.status(503).json({
+          code: 'AUTH_UNAVAILABLE',
+          message: serverText(
+            msg('errors.theAuthenticationServiceIsTemporarilyUnavailable'),
+          ),
+        });
       return;
     }
     if (
@@ -75,7 +81,7 @@ export function nativeAuthPolicy(
           throw new AppError(
             403,
             'USE_PUBLIC_PROFILE',
-            '微信账号请使用公开账号接口。',
+            msg('errors.pleaseUseThePublicAccountInterfaceFor'),
           );
         if (session) forwardSessionHeaders(response, session.responseHeaders);
       } else if (sessionPaths.has(path)) {
@@ -86,22 +92,29 @@ export function nativeAuthPolicy(
         );
         forwardSessionHeaders(response, session.responseHeaders);
       } else {
-        response
-          .status(404)
-          .json({ code: 'NOT_FOUND', message: '此认证操作尚未开放。' });
+        response.status(404).json({
+          code: 'NOT_FOUND',
+          message: serverText(
+            msg('errors.thisAuthenticationOperationIsNotYetOpen'),
+          ),
+        });
         return;
       }
       next();
     } catch (error) {
       reportFailure(error);
       if (error instanceof AppError) {
-        response
-          .status(error.getStatus())
-          .json({ code: error.code, message: error.message });
+        response.status(error.getStatus()).json({
+          code: error.code,
+          message: serverText(error.localized ?? error.message),
+        });
       } else {
-        response
-          .status(503)
-          .json({ code: 'AUTH_UNAVAILABLE', message: '认证服务暂时不可用。' });
+        response.status(503).json({
+          code: 'AUTH_UNAVAILABLE',
+          message: serverText(
+            msg('errors.theAuthenticationServiceIsTemporarilyUnavailable'),
+          ),
+        });
       }
     }
   };

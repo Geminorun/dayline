@@ -1,0 +1,9 @@
+{
+  "account.personalizeDaylineAndManageYourAccount": "调整外观，管理你的账号。",
+  "account.logInUsingEmailAndPassword": "使用邮箱和密码登录。",
+  "account.afterBindingTheEmailAddressYouCan": "绑定邮箱后，可设置登录密码。",
+  "account.afterConfirmingTheIdentityOfTheEmail": "确认邮箱或微信身份后，管理两个账号的记录。",
+  "account.viewOrCancelAccountAccountDeletion": "查看或撤销账号注销",
+  "account.checkTheAccountDeletionRulesAndRecovery": "查看注销规则与恢复期限。",
+  "account.afterLoggingInYouCanModifyInformation": "登录后可以修改资料、关联微信和管理密码。外观设置随时可用。"
+}

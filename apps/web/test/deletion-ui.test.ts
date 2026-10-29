@@ -57,6 +57,7 @@ import { useAccount } from '../src/account';
 import { useWorkspace } from '../src/records/workspace';
 const wrappers: ReturnType<typeof mount>[] = [];
 const actor = (): UserDto => ({
+  locale: 'zh-CN',
   id: randomUUID(),
   displayName: '当前身份',
   profileVersion: 1,

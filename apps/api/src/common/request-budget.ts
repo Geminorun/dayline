@@ -1,7 +1,10 @@
+import type { Locale } from '@dayline/locales';
+import { msg } from '@dayline/locales';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { AppError } from './app-error.js';
 import type { EmailFlow } from '@dayline/contracts';
 export const requestBudget = new AsyncLocalStorage<{
+  locale?: Locale;
   deadline: number;
   requestId?: string;
   verificationUserId?: string;
@@ -21,7 +24,7 @@ export function remainingBudget(fallback: number): number {
     throw new AppError(
       504,
       'REQUEST_TIMEOUT',
-      '操作结果尚未确认，请读取当前记录或原任务状态后再决定。',
+      msg('errors.theOperationResultHasNotBeenConfirmed'),
     );
   return value;
 }

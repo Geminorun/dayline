@@ -609,3 +609,108 @@ describe('authentication foundation with real PostgreSQL and HTTP', () => {
       .expect(422);
   });
 });
+
+it('persists language separately from the display name and sends account-language verification and reset emails', async () => {
+  const email = `language-${runId}@example.com`;
+  const registration = await post('/api/auth/sign-up/email')
+    .set('Accept-Language', 'en-US,en;q=0.9')
+    .send({
+      email,
+      password,
+      name: 'Language profile',
+      callbackURL: `${origin}/verified`,
+    })
+    .expect(200);
+  const id = userIdSchema.parse(registration.body).user.id;
+  expect(registration.headers['content-language']).toBe('en');
+  expect(
+    (await database.user.findUniqueOrThrow({ where: { id } })).locale,
+  ).toBe('en');
+  const verification = await mailUrl(email, 'Verify your Dayline email');
+  await request(app.getHttpServer())
+    .get(verification.pathname + verification.search)
+    .expect(302);
+  const session = await login(email);
+  const profile = await request(app.getHttpServer())
+    .get('/api/v1/me')
+    .set('Cookie', session.cookie)
+    .expect(200);
+  expect(profile.body.data.locale).toBe('en');
+  await post('/api/auth/request-password-reset')
+    .set('Accept-Language', 'zh-CN')
+    .send({ email, redirectTo: `${origin}/reset-password` })
+    .expect(200);
+  const reset = await mailUrl(email, 'Reset your Dayline password');
+  const resetResponse = await request(app.getHttpServer())
+    .get(reset.pathname + reset.search)
+    .expect(302);
+  expect(
+    new URL(String(resetResponse.headers.location)).searchParams.has('token'),
+  ).toBe(true);
+  const change = await request(app.getHttpServer())
+    .patch('/api/v1/me')
+    .set('Origin', origin)
+    .set('Cookie', session.cookie)
+    .set('X-Dayline-Expected-User', id)
+    .set('Accept-Language', 'en')
+    .send({
+      locale: 'zh-CN',
+      expectedProfileVersion: profile.body.data.profileVersion,
+    })
+    .expect(200);
+  expect(change.body.data.locale).toBe('zh-CN');
+  expect(change.body.data.displayName).toBe('Language profile');
+  expect(change.body.data.profileVersion).toBe(
+    profile.body.data.profileVersion + 1,
+  );
+  await request(app.getHttpServer())
+    .patch('/api/v1/me')
+    .set('Origin', origin)
+    .set('Cookie', session.cookie)
+    .set('X-Dayline-Expected-User', id)
+    .send({
+      locale: 'en',
+      expectedProfileVersion: profile.body.data.profileVersion,
+    })
+    .expect(409);
+  await request(app.getHttpServer())
+    .patch('/api/v1/me')
+    .set('Origin', origin)
+    .set('Cookie', session.cookie)
+    .set('X-Dayline-Expected-User', id)
+    .send({
+      locale: 'fr',
+      expectedProfileVersion: change.body.data.profileVersion,
+    })
+    .expect(422);
+  expect(
+    (await database.user.findUniqueOrThrow({ where: { id } })).locale,
+  ).toBe('zh-CN');
+  const zhFailure = await post('/api/auth/sign-in/email')
+    .set('Accept-Language', 'zh-CN')
+    .send({ email, password: 'Incorrect-password-73!' })
+    .expect(401);
+  const enFailure = await post('/api/auth/sign-in/email')
+    .set('Accept-Language', 'en')
+    .send({ email, password: 'Incorrect-password-73!' })
+    .expect(401);
+  expect(zhFailure.body.code).toBe(enFailure.body.code);
+  expect(zhFailure.body.message).toContain('邮箱或密码');
+  expect(enFailure.body.message).toMatch(/email or password/i);
+});
+it('keeps concurrent API error translations isolated per request without changing error codes', async () => {
+  const responses = await Promise.all(
+    Array.from({ length: 12 }, (_, i) =>
+      request(app.getHttpServer())
+        .get('/api/v1/me')
+        .set('Accept-Language', i % 2 ? 'en-GB,en;q=0.9' : 'zh-Hans')
+        .expect(401),
+    ),
+  );
+  for (const [i, response] of responses.entries()) {
+    expect(response.headers['content-language']).toBe(i % 2 ? 'en' : 'zh-CN');
+    expect(response.body.error.code).toBe('UNAUTHENTICATED');
+    if (i % 2) expect(response.body.error.message).toMatch(/sign in|log in/i);
+    else expect(response.body.error.message).toContain('登录');
+  }
+});

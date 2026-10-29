@@ -6,6 +6,7 @@ COPY --chown=node:node apps/api/package.json apps/api/package.json
 COPY --chown=node:node apps/web/package.json apps/web/package.json
 COPY --chown=node:node apps/miniapp/package.json apps/miniapp/package.json
 COPY --chown=node:node packages/core/package.json packages/core/package.json
+COPY --chown=node:node packages/locales/package.json packages/locales/package.json
 COPY --chown=node:node packages/contracts/package.json packages/contracts/package.json
 COPY --chown=node:node packages/api-client/package.json packages/api-client/package.json
 RUN --mount=type=secret,id=proxy_ca \

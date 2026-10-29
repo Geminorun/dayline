@@ -1,0 +1,5 @@
+{
+  "deletion.ifTheNetworkIsInterruptedOrThe": "{value0} 如网络中断或结果不明，请重新登录原身份并读取注销状态。",
+  "deletion.thisIdentityHasBeenVerifiedAndWill": "本次身份已验证，五分钟内明确确认。",
+  "deletion.whenTheResultIsUnknownPleaseLog": "{value0} 结果不明时，请以原微信重新登录并读取注销状态。"
+}

@@ -1,0 +1,15 @@
+{
+  "timelineView.message": "{value0}",
+  "timelineView.message2": "{value0}-{value1}",
+  "timelineView.focusDay": "{value0} · {value1} · focus day",
+  "timelineView.focusDays": "{value0} · {value1} focus days · {value2}{value3}",
+  "timelineView.currentScopeByStartDate": "Current range · Start date, {value0}",
+  "timelineView.end": "End {value0}",
+  "timelineView.cumulativeFocusDays": "Focus: {value0} days",
+  "timelineView.to": "{value0}, {value1} to {value2}, {value3}",
+  "timelineView.timelineScrollWheelToZoomDragThe": "Timeline: scroll to zoom; drag empty space or use arrow keys to pan",
+  "timelineView.focusDays2": "{value0} focus days",
+  "timelineView.focusDatesDays": "focus dates · {value0} days",
+  "timelineView.theDateContainedInTheCurrentMark": "Select a focus date to open its daily review.",
+  "timelineView.review": "Review {value0}"
+}

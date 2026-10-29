@@ -1,0 +1,12 @@
+{
+  "emails.verification.subject": "验证日序邮箱",
+  "emails.verification.action": "验证邮箱",
+  "emails.verification.description": "此链接用于确认你的邮箱地址，24 小时内有效。",
+  "emails.binding.subject": "确认添加日序邮箱",
+  "emails.binding.action": "验证待绑定邮箱",
+  "emails.binding.description": "此链接仅验证邮箱，不会登录或移动任何账号。请在原设备继续，30 分钟内有效。",
+  "emails.reset.subject": "重置日序密码",
+  "emails.reset.action": "重置密码",
+  "emails.reset.description": "如果你没有申请重置密码，可忽略此邮件。链接在 30 分钟内有效。",
+  "emails.footer": "链接有时效，请勿转发。"
+}

@@ -1,0 +1,7 @@
+{
+  "accountExports.theLocalDraftCannotBeReadTemporarily": "本机草稿暂时无法读取，原始数据保留。可明确继续只导出云端记录，未提交输入不会混入备份。",
+  "accountExports.thereIsAnUncommittedDraftYouCan": "有未提交草稿。可先单独保留，或明确继续只导出云端记录。",
+  "accountExports.csvContainsActivityEntriesAndTheComplete": "CSV 包含活动事项，完整 JSON 包含分类、重点及仍保留的回收站。未提交草稿单独保留，不混入云端备份。导出直接读取服务器，不依赖本机完整缓存或普通快照。",
+  "accountExports.exportFullJson": "导出完整 JSON",
+  "accountExports.continueToExportCloudRecordsOnly": "继续只导出云端记录"
+}

@@ -1,0 +1,5 @@
+{
+  "deletion.ifTheNetworkIsInterruptedOrThe": "{value0} If the network is interrupted or the result is unknown, please log in again with the original identity and read the account deletion status.",
+  "deletion.thisIdentityHasBeenVerifiedAndWill": "This identity has been verified and will be confirmed clearly within five minutes.",
+  "deletion.whenTheResultIsUnknownPleaseLog": "{value0} When the result is unknown, please log in again with the original WeChat and read the account deletion status."
+}

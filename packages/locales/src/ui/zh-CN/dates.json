@@ -1,0 +1,9 @@
+{
+  "dates.notSet": "未设置",
+  "dates.unavailable": "时间待确认",
+  "dates.beijing": "（北京时间）",
+  "dates.startsOn": "从 {date} 开始",
+  "dates.elapsed": "已持续 {count} 天",
+  "dates.span": "跨度 {count} 天",
+  "dates.monthYear": "{year}年{month}月"
+}

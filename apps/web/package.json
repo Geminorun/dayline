@@ -15,7 +15,9 @@
     "dexie": "4.2.1",
     "sortablejs": "1.15.7",
     "vue": "3.5.44",
-    "vue-router": "4.6.4"
+    "vue-i18n": "11.4.16",
+    "vue-router": "4.6.4",
+    "@dayline/locales": "workspace:*"
   },
   "devDependencies": {
     "@types/sortablejs": "1.15.9",

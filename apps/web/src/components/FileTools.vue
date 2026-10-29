@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { tr } from '../i18n/index';
 import { defineAsyncComponent, onMounted, ref } from 'vue';
 import PlannerIcon from './PlannerIcon.vue';
 import FileToolLoading from './FileToolLoading.vue';
@@ -27,13 +28,17 @@ const action = ref<'import' | 'export' | null>(null);
 const detailed = ref(false);
 </script>
 <template>
-  <div class="file-tools" role="group" aria-label="导入与导出">
+  <div
+    class="file-tools"
+    role="group"
+    :aria-label="tr('common.importAndExport')"
+  >
     <button
       class="icon-btn"
       type="button"
-      aria-label="导入记录"
+      :aria-label="tr('common.importRecords')"
       :disabled="workspace.readonly.value"
-      title="导入 CSV / JSON"
+      :title="tr('fileTools.importCsvJson')"
       @pointerenter="warm"
       @focus="warm"
       @click="action = 'import'"
@@ -43,8 +48,8 @@ const detailed = ref(false);
     <button
       class="icon-btn"
       type="button"
-      aria-label="导出记录"
-      title="导出 CSV / JSON"
+      :aria-label="tr('common.exportRecords')"
+      :title="tr('fileTools.exportCsvJson')"
       @pointerenter="warm"
       @focus="warm"
       @click="action = 'export'"
@@ -53,14 +58,18 @@ const detailed = ref(false);
     </button>
     <PlannerDialog
       v-if="action"
-      :label="action === 'import' ? '导入记录' : '导出记录'"
+      :label="
+        action === 'import'
+          ? tr('common.importRecords')
+          : tr('common.exportRecords')
+      "
       class="data-dialog"
       :class="{ 'data-detail-dialog': action === 'import' && detailed }"
       @close="action = null"
     >
       <button
         class="icon-btn manager-close"
-        aria-label="关闭数据工具"
+        :aria-label="tr('common.closeDataTools')"
         @click="action = null"
       >
         <PlannerIcon name="close" />

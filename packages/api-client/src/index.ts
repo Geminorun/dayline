@@ -1,4 +1,12 @@
 import {
+  sharedMessages,
+  diagnosticMessage,
+  fallbackText,
+  msg,
+} from '@dayline/locales';
+
+import type { Message, UiText } from '@dayline/locales';
+import {
   focusRemovalDetailsSchema,
   versionConflictDetailsSchema,
   dataVersionSchema,
@@ -30,14 +38,17 @@ export interface RequestOptions {
   requireDataVersion?: boolean;
 }
 export class ClientError extends Error {
+  readonly localized?: Message;
   constructor(
     readonly code: string,
-    message: string,
+    message: UiText,
     readonly status = 0,
     readonly details?: unknown,
     readonly retryAfterSeconds?: number,
   ) {
-    super(message);
+    const localized = diagnosticMessage(message);
+    super(fallbackText(localized));
+    if (typeof localized !== 'string') this.localized = localized;
     this.name = 'ClientError';
   }
 }
@@ -137,7 +148,10 @@ export class ApiClient {
     const generation = this.generation;
     const userId = this.accountId;
     if (options.account && !userId)
-      throw new ClientError('ACTOR_CONTEXT_REQUIRED', '请先确认当前账号。');
+      throw new ClientError(
+        'ACTOR_CONTEXT_REQUIRED',
+        msg('errors.pleaseConfirmTheCurrentAccountFirst'),
+      );
     const headers = {
       ...options.headers,
       ...(options.account && userId ? { [EXPECTED_USER_HEADER]: userId } : {}),
@@ -152,19 +166,25 @@ export class ApiClient {
       });
     } catch (error) {
       if (generation !== this.generation)
-        throw new ClientError('STALE_RESPONSE', '账号已变化，请重新读取。');
+        throw new ClientError(
+          'STALE_RESPONSE',
+          msg('errors.theAccountHasChangedPleaseReadIt'),
+        );
       if (error instanceof ClientError) throw error;
       throw new ClientError(
         'NETWORK_ERROR',
-        '网络请求失败，请检查连接后重试。',
+        msg('errors.networkRequestFailedPleaseCheckTheConnection'),
       );
     }
     if (generation !== this.generation)
-      throw new ClientError('STALE_RESPONSE', '账号已变化，请重新读取。');
+      throw new ClientError(
+        'STALE_RESPONSE',
+        msg('errors.theAccountHasChangedPleaseReadIt'),
+      );
     if (response.status === 304 && options.requireDataVersion)
       throw new ClientError(
         'INVALID_RESPONSE',
-        '服务器未返回完整保存确认，请刷新后核对记录。',
+        msg('errors.theServerDidNotReturnAComplete'),
         response.status,
       );
     if (response.status === 304)
@@ -194,63 +214,100 @@ export class ApiClient {
       )
         this.invalidate();
       // Never echo an upstream body, credential or internal SDK message into a UI.
-      const messages: Record<string, string> = {
-        ACTOR_CONTEXT_MISMATCH: '当前账号已变化，请重新登录。',
-        REAUTH_REQUIRED:
-          '本次身份验证未通过或已过期，请重新验证；当前会话仍保留。',
-        IDENTITY_COMBINATION_UNSUPPORTED:
-          '首版支持一个邮箱和一个微信；此组合不能合并，双方账号保持独立。',
-        IDENTITY_ALREADY_LINKED: '登录方式关联已变化，请重新验证后核对。',
-        BINDING_LINK_INVALID: '邮箱验证链接已失效，请回原设备重新申请。',
-        BINDING_ENDED: '此绑定操作已结束，请重新读取账号。',
-        EMAIL_NOT_VERIFIED: '请先验证邮箱，可重新发送验证邮件。',
-        INVALID_EMAIL_OR_PASSWORD: '邮箱或密码不正确。',
-        MAIL_UNAVAILABLE: '邮件暂时无法发送，请稍后重新申请。',
-        AUTH_UNAVAILABLE: '认证服务暂时不可用，请稍后重试。',
-        USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL:
-          '该邮箱已注册，请登录或找回密码。',
-        INVALID_EMAIL: '邮箱格式不正确，请检查后重试。',
-        PASSWORD_TOO_SHORT: '密码至少需要 8 个字符。',
-        PASSWORD_TOO_LONG: '密码不能超过 128 个字符。',
-        INVALID_TOKEN: '链接已失效或无效，请重新申请邮件。',
-        QR_EXPIRED: '二维码已过期，请重新生成。',
-        QR_STATE_CONFLICT: '扫码请求已失效，请重新生成。',
-        QR_SCANNER_CONFLICT: '二维码已被其他微信扫描，请重新生成。',
-        WECHAT_NOT_CONFIGURED: '微信登录暂未配置，请使用邮箱登录。',
-        VERSION_CONFLICT: '记录已有更新，请保留输入并重新核对。',
-        FOCUS_VERSION_CONFLICT: '当天重点已有更新，请重新读取。',
-        FOCUS_REMOVAL_CONFIRMATION_REQUIRED:
-          '日期范围变化将移除重点，请确认具体日期。',
-        DATA_VERSION_CONFLICT: '数据已有变化，请刷新后重新确认。',
-        ENTRY_DELETED: '事项已在回收站。',
-        TRASH_EXPIRED: '事项已超过恢复期限。',
-        RATE_LIMITED: '操作过于频繁，请稍后重试。',
-        ACCOUNT_PENDING_DELETION: '账号正在注销中，请查看注销状态或明确撤销。',
-        DELETION_EXPIRED: '注销撤销期限已过，账号不能恢复。',
-        REQUEST_TIMEOUT:
-          '请求未在时限内完成，请先读取当前记录或原任务状态确认结果。',
-        MAINTENANCE_PENDING: '服务正在完成启动维护，请稍后重试。',
-        PREVIEW_STALE:
-          '记录或计划已有变化，请保留原文件，重新建立预览并核对当前内容。',
-        IMPORT_REVIEW_REQUIRED:
-          '请先处理所有逐项冲突与分类映射，再确认整体导入。',
-        IDEMPOTENCY_KEY_REUSED:
-          '原任务的文件不能更换，请查询原任务，或为另一份文件建立新预览。',
-        IMPORT_INVALID: '文件格式、行内容或引用无效，请修正原文件后重新预览。',
-        UPDATE_VERSION_REQUIRED:
-          '缺少更新基准，请使用带版本的导出，或明确核对当前内容。',
-        FORMAT_VERSION_UNSUPPORTED: '文件版本不兼容，请使用 Dayline v1 格式。',
-        FILE_TOO_LARGE:
-          '文件超过 10 MiB 或单次事项、重点数量限制，请拆分文件后重试。',
+      const messages: Record<string, UiText> = {
+        ACTOR_CONTEXT_MISMATCH: msg(
+          'errors.theCurrentAccountHasChangedPleaseLog',
+        ),
+        REAUTH_REQUIRED: msg(
+          'errors.thisAuthenticationFailedOrHasExpiredPlease',
+        ),
+        IDENTITY_COMBINATION_UNSUPPORTED: msg(
+          'errors.theFirstVersionSupportsOneEmailAnd',
+        ),
+        IDENTITY_ALREADY_LINKED: msg(
+          'errors.theLoginMethodAssociationHasChangedPlease',
+        ),
+        BINDING_LINK_INVALID: msg(
+          'errors.theEmailVerificationLinkHasExpiredPlease',
+        ),
+        BINDING_ENDED: msg('errors.thisBindingOperationHasEndedPleaseRead'),
+        EMAIL_NOT_VERIFIED: msg('errors.pleaseVerifyYourEmailAddressFirstYou'),
+        INVALID_EMAIL_OR_PASSWORD: msg('errors.emailOrPasswordIsIncorrect'),
+        MAIL_UNAVAILABLE: msg('errors.theEmailCannotBeSentTemporarilyPlease'),
+        AUTH_UNAVAILABLE: msg(
+          'errors.theAuthenticationServiceIsTemporarilyUnavailablePlease',
+        ),
+        USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: msg(
+          'errors.thisEmailAddressHasBeenRegisteredPlease',
+        ),
+        INVALID_EMAIL: msg('errors.theEmailFormatIsIncorrectPleaseCheck'),
+        PASSWORD_TOO_SHORT: msg('errors.passwordRequiresAtLeast8Characters'),
+        PASSWORD_TOO_LONG: msg('errors.passwordCannotExceed128Characters'),
+        INVALID_TOKEN: msg('errors.theLinkHasExpiredOrIsInvalid'),
+        QR_EXPIRED: msg('errors.theQrCodeHasExpiredPleaseRegenerate'),
+        QR_STATE_CONFLICT: msg('errors.theScanCodeRequestHasExpiredPlease'),
+        QR_SCANNER_CONFLICT: msg('errors.theQrCodeHasBeenScannedBy'),
+        WECHAT_NOT_CONFIGURED: msg('errors.wechatLoginHasNotBeenConfiguredYet'),
+        VERSION_CONFLICT: msg('errors.theRecordHasBeenUpdatedPleaseKeep'),
+        FOCUS_VERSION_CONFLICT: msg('errors.theKeyPointsOfTheDayHave'),
+        FOCUS_REMOVAL_CONFIRMATION_REQUIRED: msg(
+          'errors.dateRangeChangesWillRemoveEmphasisPlease',
+        ),
+        DATA_VERSION_CONFLICT: msg('errors.theDataHasChangedPleaseRefreshAnd'),
+        ENTRY_DELETED: msg('errors.entryIsInTrash'),
+        TRASH_EXPIRED: msg('errors.theEntryHasExceededTheRecoveryPeriod'),
+        RATE_LIMITED: msg('errors.theOperationIsTooFrequentPleaseTry'),
+        ACCOUNT_PENDING_DELETION: msg(
+          'errors.theAccountIsBeingCanceledPleaseCheck',
+        ),
+        DELETION_EXPIRED: msg('errors.theCancellationPeriodHasExpiredAndThe'),
+        REQUEST_TIMEOUT: msg('errors.theRequestWasNotCompletedWithinThe'),
+        MAINTENANCE_PENDING: msg(
+          'errors.theServiceIsCompletingStartupMaintenancePlease',
+        ),
+        PREVIEW_STALE: msg('errors.theRecordOrPlanHasChangedPlease'),
+        IMPORT_REVIEW_REQUIRED: msg(
+          'errors.pleaseHandleAllItemByItemConflicts',
+        ),
+        IDEMPOTENCY_KEY_REUSED: msg('errors.theFileOfTheOriginalTaskCannot'),
+        IMPORT_INVALID: msg('errors.theFileFormatLineContentOrReference'),
+        UPDATE_VERSION_REQUIRED: msg(
+          'errors.missingUpdateBaselinePleaseUseAVersioned',
+        ),
+        FORMAT_VERSION_UNSUPPORTED: msg(
+          'errors.fileVersionIsIncompatiblePleaseUseDayline',
+        ),
+        FILE_TOO_LARGE: msg('errors.theFileExceeds10MibOrThe'),
       };
+      // Only known public error keys and numeric interpolation arguments cross the wire.
+      // Free-form upstream messages never become user-facing notices.
+      const key =
+        typeof error.messageKey === 'string' &&
+        error.messageKey.startsWith('errors.') &&
+        Object.hasOwn(sharedMessages['zh-CN'], error.messageKey)
+          ? error.messageKey
+          : null;
+      const localized = key
+        ? msg(
+            key,
+            Object.fromEntries(
+              Object.entries(record(error.params)).filter(
+                (pair): pair is [string, number] =>
+                  typeof pair[1] === 'number' && Number.isFinite(pair[1]),
+              ),
+            ),
+          )
+        : undefined;
       throw new ClientError(
         code,
         (code === 'RATE_LIMITED' && retryAfterSeconds !== undefined
-          ? `操作过于频繁，请等待 ${retryAfterSeconds} 秒后再试。`
-          : messages[code]) ??
+          ? msg('errors.theOperationIsTooFrequentPleaseWait', {
+              value0: retryAfterSeconds,
+            })
+          : (localized ?? messages[code])) ??
           (response.status === 401
-            ? '登录状态失效，请重新登录。'
-            : '操作未完成，请核对输入后重试。'),
+            ? msg('errors.loginStatusIsInvalidPleaseLogIn')
+            : msg('errors.theOperationIsNotCompletedPleaseCheck')),
         response.status,
         code === 'FOCUS_REMOVAL_CONFIRMATION_REQUIRED'
           ? focusRemovalDetailsSchema.safeParse(error.details).data
@@ -271,7 +328,7 @@ export class ApiClient {
       if (options.requireDataVersion)
         throw new ClientError(
           'INVALID_RESPONSE',
-          '服务器未返回完整保存确认，请刷新后核对记录。',
+          msg('errors.theServerDidNotReturnAComplete'),
           response.status,
         );
       this.acceptCredentials?.(response.headers);
@@ -285,7 +342,7 @@ export class ApiClient {
       } catch {
         throw new ClientError(
           'INVALID_RESPONSE',
-          '服务器响应不符合约定，请稍后重试。',
+          msg('errors.theServerResponseDoesNotMeetThe'),
           response.status,
         );
       }
@@ -297,14 +354,14 @@ export class ApiClient {
     if (parsedMeta && !parsedMeta.success)
       throw new ClientError(
         'INVALID_RESPONSE',
-        '服务器响应不完整，请稍后重试。',
+        msg('errors.theServerResponseIsIncompletePleaseTry'),
         response.status,
       );
     const meta = parsedMeta?.data;
     if (options.requireDataVersion && !meta?.dataVersion)
       throw new ClientError(
         'INVALID_RESPONSE',
-        '服务器未返回完整保存确认，请刷新后核对记录。',
+        msg('errors.theServerDidNotReturnAComplete'),
         response.status,
       );
     this.acceptCredentials?.(response.headers);
