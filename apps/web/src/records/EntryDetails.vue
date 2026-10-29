@@ -38,18 +38,17 @@ const dates = computed(() =>
         /><IconButton icon="close" label="关闭详情" @click="emit('close')" />
       </div>
     </div>
-    <h2>{{ entry.title }}</h2>
-    <span class="detail-status">{{
-      entryStatus(entry, today) === 'ongoing' ? '进行中' : '已结束'
-    }}</span>
+    <div class="entry-detail-title">
+      <h2>{{ entry.title }}</h2>
+      <span class="detail-status">{{
+        entryStatus(entry, today) === 'ongoing' ? '进行中' : '已结束'
+      }}</span>
+    </div>
     <dl class="entry-detail-fields">
-      <div>
-        <dt>开始日期</dt>
-        <dd>{{ entry.startDate }}</dd>
-      </div>
-      <div>
-        <dt>结束日期</dt>
+      <div class="entry-detail-range">
+        <dt>起止日期</dt>
         <dd>
+          {{ entry.startDate }} <span aria-hidden="true">—</span>
           {{ entry.endDate ?? (entry.startDate > today ? '结束未定' : '至今') }}
         </dd>
       </div>

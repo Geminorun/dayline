@@ -252,7 +252,11 @@ importers:
         specifier: 5.3.16
         version: 5.3.16
 
-  packages/core: {}
+  packages/core:
+    dependencies:
+      '@datastructures-js/priority-queue':
+        specifier: 6.4.0
+        version: 6.4.0
 
 packages:
 
@@ -1046,6 +1050,12 @@ packages:
   '@csstools/css-tokenizer@4.0.2':
     resolution: {integrity: sha512-OoKoR0f76dCY666JlcbhmVTs2drYj1GUXZTYTcbUgJjh9Nv41aFfZ21bPQTERm5+L5cBDo466NltB2lplS5GBw==}
     engines: {node: '>=20.19.0'}
+
+  '@datastructures-js/heap@4.3.7':
+    resolution: {integrity: sha512-Dx4un7Uj0dVxkfoq4RkpzsY2OrvNJgQYZ3n3UlGdl88RxxdHd7oTi21/l3zoxUUe0sXFuNUrfmWqlHzqnoN6Ug==}
+
+  '@datastructures-js/priority-queue@6.4.0':
+    resolution: {integrity: sha512-m07hIOpbPC4kE5SPtOwVcS6Sm3xhvhXiQy1qmATavYljeBqokvpWbBq+Tf3GtRLbiLJCOx1S7inWjrFihueu6A==}
 
   '@dcloudio/types@3.4.31':
     resolution: {integrity: sha512-YAqOfJpcAwMs4Fagv2oP+iRHSCJOJoN8JUYyoRD6gwfANhsI9QaYj4/j22FzSopfHkqjX50B7YkG/VRAyz9OnA==}
@@ -6983,6 +6993,12 @@ snapshots:
       css-tree: 3.2.1
 
   '@csstools/css-tokenizer@4.0.2': {}
+
+  '@datastructures-js/heap@4.3.7': {}
+
+  '@datastructures-js/priority-queue@6.4.0':
+    dependencies:
+      '@datastructures-js/heap': 4.3.7
 
   '@dcloudio/types@3.4.31': {}
 

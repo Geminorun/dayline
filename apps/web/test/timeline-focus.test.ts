@@ -55,6 +55,8 @@ it('shows lifetime counts separately from visible dots and opens only the select
       w.findAll('[data-focus-date]').map((button) => button.text()),
     ).toEqual(['2026-10-03', '2026-10-12']);
     expect(cluster.attributes('aria-expanded')).toBe('true');
+    await w.get('.timeline-entry-list').trigger('scroll');
+    expect(cluster.attributes('aria-expanded')).toBe('true');
     await w.setProps({ entries: [{ ...entry }], focusDays: [...focusDays] });
     expect(cluster.attributes('aria-expanded')).toBe('true');
     expect(w.findAll('[data-focus-date]')).toHaveLength(2);

@@ -9,7 +9,7 @@ import {
   useId,
 } from 'vue';
 import {
-  timelineBar,
+  packTimelineLanes,
   timelineFocusGroups,
   validFocusDays,
   timelineCanvasWindow,
@@ -27,6 +27,7 @@ import type {
   TimelineCanvasWindow,
   TimelineScale,
   TimelineFocusGroup,
+  TimelinePlacement,
 } from '@dayline/core';
 import type { CategoryDto, EntryDto, FocusDayDto } from '@dayline/contracts';
 const props = defineProps<{
@@ -51,6 +52,11 @@ const detailOffset = ref(0);
 const viewport = ref<HTMLElement | null>(null),
   scrollTop = ref(0),
   selection = ref<string | null>(null);
+const listViewport = ref<HTMLElement | null>(null);
+const listScrollTop = ref(0);
+const highlighted = ref<string | null>(null);
+const laneHeight = 56,
+  listRowHeight = 56;
 const panelId = useId();
 const focusPanel = ref<HTMLElement | null>(null);
 const focusOpen = ref(false);
@@ -88,9 +94,7 @@ let wheelTimer: ReturnType<typeof setTimeout> | undefined;
 function measure() {
   const el = viewport.value;
   if (!el) return;
-  const label =
-    el.querySelector('.timeline-name')?.getBoundingClientRect().width ?? 240;
-  plotWidth.value = Math.max(80, el.clientWidth - label);
+  plotWidth.value = Math.max(80, el.clientWidth);
 }
 function camera(start: number, days: number) {
   emit('camera', { day: start + days * TIMELINE_RECENT_POSITION, days });
@@ -98,15 +102,6 @@ function camera(start: number, days: number) {
 function wheel(event: WheelEvent) {
   const el = viewport.value;
   if (!el) return;
-  const name = el.querySelector('.timeline-name');
-  // The sticky name column keeps native vertical scrolling, including its buttons.
-  if (
-    (event.target instanceof Element &&
-      event.target.closest('.timeline-name')) ||
-    event.clientX <
-      (name?.getBoundingClientRect().right ?? el.getBoundingClientRect().left)
-  )
-    return;
   // Leave browser page zoom and horizontal trackpad scrolling alone.
   if (
     event.ctrlKey ||
@@ -121,13 +116,11 @@ function wheel(event: WheelEvent) {
     (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 500 : 1);
   wheelDelta += delta;
   if (Math.abs(wheelDelta) < 4) return;
-  const label =
-    el.querySelector('.timeline-name')?.getBoundingClientRect().width ?? 240;
   const ratio = Math.max(
     0,
     Math.min(
       1,
-      (event.clientX - el.getBoundingClientRect().left - label) / current.width,
+      (event.clientX - el.getBoundingClientRect().left) / current.width,
     ),
   );
   const days = current.endExclusive - current.start;
@@ -229,12 +222,6 @@ const axisGroups = computed(() => {
   }
   return groups;
 });
-const rows = computed(() =>
-  visibleRows(props.entries.length, scrollTop.value, 480, 78),
-);
-const visible = computed(() =>
-  props.entries.slice(rows.value.start, rows.value.end),
-);
 const groups = computed(() =>
   timelineFocusGroups(
     props.entries,
@@ -244,15 +231,81 @@ const groups = computed(() =>
     { minimumDistance: 28, position: 'dates-center' },
   ),
 );
-const groupsByEntry = computed(() => {
-  const result = new Map<string, TimelineFocusGroup[]>();
-  for (const group of groups.value) {
-    const list = result.get(group.entryId) ?? [];
-    list.push(group);
-    result.set(group.entryId, list);
-  }
-  return result;
-});
+let previousLanes: ReadonlyMap<string, number> = new Map();
+const lanes = computed(() =>
+  packTimelineLanes(
+    props.entries,
+    props.today,
+    window.value,
+    groups.value,
+    previousLanes,
+  ),
+);
+watch(
+  lanes,
+  (value) => {
+    previousLanes = new Map(
+      value.flatMap((lane) => lane.map((p) => [p.entry.id, p.lane])),
+    );
+  },
+  { immediate: true },
+);
+const bodyHeight = computed(() =>
+  Math.min(336, Math.max(168, lanes.value.length * laneHeight)),
+);
+const rows = computed(() =>
+  visibleRows(
+    lanes.value.length,
+    scrollTop.value,
+    bodyHeight.value,
+    laneHeight,
+    3,
+  ),
+);
+const visibleLanes = computed(() =>
+  lanes.value.slice(rows.value.start, rows.value.end),
+);
+const listRows = computed(() =>
+  visibleRows(
+    props.entries.length,
+    listScrollTop.value,
+    bodyHeight.value,
+    listRowHeight,
+    3,
+  ),
+);
+const visibleEntries = computed(() =>
+  props.entries.slice(listRows.value.start, listRows.value.end),
+);
+const placementsById = computed(
+  () =>
+    new Map(lanes.value.flatMap((lane) => lane.map((p) => [p.entry.id, p]))),
+);
+const listIndices = computed(
+  () => new Map(props.entries.map((entry, index) => [entry.id, index])),
+);
+function highlight(id: string, source: 'list' | 'plot') {
+  highlighted.value = id;
+  const el = source === 'list' ? viewport.value : listViewport.value;
+  const index =
+    source === 'list'
+      ? placementsById.value.get(id)?.lane
+      : listIndices.value.get(id);
+  if (!el || index === undefined) return;
+  const height = source === 'list' ? laneHeight : listRowHeight;
+  const top = index * height;
+  const current = source === 'list' ? scrollTop.value : listScrollTop.value;
+  const next =
+    top < current
+      ? top
+      : top + height > current + bodyHeight.value
+        ? top + height - bodyHeight.value
+        : current;
+  if (next === current) return;
+  el.scrollTop = next;
+  if (source === 'list') scrollTop.value = next;
+  else listScrollTop.value = next;
+}
 const focusTotals = computed(() => {
   const counts = new Map<string, number>();
   for (const focus of validFocusDays(
@@ -332,6 +385,11 @@ watch(
   () => closeFocus(),
 );
 watch(
+  () =>
+    lanes.value.map((lane) => lane.map((p) => p.entry.id).join('|')).join(';'),
+  () => closeFocus(),
+);
+watch(
   () => details.value?.dates.join('|'),
   (value) => {
     detailOffset.value = 0;
@@ -343,25 +401,13 @@ function color(entry: EntryDto) {
     props.categories?.find((c) => c.id === entry.categoryId)?.color ?? '#315C4D'
   );
 }
-function bar(entry: EntryDto) {
-  return timelineBar(entry, props.today, window.value);
-}
-function barStyle(entry: EntryDto) {
-  const value = bar(entry);
-  if (!value) return {};
-  const width = Math.max(24, value.width);
-  const left = Math.max(
-    0,
-    Math.min(
-      window.value.width - width,
-      value.left - (width - value.width) / 2,
-    ),
-  );
+function barStyle(placement: TimelinePlacement<EntryDto>) {
+  const { bar, hitLeft, hitWidth, entry } = placement;
   return {
-    left: left + 'px',
-    width: width + 'px',
-    '--bar-width': value.width + 'px',
-    '--bar-offset': value.left - left + 'px',
+    left: hitLeft - placement.left + 'px',
+    width: hitWidth + 'px',
+    '--bar-width': bar.width + 'px',
+    '--bar-offset': bar.left - hitLeft + 'px',
     '--category-color': color(entry),
     borderColor: color(entry),
   };
@@ -382,12 +428,27 @@ function locateToday() {
     );
 }
 watch(
-  () => props.entries.length,
-  async (count) => {
-    const top = Math.max(0, Math.min(scrollTop.value, count * 78 - 480));
+  [() => lanes.value.length, () => props.entries.length, bodyHeight],
+  async () => {
+    const top = Math.max(
+      0,
+      Math.min(
+        scrollTop.value,
+        lanes.value.length * laneHeight - bodyHeight.value,
+      ),
+    );
+    const listTop = Math.max(
+      0,
+      Math.min(
+        listScrollTop.value,
+        props.entries.length * listRowHeight - bodyHeight.value,
+      ),
+    );
     scrollTop.value = top;
+    listScrollTop.value = listTop;
     await nextTick();
     if (viewport.value) viewport.value.scrollTop = top;
+    if (listViewport.value) listViewport.value.scrollTop = listTop;
   },
 );
 onMounted(() => {
@@ -400,12 +461,31 @@ onMounted(() => {
   globalThis.addEventListener('resize', dismissFocus);
   globalThis.addEventListener('scroll', dismissFocus, true);
   if (viewport.value) {
-    viewport.value.scrollTop = recordView.timelineTop;
-    viewport.value.scrollLeft = recordView.timelineLeft;
-    scrollTop.value = recordView.timelineTop;
+    const top = Math.max(
+      0,
+      Math.min(
+        recordView.timelineTop,
+        lanes.value.length * laneHeight - bodyHeight.value,
+      ),
+    );
+    viewport.value.scrollTop = top;
+    scrollTop.value = top;
+  }
+  if (listViewport.value) {
+    const top = Math.max(
+      0,
+      Math.min(
+        recordView.timelineListTop,
+        props.entries.length * listRowHeight - bodyHeight.value,
+      ),
+    );
+    listViewport.value.scrollTop = top;
+    listScrollTop.value = top;
   }
 });
 function dismissFocus(event: Event) {
+  // Scrolling the independent list does not move a marker's plot anchor.
+  if (event.type === 'scroll' && event.target === listViewport.value) return;
   if (event.target instanceof Node && focusPanel.value?.contains(event.target))
     return;
   closeFocus();
@@ -417,84 +497,51 @@ onBeforeUnmount(() => {
   clearTimeout(wheelTimer);
   viewport.value?.removeEventListener('wheel', wheel);
   recordView.timelineTop = viewport.value?.scrollTop ?? 0;
-  recordView.timelineLeft = viewport.value?.scrollLeft ?? 0;
+  recordView.timelineListTop = listViewport.value?.scrollTop ?? 0;
 });
 defineExpose({ locateToday });
 </script>
 <template>
   <div
-    ref="viewport"
-    class="timeline-viewport gantt-scroll"
-    :class="{ 'is-dragging': dragging }"
-    tabindex="0"
-    aria-label="时间轴，左侧滚轮浏览事项，右侧滚轮缩放，拖动空白区域或方向键左右浏览"
-    @pointerdown="pointerDown"
-    @pointermove="pointerMove"
-    @pointerup="pointerEnd"
-    @pointercancel="pointerEnd"
-    @click.capture="click"
-    @keydown="keydown"
-    @scroll="scroll"
+    class="packed-timeline"
+    :style="{ '--timeline-body-height': bodyHeight + 'px' }"
+    @pointerleave="highlighted = null"
   >
-    <div
-      class="timeline-content"
-      :style="{
-        width: `calc(${window.width}px + var(--timeline-label-width, 240px))`,
-      }"
-    >
-      <div class="timeline-header">
-        <span class="timeline-name gantt-heading-label"
-          ><strong
-            >事项 <span>{{ entries.length }}</span></strong
-          ><small
-            >按开始日期{{ sort === 'asc' ? '从早到晚' : '从晚到早' }}</small
-          ></span
+    <aside class="timeline-entry-column" aria-label="当前范围事项">
+      <div class="gantt-heading-label">
+        <strong
+          >事项 <span>{{ entries.length }}</span></strong
         >
-        <div class="timeline-axis" :style="{ width: window.width + 'px' }">
-          <span
-            v-for="group in axisGroups.filter((group) => group.width >= 40)"
-            :key="group.key"
-            class="gantt-month"
-            :style="{ left: group.left + 'px', width: group.width + 'px' }"
-            >{{ group.label }}</span
-          >
-          <div class="gantt-ticks">
-            <span
-              v-for="(tick, index) in displayTicks"
-              :key="tick.day"
-              class="timeline-tick gantt-tick"
-              :class="{
-                today: tick.day === dateOrdinal(today),
-                weekend: window.focusUnit === 'day' && (tick.day - 1) % 7 >= 5,
-              }"
-              :style="{
-                left: tick.x + 'px',
-                width:
-                  (displayTicks[index + 1]?.x ?? window.width) - tick.x + 'px',
-              }"
-              ><b>{{
-                window.focusUnit === 'day'
-                  ? Number(ordinalDate(tick.day).slice(8))
-                  : tick.label
-              }}</b
-              ><small v-if="window.focusUnit === 'day'">{{
-                ['一', '二', '三', '四', '五', '六', '日'][(tick.day - 1) % 7]
-              }}</small></span
-            >
-          </div>
-        </div>
+        <small
+          >当前范围 · 按开始日期{{
+            sort === 'asc' ? '从早到晚' : '从晚到早'
+          }}</small
+        >
       </div>
-      <div :style="{ height: rows.before + 'px' }"></div>
-      <div v-for="entry in visible" :key="entry.id" class="timeline-row">
+      <div
+        ref="listViewport"
+        class="timeline-entry-list"
+        tabindex="0"
+        aria-label="滚动浏览事项列表"
+        @scroll="listScrollTop = listViewport?.scrollTop ?? 0"
+      >
+        <div :style="{ height: listRows.before + 'px' }"></div>
         <div
-          class="timeline-name gantt-row-label"
+          v-for="entry in visibleEntries"
+          :key="entry.id"
+          class="gantt-row-label timeline-list-entry"
+          :class="{ 'is-highlighted': highlighted === entry.id }"
+          :data-entry-id="entry.id"
           :style="{ '--category-color': color(entry) }"
+          @pointerenter="highlight(entry.id, 'list')"
+          @focusin="highlight(entry.id, 'list')"
         >
           <div class="gantt-row-title">
-            <i class="category-dot"></i
-            ><button :title="entry.title" @click="emit('view', entry)">
-              {{ entry.title }}</button
-            ><button
+            <i class="category-dot"></i>
+            <button :title="entry.title" @click="emit('view', entry)">
+              {{ entry.title }}
+            </button>
+            <button
               v-if="
                 !readonly &&
                 entry.startDate <= today &&
@@ -510,83 +557,150 @@ defineExpose({ locateToday });
             </button>
           </div>
           <div class="gantt-row-meta">
-            <span>{{
-              categories?.find((category) => category.id === entry.categoryId)
-                ?.name
-            }}</span
-            ><span
-              class="event-status"
-              :class="{ live: entryStatus(entry, today) === 'ongoing' }"
-              >{{
-                { ongoing: '进行中', ended: '已结束' }[
-                  entryStatus(entry, today)
-                ]
-              }}</span
-            ><span>持续 {{ durationDays(entry, today) }} 天</span>
-          </div>
-          <div
-            class="gantt-focus-total"
-            :class="{ 'has-focus': focusTotals.get(entry.id) }"
-          >
-            累计重点 {{ focusTotals.get(entry.id) ?? 0 }} 天
+            <span class="event-status">{{
+              entryStatus(entry, today) === 'ongoing' ? '进行中' : '已结束'
+            }}</span>
+            <span>{{ durationDays(entry, today) }} 天</span>
+            <span
+              class="gantt-focus-total"
+              :class="{ 'has-focus': focusTotals.get(entry.id) }"
+              >累计重点 {{ focusTotals.get(entry.id) ?? 0 }} 天</span
+            >
           </div>
         </div>
-        <div
-          class="timeline-track gantt-row-plot"
-          :style="{ width: window.width + 'px' }"
-        >
+        <div :style="{ height: listRows.after + 'px' }"></div>
+      </div>
+    </aside>
+    <div
+      ref="viewport"
+      class="timeline-viewport gantt-scroll"
+      :class="{ 'is-dragging': dragging }"
+      tabindex="0"
+      aria-label="时间轴，滚轮缩放，拖动空白区域或方向键左右浏览"
+      @pointerdown="pointerDown"
+      @pointermove="pointerMove"
+      @pointerup="pointerEnd"
+      @pointercancel="pointerEnd"
+      @click.capture="click"
+      @keydown="keydown"
+      @scroll="scroll"
+    >
+      <div class="timeline-content" :style="{ width: window.width + 'px' }">
+        <div class="timeline-header">
+          <div class="timeline-axis" :style="{ width: window.width + 'px' }">
+            <span
+              v-for="group in axisGroups.filter((group) => group.width >= 40)"
+              :key="group.key"
+              class="gantt-month"
+              :style="{ left: group.left + 'px', width: group.width + 'px' }"
+              >{{ group.label }}</span
+            >
+            <div class="gantt-ticks">
+              <span
+                v-for="(tick, index) in displayTicks"
+                :key="tick.day"
+                class="timeline-tick gantt-tick"
+                :class="{
+                  today: tick.day === dateOrdinal(today),
+                  weekend:
+                    window.focusUnit === 'day' && (tick.day - 1) % 7 >= 5,
+                }"
+                :style="{
+                  left: tick.x + 'px',
+                  width:
+                    (displayTicks[index + 1]?.x ?? window.width) -
+                    tick.x +
+                    'px',
+                }"
+              >
+                <b>{{
+                  window.focusUnit === 'day'
+                    ? Number(ordinalDate(tick.day).slice(8))
+                    : tick.label
+                }}</b>
+                <small v-if="window.focusUnit === 'day'">{{
+                  ['一', '二', '三', '四', '五', '六', '日'][(tick.day - 1) % 7]
+                }}</small>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="timeline-lanes" :style="{ minHeight: bodyHeight + 'px' }">
           <span
             v-if="window.todayX !== null"
             class="today-line"
             :style="{ left: window.todayX + 'px' }"
             aria-label="今天"
           ></span>
-          <button
-            v-if="bar(entry)"
-            class="timeline-bar gantt-bar"
-            :class="{
-              future: entry.startDate > today,
-              ongoing: !entry.endDate,
-              'is-short': (bar(entry)?.width ?? 0) < 24,
-            }"
-            :style="barStyle(entry)"
-            :title="`${entry.title} · ${entry.startDate} — ${entry.endDate ?? (entry.startDate > today ? '结束未定' : '至今')}`"
-            :aria-label="`${entry.title}，${entry.startDate} 至 ${entry.endDate ?? (entry.startDate > today ? '结束未定' : '今天')}，${entry.startDate > today ? '未开始' : ''}`"
-            @click="emit('view', entry)"
+          <div :style="{ height: rows.before + 'px' }"></div>
+          <div
+            v-for="(lane, index) in visibleLanes"
+            :key="rows.start + index"
+            class="timeline-row timeline-track timeline-lane"
+            :data-lane="rows.start + index"
           >
-            <span class="gantt-bar-title"
-              >{{ bar(entry)?.continuesBefore ? '‹ ' : ''
-              }}{{ entry.title }}</span
-            ><span v-if="!entry.endDate" class="gantt-bar-live">至今</span
-            >{{ bar(entry)?.continuesAfter ? '›' : '' }}
-          </button>
-          <button
-            v-for="group in groupsByEntry.get(entry.id) ?? []"
-            :key="group.key"
-            type="button"
-            class="focus-marker timeline-focus-marker"
-            :class="{
-              'is-cluster': group.dates.length > 1,
-              'is-large-count': group.dates.length > 999,
-            }"
-            :style="{ left: group.left + 'px' }"
-            :title="focusLabel(group)"
-            :aria-label="focusLabel(group)"
-            :aria-controls="panelId"
-            :aria-expanded="focusOpen && selection === group.key"
-            @click="openFocus(group, $event)"
-          >
-            <span class="timeline-focus-dot" aria-hidden="true">{{
-              group.dates.length > 1
-                ? group.dates.length > 999
-                  ? '999+'
-                  : group.dates.length
-                : ''
-            }}</span>
-          </button>
+            <div
+              v-for="placement in lane"
+              :key="placement.entry.id"
+              class="timeline-packed-item"
+              :data-entry-id="placement.entry.id"
+              :class="{ 'is-highlighted': highlighted === placement.entry.id }"
+              :style="{
+                left: placement.left + 'px',
+                width: placement.right - placement.left + 'px',
+              }"
+              @pointerenter="highlight(placement.entry.id, 'plot')"
+              @focusin="highlight(placement.entry.id, 'plot')"
+            >
+              <button
+                class="timeline-bar gantt-bar"
+                :class="{
+                  future: placement.entry.startDate > today,
+                  ongoing: !placement.entry.endDate,
+                  'is-short': placement.bar.width < 24,
+                }"
+                :style="barStyle(placement)"
+                :title="`${placement.entry.title} · ${placement.entry.startDate} — ${placement.entry.endDate ?? (placement.entry.startDate > today ? '结束未定' : '至今')}`"
+                :aria-label="`${placement.entry.title}，${placement.entry.startDate} 至 ${placement.entry.endDate ?? (placement.entry.startDate > today ? '结束未定' : '今天')}，${entryStatus(placement.entry, today) === 'ongoing' ? '进行中' : '已结束'}`"
+                @click="emit('view', placement.entry)"
+              >
+                <span class="gantt-bar-title"
+                  >{{ placement.bar.continuesBefore ? '‹ ' : ''
+                  }}{{ placement.entry.title }}</span
+                >
+                <span v-if="!placement.entry.endDate" class="gantt-bar-live"
+                  >至今</span
+                >{{ placement.bar.continuesAfter ? '›' : '' }}
+              </button>
+              <button
+                v-for="group in placement.groups"
+                :key="group.key"
+                type="button"
+                class="focus-marker timeline-focus-marker"
+                :class="{
+                  'is-cluster': group.dates.length > 1,
+                  'is-large-count': group.dates.length > 999,
+                }"
+                :style="{ left: group.left - placement.left + 'px' }"
+                :title="focusLabel(group)"
+                :aria-label="focusLabel(group)"
+                :aria-controls="panelId"
+                :aria-expanded="focusOpen && selection === group.key"
+                @click="openFocus(group, $event)"
+              >
+                <span class="timeline-focus-dot" aria-hidden="true">{{
+                  group.dates.length > 1
+                    ? group.dates.length > 999
+                      ? '999+'
+                      : group.dates.length
+                    : ''
+                }}</span>
+              </button>
+            </div>
+          </div>
+          <div :style="{ height: rows.after + 'px' }"></div>
         </div>
       </div>
-      <div :style="{ height: rows.after + 'px' }"></div>
     </div>
   </div>
   <Teleport to="body">

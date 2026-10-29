@@ -1899,12 +1899,25 @@ dd {
   pointer-events: none;
 }
 .entry-details {
-  padding: 4px 0;
+  padding: 0;
+}
+.planner-dialog.entry-detail-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 0;
+}
+.entry-detail-dialog .planner-dialog-content {
+  padding: 20px;
+}
+.entry-detail-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 10px 0 12px;
 }
 .entry-details h2 {
-  font-size: 23px;
-  line-height: 1.5;
-  margin: 16px 0 8px;
+  font-size: 20px;
+  line-height: 1.4;
+  margin: 0;
   overflow-wrap: anywhere;
 }
 .entry-details .modal-header {
@@ -1916,27 +1929,31 @@ dd {
 }
 .detail-status {
   color: var(--accent-ink);
-  font-size: 12px;
+  font-size: 11px;
+  flex-shrink: 0;
 }
 .entry-detail-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px 20px;
-  margin: 28px 0 12px;
+  gap: 12px 20px;
+  margin: 0;
+}
+.entry-detail-range {
+  grid-column: 1 / -1;
 }
 .entry-detail-fields dt {
   color: var(--muted);
   font-size: 11px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .entry-detail-fields dd {
   margin: 0;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 13px;
 }
 .detail-focus-dates {
-  margin-top: 24px;
-  padding-top: 16px;
+  margin-top: 16px;
+  padding-top: 12px;
   border-top: 1px solid var(--line);
   color: var(--ink-soft);
   font-size: 12px;
@@ -1996,8 +2013,112 @@ dd {
   padding-bottom: 8px;
 }
 
-.gantt-scroll .timeline-name {
-  cursor: default;
+.packed-timeline {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  border-block: 1px solid var(--line);
+  background: var(--surface);
+}
+.timeline-entry-column {
+  min-width: 0;
+  border-right: 1px solid var(--line);
+}
+.timeline-entry-column .gantt-heading-label {
+  position: static;
+  border-right: 0;
+  padding-inline: 16px;
+}
+.timeline-entry-list {
+  height: var(--timeline-body-height);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.timeline-entry-column .timeline-list-entry {
+  position: relative;
+  height: 56px;
+  padding: 5px 10px 5px 16px;
+  border-right: 0;
+  border-bottom: 1px solid var(--line);
+  transition: background 0.12s;
+}
+.timeline-list-entry.is-highlighted {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 var(--accent);
+}
+.timeline-list-entry .gantt-row-meta {
+  gap: 8px;
+  font-size: 9px;
+  margin-top: 0;
+  line-height: 16px;
+}
+.timeline-list-entry .gantt-focus-total {
+  margin: 0;
+  font-size: 9px;
+}
+.timeline-list-entry .gantt-row-meta > span:first-child {
+  color: var(--muted);
+  max-width: none;
+}
+.timeline-list-entry .gantt-row-title > button:not(.gantt-finish) {
+  font-size: 12px;
+}
+.packed-timeline .timeline-viewport {
+  height: calc(var(--timeline-body-height) + 68px);
+  max-height: none;
+  min-width: 0;
+  border: 0;
+  scrollbar-color: var(--line) transparent;
+}
+.timeline-lanes {
+  position: relative;
+}
+.packed-timeline .timeline-lane {
+  height: 56px;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+.timeline-packed-item {
+  position: absolute;
+  top: 0;
+  height: 56px;
+  border-radius: 4px;
+}
+.timeline-packed-item.is-highlighted {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.timeline-packed-item .gantt-bar {
+  top: 4px;
+  height: 24px;
+  border-radius: 4px;
+  box-shadow: none;
+}
+.timeline-packed-item .gantt-bar.is-short::before {
+  top: 4px;
+}
+.timeline-packed-item .timeline-focus-marker {
+  top: 28px;
+}
+@media (max-width: 600px) {
+  .packed-timeline {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
+  .timeline-entry-column .gantt-heading-label {
+    padding-inline: 10px;
+  }
+  .timeline-entry-column .timeline-list-entry {
+    padding-inline: 8px;
+  }
+  .timeline-list-entry .gantt-row-meta {
+    gap: 4px;
+    padding-left: 0;
+    font-size: 8px;
+  }
+  .timeline-list-entry .gantt-focus-total {
+    font-size: 8px;
+  }
 }
 
 /* Focus marks use one shape at every zoom level. Date counts stay explicit. */

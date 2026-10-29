@@ -982,6 +982,7 @@ const recent = computed(
       </template>
       <PlannerDialog
         v-if="view === 'editor'"
+        :class="{ 'entry-detail-dialog': !editing }"
         :label="editing ? '事项编辑' : '事项详情'"
         @close="closeEditor"
       >

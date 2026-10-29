@@ -138,6 +138,7 @@ export function summarizeEntries<T extends DateRange & { categoryId: string }>(
   };
 }
 export * from './views.js';
+export * from './timeline-layout.js';
 
 /** Display instants in the fixed product timezone, including on hosts without Intl. */
 export function formatBeijingTime(value: string | null | undefined): string {
