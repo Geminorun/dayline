@@ -9,6 +9,7 @@ import { useWorkspace } from './records/workspace';
 import { errorMessage } from './records/record-service';
 import AppearanceSettings from './appearance/AppearanceSettings.vue';
 import LanguageSettings from './i18n/LanguageSettings.vue';
+import PwaSettings from './pwa/PwaSettings.vue';
 const account = useAccount(),
   workspace = useWorkspace();
 const { current } = account;
@@ -123,7 +124,7 @@ async function save() {
       role="tabpanel"
       aria-labelledby="settings-tab-appearance"
     >
-      <LanguageSettings /><AppearanceSettings />
+      <LanguageSettings /><AppearanceSettings /><PwaSettings />
     </div>
     <section
       v-else

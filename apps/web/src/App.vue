@@ -18,6 +18,8 @@ import { recordView } from './records/view-state';
 import PlannerIcon from './components/PlannerIcon.vue';
 import PlannerSymbols from './components/PlannerSymbols.vue';
 import SyncStatus from './components/SyncStatus.vue';
+import PwaExperience from './pwa/PwaExperience.vue';
+import { pwa } from './pwa/client';
 import { useDraftCount } from './records/use-draft-count';
 import { initializeAppearance, stopAppearance } from './appearance/theme';
 import { errorMessage } from './records/record-service';
@@ -250,6 +252,7 @@ function hasEvent(date: string) {
 </script>
 <template>
   <PlannerSymbols />
+  <PwaExperience />
   <div class="app-shell">
     <aside class="sidebar">
       <RouterLink class="brand" to="/day" :aria-label="tr('common.daylineHome')"
@@ -390,6 +393,13 @@ function hasEvent(date: string) {
           ><strong>{{ pageLabel }}</strong>
         </div>
         <div class="topbar-end">
+          <span
+            v-if="pwa.state.offline"
+            class="pwa-offline"
+            role="status"
+            :title="tr('pwa.offlineHint')"
+            >{{ tr('pwa.offline') }}</span
+          >
           <SyncStatus />
           <details
             ref="accountMenu"
@@ -447,7 +457,18 @@ function hasEvent(date: string) {
                     "
                     >{{ draftsUnavailable ? '!' : draftCount }}</span
                   ></RouterLink
-                ><RouterLink class="button" to="/trash">{{
+                >
+                <button
+                  v-if="!pwa.state.installed"
+                  class="button"
+                  @click="
+                    closeAccountMenu();
+                    pwa.install();
+                  "
+                >
+                  <PlannerIcon name="download" />{{ tr('pwa.install') }}
+                </button>
+                <RouterLink class="button" to="/trash">{{
                   tr('common.trash')
                 }}</RouterLink>
                 <button

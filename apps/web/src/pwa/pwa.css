@@ -1,0 +1,188 @@
+.pwa-update {
+  position: fixed;
+  z-index: 100;
+  top: max(84px, env(safe-area-inset-top));
+  right: max(20px, env(safe-area-inset-right));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100vw - 32px);
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  background: var(--surface-raised);
+  box-shadow: 0 8px 32px var(--shadow);
+  font-size: 13px;
+}
+.pwa-update > svg {
+  width: 18px;
+  height: 18px;
+  color: var(--accent-ink);
+}
+.pwa-offline {
+  font-size: 11px;
+  color: var(--muted);
+}
+.pwa-help {
+  max-width: 400px;
+}
+.pwa-help header,
+.pwa-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.pwa-help h2 {
+  font-size: 20px;
+  margin: 0;
+}
+.pwa-help p,
+.pwa-help li {
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink-soft);
+}
+.pwa-help li + li {
+  margin-top: 12px;
+}
+.pwa-help ul {
+  padding-left: 20px;
+}
+.pwa-actions {
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+.pwa-settings > .muted {
+  margin: 0;
+  padding: 0 0 20px;
+}
+@media (max-width: 760px) {
+  .sidebar {
+    display: contents;
+  }
+  .sidebar > :not(.primary-nav) {
+    display: none;
+  }
+  .primary-nav {
+    position: fixed;
+    z-index: 30;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    gap: 8px;
+    padding: 6px max(16px, env(safe-area-inset-right))
+      calc(6px + env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .primary-nav .nav-item {
+    flex: 1;
+    justify-content: center;
+    min-height: 48px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
+  .primary-nav .nav-item svg {
+    width: 18px;
+    height: 18px;
+  }
+  .topbar {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    min-height: calc(56px + env(safe-area-inset-top));
+    height: auto;
+    padding: calc(6px + env(safe-area-inset-top))
+      max(16px, env(safe-area-inset-right)) 6px
+      max(16px, env(safe-area-inset-left));
+    background: var(--surface);
+    gap: 8px;
+  }
+  .topbar .breadcrumb {
+    display: flex;
+    font-size: 0;
+    gap: 0;
+    min-width: 0;
+  }
+  .topbar .breadcrumb > strong {
+    display: block;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .topbar-end {
+    gap: 4px;
+    min-width: 0;
+    width: auto;
+    margin-left: auto;
+  }
+  .account-entry {
+    min-height: 44px;
+    gap: 6px;
+  }
+  .account-entry > span:last-child {
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .account-popover {
+    width: min(300px, calc(100vw - 32px));
+    right: 0;
+  }
+  .account-popover .button {
+    min-height: 44px;
+  }
+  .main-content {
+    padding: 20px max(16px, env(safe-area-inset-right))
+      calc(80px + env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
+  }
+  .icon-btn,
+  .sync-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .filter-tab,
+  .status-tab {
+    min-height: 44px;
+  }
+  :where(.card, .record-panel, .themed-form, .profile-edit)
+    :is(input, select, textarea) {
+    font-size: 16px;
+  }
+  .planner-dialog {
+    max-height: calc(
+      100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+    );
+  }
+  .pwa-update {
+    top: auto;
+    bottom: calc(78px + env(safe-area-inset-bottom));
+    left: 16px;
+    right: 16px;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .workspace-toast {
+    bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+  body:has(.pwa-update) .workspace-toast {
+    bottom: calc(160px + env(safe-area-inset-bottom));
+  }
+}
+@media (max-width: 380px) {
+  .account-entry > span:last-child {
+    display: none;
+  }
+  .pwa-update {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}

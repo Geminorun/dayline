@@ -1,0 +1,21 @@
+{
+  "pwa.app": "日序应用",
+  "pwa.install": "安装日序",
+  "pwa.installed": "已作为独立应用打开。",
+  "pwa.installHint": "添加到桌面，像应用一样打开日序。",
+  "pwa.appleHint": "iPhone / iPad：在 Safari 中打开，点击“分享”，选择“添加到主屏幕”。",
+  "pwa.browserHint": "Chrome / Edge：使用地址栏的安装图标，或浏览器菜单中的“安装应用 / 添加到主屏幕”。若没有此选项，请使用最新版受支持的浏览器。",
+  "pwa.offlineHint": "页面缓存不等于云端备份。游客记录保存在本机；账号保存、登录和同步需要联网，未提交草稿仍需手动保存。",
+  "pwa.offlineReady": "页面已缓存，可离线打开。",
+  "pwa.cachePending": "首次安装页面缓存需要联网。",
+  "pwa.cacheFailed": "页面缓存或更新检查失败，请联网后重试。",
+  "pwa.offline": "离线",
+  "pwa.updateAvailable": "有新版本可用",
+  "pwa.update": "更新应用",
+  "pwa.updateHint": "更新会重新加载页面。请先完成其他表单的保存；事项编辑器会先暂存账号草稿，无法暂存的输入将再次确认。其他窗口不会自动刷新。",
+  "pwa.reload": "更新并重新加载",
+  "pwa.later": "稍后更新",
+  "pwa.checkUpdate": "检查更新",
+  "pwa.updateFailed": "更新未完成，请重试",
+  "pwa.upToDate": "检查完成，未发现新版本。"
+}

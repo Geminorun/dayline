@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "vue-tsc --noEmit && vite build",
+    "build": "vue-tsc --noEmit && vite build && node scripts/verify-pwa.mjs",
     "typecheck": "vue-tsc --noEmit && vue-tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run"
   },
@@ -12,12 +12,12 @@
     "@dayline/api-client": "workspace:*",
     "@dayline/contracts": "workspace:*",
     "@dayline/core": "workspace:*",
+    "@dayline/locales": "workspace:*",
     "dexie": "4.2.1",
     "sortablejs": "1.15.7",
     "vue": "3.5.44",
     "vue-i18n": "11.4.16",
-    "vue-router": "4.6.4",
-    "@dayline/locales": "workspace:*"
+    "vue-router": "4.6.4"
   },
   "devDependencies": {
     "@types/sortablejs": "1.15.9",
@@ -26,6 +26,7 @@
     "fake-indexeddb": "6.2.5",
     "jsdom": "29.1.1",
     "vite": "8.3.5",
+    "vite-plugin-pwa": "2.0.0",
     "vue-tsc": "3.3.13"
   }
 }

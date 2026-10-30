@@ -16,6 +16,14 @@ beforeAll(async () => {
     join(directory, 'assets', 'app-hash.js'),
     'window.dayline=1;',
   );
+  await writeFile(
+    join(directory, 'sw.js'),
+    'self.addEventListener("fetch",()=>{});',
+  );
+  await writeFile(
+    join(directory, 'manifest.webmanifest'),
+    JSON.stringify({ name: 'Dayline', start_url: '/day' }),
+  );
   await writeFile(join(directory, '.env'), 'PRIVATE_VALUE=secret');
   app.use(createStaticSite(directory));
   app.use((_request, response) =>
@@ -45,6 +53,18 @@ describe('single-container public website', () => {
     expect(response.headers['cache-control']).toContain('immutable');
     await request(app).get('/assets/missing.js').expect(404);
     await request(app).get('/favicon.ico').expect(404);
+  });
+  it('serves PWA metadata and worker with fresh headers and correct MIME types', async () => {
+    const worker = await request(app).get('/sw.js').expect(200);
+    expect(worker.type).toMatch(/javascript/);
+    expect(worker.headers['cache-control']).toBe('no-store');
+    const manifest = await request(app)
+      .get('/manifest.webmanifest')
+      .expect(200);
+    expect(manifest.type).toBe('application/manifest+json');
+    expect(manifest.headers['cache-control']).toBe('no-store');
+    await request(app).get('/workbox-missing.js').expect(404);
+    await request(app).get('/icons/missing.png').expect(404);
   });
   it('leaves API, auth, health, non-GET and hidden paths to their real handlers', async () => {
     for (const path of [

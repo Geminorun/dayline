@@ -3,9 +3,13 @@ import { createRouter, createWebHistory } from 'vue-router';
 import App from './App.vue';
 import { routes } from './routes';
 import './style.css';
+import './pwa/pwa.css';
+import { pwa } from './pwa/client';
 import { initializeAppearance } from './appearance/theme';
 import { i18n, initializeLanguage } from './i18n';
 initializeAppearance();
 initializeLanguage();
 const router = createRouter({ history: createWebHistory(), routes });
 createApp(App).use(i18n).use(router).mount('#app');
+
+if (import.meta.env.PROD) pwa.start();

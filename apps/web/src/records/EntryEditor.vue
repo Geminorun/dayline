@@ -30,6 +30,7 @@ import {
 } from '../adapters/local-repository';
 import { api } from '../api';
 import PlannerIcon from '../components/PlannerIcon.vue';
+import { registerReloadGuard } from '../pwa/reload-guards';
 const route = inject(routeLocationKey, undefined);
 const props = defineProps<{
   entry: EntryDto | null;
@@ -219,6 +220,8 @@ async function canLeave() {
     window.confirm(tr('entryEditor.theCurrentInputHasNotBeenSaved'))
   );
 }
+const removeReloadGuard = registerReloadGuard(canLeave);
+onBeforeUnmount(removeReloadGuard);
 onBeforeRouteLeave(canLeave);
 onBeforeRouteUpdate((to, from) => (to.path === from.path ? true : canLeave()));
 function leaving(event: BeforeUnloadEvent) {

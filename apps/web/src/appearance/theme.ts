@@ -110,6 +110,9 @@ function apply() {
   };
   for (const [key, colorValue] of Object.entries(variables))
     document.documentElement.style.setProperty('--' + key, colorValue);
+  document
+    .querySelector('meta[name=theme-color]')
+    ?.setAttribute('content', value.surface);
   document.documentElement.dataset.theme = preferences.theme;
   document.documentElement.dataset.colorMode = resolvedMode.value;
   document.documentElement.style.colorScheme = resolvedMode.value;

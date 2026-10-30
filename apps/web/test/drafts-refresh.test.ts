@@ -4,6 +4,7 @@ import { defineComponent } from 'vue';
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import EntryEditor from '../src/records/EntryEditor.vue';
+import { canReload } from '../src/pwa/reload-guards';
 import { useAccount } from '../src/account';
 import { api } from '../src/api';
 import {
@@ -99,6 +100,21 @@ function editor(
   return w;
 }
 describe('durable manual drafts and identity transitions', () => {
+  it('flushes the last keystroke before a PWA reload without submitting it to the server', async () => {
+    const save = vi.fn();
+    const w = editor(save);
+    await w.get('input').setValue('更新前的最后输入');
+    expect(await canReload()).toBe(true);
+    expect((await localRepository.drafts(userId)).at(-1)?.fields.title).toBe(
+      '更新前的最后输入',
+    );
+    expect(save).not.toHaveBeenCalled();
+    vi.spyOn(localRepository, 'putDraft').mockRejectedValue(new Error('quota'));
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    await w.get('input').setValue('无法暂存的输入');
+    expect(await canReload()).toBe(false);
+    expect(w.get('input').element.value).toBe('无法暂存的输入');
+  });
   it('flushes the last input to its original account when identity expires before debounce and never exposes it as another account draft', async () => {
     const w = editor(async () => {});
     await w.get('input').setValue('失效前最后输入');

@@ -1,0 +1,21 @@
+{
+  "pwa.app": "Dayline app",
+  "pwa.install": "Install Dayline",
+  "pwa.installed": "Opened as a standalone app.",
+  "pwa.installHint": "Add Dayline to your home screen for an app experience.",
+  "pwa.appleHint": "iPhone / iPad: open in Safari, tap Share, then Add to Home Screen.",
+  "pwa.browserHint": "Chrome / Edge: use the install icon in the address bar, or Install app / Add to Home Screen in the browser menu. If unavailable, use a current supported browser.",
+  "pwa.offlineHint": "Page caching is not a cloud backup. Guest records stay on this device. Account saves, sign-in and sync require a connection; local drafts still need manual submission.",
+  "pwa.offlineReady": "Pages are cached and can open offline.",
+  "pwa.cachePending": "Connect to cache pages on the first visit.",
+  "pwa.cacheFailed": "Page caching or the update check failed. Reconnect and try again.",
+  "pwa.offline": "Offline",
+  "pwa.updateAvailable": "An update is available",
+  "pwa.update": "Update app",
+  "pwa.updateHint": "Updating reloads this page. Save any other forms first. The entry editor will store account drafts locally and ask before discarding input it cannot store. Other windows will not reload automatically.",
+  "pwa.reload": "Update and reload",
+  "pwa.later": "Update later",
+  "pwa.checkUpdate": "Check for updates",
+  "pwa.updateFailed": "Update did not finish. Try again.",
+  "pwa.upToDate": "Check complete. No new version found."
+}

@@ -1,4 +1,6 @@
 import { sharedMessages } from './shared/index.js';
+import pwaZh from './ui/zh-CN/pwa.json' with { type: 'json' };
+import pwaEn from './ui/en/pwa.json' with { type: 'json' };
 import datesZh from './ui/zh-CN/dates.json' with { type: 'json' };
 import datesEn from './ui/en/dates.json' with { type: 'json' };
 import zh0 from './ui/zh-CN/account.json' with { type: 'json' };
@@ -70,6 +72,7 @@ import en37 from './ui/en/workspace.json' with { type: 'json' };
 export const uiMessages: Record<'zh-CN' | 'en', Record<string, string>> = {
   'zh-CN': {
     ...datesZh,
+    ...pwaZh,
     ...zh0,
     ...zh1,
     ...zh2,
@@ -106,6 +109,7 @@ export const uiMessages: Record<'zh-CN' | 'en', Record<string, string>> = {
   },
   en: {
     ...datesEn,
+    ...pwaEn,
     ...en0,
     ...en1,
     ...en2,
