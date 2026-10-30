@@ -8,6 +8,8 @@
 
 ## 技术与目录
 
+客户端目录与发布顺序见 [多平台规划](docs/publishing.md)：优先 Web / PWA 和 Chrome / Edge 扩展，小程序待备案后继续，Android / iOS 后续推进。下方为已实现工程；规划中的新端尚未创建。
+
 - Node.js 24.19.0、pnpm 11.25.0、TypeScript 严格模式。
 - NestJS 11 + Express，PostgreSQL 17 / 18 + Prisma 7。
 - Better Auth 1.7.13，社区 Nest 适配器 2.8.0，Resend 6.34.1。
