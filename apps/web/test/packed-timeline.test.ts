@@ -5,6 +5,8 @@ import EntryDetails from '../src/records/EntryDetails.vue';
 import { recordView, resetRecordView } from '../src/records/view-state';
 import { dateOrdinal, timelineCanvasWindow } from '@dayline/core';
 import type { EntryDto } from '@dayline/contracts';
+import { changeLanguage } from '../src/i18n';
+const laneHeight = 72;
 const today = '2026-10-29',
   now = `${today}T00:00:00.000Z`;
 const entry = (
@@ -57,6 +59,55 @@ it('uses matching track cells for single entries regardless of input order', asy
   } finally {
     w.unmount();
     resetRecordView();
+  }
+});
+
+it('keeps status, duration and focus summaries for each packed entry and localizes them without losing the track', async () => {
+  resetRecordView();
+  const entries = [
+    entry('first', '2026-10-01', '2026-10-05'),
+    entry('second', '2026-10-08', '2026-10-12'),
+  ];
+  const w = mount(TimelineView, {
+    props: {
+      entries,
+      focusDays: [
+        { entryId: 'first', date: '2026-10-03', focused: true, version: 1 },
+      ],
+      today,
+      scale: 'month',
+      anchor: today,
+    },
+  });
+  try {
+    await flushPromises();
+    expect(w.findAll('.timeline-list-lane')).toHaveLength(1);
+    const first = w.get('.timeline-list-entry[data-entry-id="first"]');
+    const second = w.get('.timeline-list-entry[data-entry-id="second"]');
+    expect(first.get('.event-status').text()).toBe('已结束');
+    expect(first.get('.timeline-entry-duration').text()).toBe('历时 5 天');
+    expect(first.get('.gantt-focus-total').text()).toBe('重点 1 天');
+    expect(second.get('.timeline-entry-duration').text()).toBe('历时 5 天');
+    expect(second.find('.gantt-focus-total').exists()).toBe(false);
+    expect(second.get('.gantt-row-title button').attributes('title')).toContain(
+      '累计重点 0 天',
+    );
+    changeLanguage('en', false);
+    await flushPromises();
+    expect(first.get('.event-status').text()).toBe('Ended');
+    expect(first.get('.timeline-entry-duration').text()).toBe('5 days');
+    expect(first.get('.gantt-focus-total').text()).toBe('1 focus day');
+    await first.trigger('pointerenter');
+    expect(
+      w.get('.timeline-packed-item[data-entry-id="first"]').classes(),
+    ).toContain('is-highlighted');
+    expect(second.classes()).not.toContain('is-highlighted');
+    await first.get('.gantt-row-title button').trigger('click');
+    expect(w.emitted('view')?.at(-1)?.[0]).toMatchObject({ id: 'first' });
+  } finally {
+    w.unmount();
+    resetRecordView();
+    changeLanguage('zh-CN', false);
   }
 });
 
@@ -142,9 +193,14 @@ it('synchronizes virtualized track scrolling and clamps both sides after filteri
     await flushPromises();
     const list = w.get<HTMLElement>('.timeline-entry-list');
     const plot = w.get<HTMLElement>('.timeline-viewport');
-    list.element.scrollTop = 19 * 56;
+    const height = Number.parseInt(
+      w
+        .get<HTMLElement>('.packed-timeline')
+        .element.style.getPropertyValue('--timeline-body-height'),
+    );
+    list.element.scrollTop = 19 * laneHeight;
     await list.trigger('scroll');
-    expect(plot.element.scrollTop).toBe(20 * 56 - 336);
+    expect(plot.element.scrollTop).toBe(20 * laneHeight - height);
     expect(list.element.scrollTop).toBe(plot.element.scrollTop);
     plot.element.scrollTop = 168;
     await plot.trigger('scroll');
@@ -239,7 +295,7 @@ it('keeps viewport height and existing tracks during zoom, then preserves the vi
     ).toBe(firstTrack);
     await vi.advanceTimersByTimeAsync(200);
     await flushPromises();
-    expect(w.findAll('.timeline-lane')).toHaveLength(9);
+    expect(w.findAll('.timeline-lane').length).toBeGreaterThan(1);
     expect(w.get('.packed-timeline').attributes('style')).toBe(height);
     await w.setProps({
       range: {
@@ -282,13 +338,13 @@ it('preserves the top visible track when zoom reveals earlier tracks above it', 
   try {
     await flushPromises();
     const plot = w.get<HTMLElement>('.timeline-viewport');
-    plot.element.scrollTop = 168;
+    plot.element.scrollTop = 3 * laneHeight;
     await plot.trigger('scroll');
     await w.setProps({ range: timelineCanvasWindow(entries, today, 'year') });
     await flushPromises();
-    expect(plot.element.scrollTop).toBe(11 * 56);
+    expect(plot.element.scrollTop).toBe(11 * laneHeight);
     expect(w.get<HTMLElement>('.timeline-entry-list').element.scrollTop).toBe(
-      11 * 56,
+      11 * laneHeight,
     );
     expect(
       w

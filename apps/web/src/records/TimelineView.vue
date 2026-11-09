@@ -58,8 +58,8 @@ const viewport = ref<HTMLElement | null>(null),
   selection = ref<string | null>(null);
 const listViewport = ref<HTMLElement | null>(null);
 const highlighted = ref<string | null>(null);
-const laneHeight = 56;
-const bodyHeight = ref(336);
+const laneHeight = 72;
+const bodyHeight = ref(360);
 const navigating = ref(false);
 const navigationTracks = ref<string[]>([]);
 const panelId = useId();
@@ -111,9 +111,9 @@ function measure() {
   if (!el) return;
   plotWidth.value = Math.max(80, el.clientWidth);
   bodyHeight.value = Math.max(
-    168,
+    216,
     Math.min(
-      336,
+      360,
       Math.floor((globalThis.innerHeight * 0.45) / laneHeight) * laneHeight,
     ),
   );
@@ -300,6 +300,11 @@ const tracks = computed(() => {
     return track ? [track] : [];
   });
 });
+const inspecting = computed(() =>
+  tracks.value.some((track) =>
+    track.items.some((item) => item.entry.id === highlighted.value),
+  ),
+);
 const rows = computed(() =>
   visibleRows(
     tracks.value.length,
@@ -538,7 +543,6 @@ function barStyle(placement: TimelinePlacement<EntryDto>) {
     '--bar-width': bar.width + 'px',
     '--bar-offset': bar.left - hitLeft + 'px',
     '--category-color': color(entry),
-    borderColor: color(entry),
   };
 }
 function markerStyle(
@@ -652,7 +656,11 @@ defineExpose({ locateToday });
 <template>
   <div
     class="packed-timeline"
-    :style="{ '--timeline-body-height': bodyHeight + 'px' }"
+    :class="{ 'is-inspecting': inspecting }"
+    :style="{
+      '--timeline-body-height': bodyHeight + 'px',
+      '--timeline-lane-height': laneHeight + 'px',
+    }"
     @pointerleave="highlighted = null"
   >
     <aside
@@ -685,9 +693,10 @@ defineExpose({ locateToday });
           :key="track.key"
           class="timeline-list-lane"
           :class="{
-            'is-highlighted': track.items.some(
+            'has-highlighted-entry': track.items.some(
               (item) => item.entry.id === highlighted,
             ),
+            'has-multiple': track.items.length > 1,
             'has-many': track.items.length > 2,
           }"
           :data-lane="rows.start + index"
@@ -796,6 +805,15 @@ defineExpose({ locateToday });
             :style="{ left: window.todayX + 'px' }"
             :aria-label="tr('common.today')"
           ></span>
+          <span
+            v-if="window.todayX !== null"
+            class="timeline-today-band"
+            :style="{
+              left: window.todayX - window.pixelsPerDay / 2 + 'px',
+              width: window.pixelsPerDay + 'px',
+            }"
+            aria-hidden="true"
+          ></span>
           <div :style="{ height: rows.before + 'px' }"></div>
           <div
             v-for="(track, index) in visibleLanes"
@@ -812,6 +830,7 @@ defineExpose({ locateToday });
               :style="{
                 left: placement.left + 'px',
                 width: placement.right - placement.left + 'px',
+                '--category-color': color(placement.entry),
               }"
               @pointerenter="highlight(placement.entry.id)"
               @focusin="highlight(placement.entry.id)"
@@ -821,7 +840,7 @@ defineExpose({ locateToday });
                 :class="{
                   future: placement.entry.startDate > today,
                   ongoing: !placement.entry.endDate,
-                  'is-short': placement.bar.width < 24,
+                  'is-short': placement.bar.width < 56,
                 }"
                 :style="barStyle(placement)"
                 :title="`${placement.entry.title} · ${placement.entry.startDate} — ${placement.entry.endDate ?? (placement.entry.startDate > today ? tr('common.endingPending') : tr('common.present'))}`"

@@ -79,7 +79,7 @@ it('shows uniform contribution cells and opens only the selected exact dates', a
   });
   try {
     await flushPromises();
-    expect(w.get('.gantt-focus-total').text()).toBe('累计重点 4 天');
+    expect(w.get('.gantt-focus-total').text()).toBe('重点 4 天');
     expect(w.findAll('.timeline-focus-marker')).toHaveLength(2);
     const cluster = w
       .findAll('.timeline-focus-marker')
@@ -128,7 +128,7 @@ it('shows uniform contribution cells and opens only the selected exact dates', a
     await cluster.trigger('click');
     await flushPromises();
     await w.setProps({ focusDays: [] });
-    expect(w.get('.gantt-focus-total').text()).toBe('累计重点 0 天');
+    expect(w.find('.gantt-focus-total').exists()).toBe(false);
     expect(w.findAll('.timeline-focus-marker')).toHaveLength(0);
     expect(w.findAll('[data-focus-date]')).toHaveLength(0);
   } finally {
