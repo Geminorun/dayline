@@ -1,5 +1,5 @@
 import { mount, flushPromises } from '@vue/test-utils';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import TimelineView from '../src/records/TimelineView.vue';
 import EntryDetails from '../src/records/EntryDetails.vue';
 import { recordView, resetRecordView } from '../src/records/view-state';
@@ -25,7 +25,42 @@ const entry = (
   updatedAt: now,
 });
 
-it('packs ended history into shared tracks and links list hover without coupling scroll positions', async () => {
+it('uses matching track cells for single entries regardless of input order', async () => {
+  resetRecordView();
+  const entries = [
+    entry('middle', '2026-10-15', null),
+    entry('first', '2026-10-01', null),
+    entry('last', '2026-10-20', null),
+  ];
+  const w = mount(TimelineView, {
+    props: { entries, focusDays: [], today, scale: 'month', anchor: today },
+  });
+  try {
+    await flushPromises();
+    for (const cell of w.findAll('.timeline-list-lane')) {
+      const id = cell.get('.timeline-list-entry').attributes('data-entry-id');
+      const lane = w.get(
+        `.timeline-lane[data-lane="${cell.attributes('data-lane')}"]`,
+      );
+      expect(
+        lane
+          .findAll('.timeline-packed-item')
+          .map((item) => item.attributes('data-entry-id')),
+      ).toEqual([id]);
+    }
+    await w
+      .get('.timeline-packed-item[data-entry-id="middle"]')
+      .trigger('pointerenter');
+    expect(
+      w.get('.timeline-list-entry[data-entry-id="middle"]').classes(),
+    ).toContain('is-highlighted');
+  } finally {
+    w.unmount();
+    resetRecordView();
+  }
+});
+
+it('packs unlimited ended entries into one matching cell and exposes collapsed entries without expanding the track', async () => {
   resetRecordView();
   const entries = Array.from({ length: 12 }, (_, i) =>
     entry(
@@ -34,18 +69,9 @@ it('packs ended history into shared tracks and links list hover without coupling
       `2026-10-${String(i + 1).padStart(2, '0')}`,
     ),
   );
-  // Provide a real width so one-day hit targets fit without artificial jsdom collisions.
-  const width = Object.getOwnPropertyDescriptor(
-    HTMLElement.prototype,
-    'clientWidth',
-  );
-  Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
-    configurable: true,
-    value: 930,
-  });
   const w = mount(TimelineView, {
     props: {
-      entries,
+      entries: [...entries].reverse(),
       focusDays: [],
       today,
       scale: 'month',
@@ -59,49 +85,52 @@ it('packs ended history into shared tracks and links list hover without coupling
         31,
       ),
     },
+    attachTo: document.body,
+    global: { stubs: { Teleport: true } },
   });
   try {
     await flushPromises();
+    const height = w.get('.packed-timeline').attributes('style');
     expect(w.findAll('.timeline-lane')).toHaveLength(1);
     expect(w.findAll('.timeline-packed-item')).toHaveLength(12);
-    const list = w.get<HTMLElement>('.timeline-entry-list');
-    const plot = w.get<HTMLElement>('.timeline-viewport');
-    list.element.scrollTop = 336;
-    await list.trigger('scroll');
-    expect(plot.element.scrollTop).toBe(0);
-    await w
-      .get('.timeline-packed-item[data-entry-id="0"]')
-      .trigger('pointerenter');
-    expect(list.element.scrollTop).toBe(0);
     expect(
-      w.get('.timeline-list-entry[data-entry-id="0"]').classes(),
-    ).toContain('is-highlighted');
-    await w.get('.timeline-packed-item[data-entry-id="11"]').trigger('focusin');
-    expect(list.element.scrollTop).toBe(504);
+      w
+        .findAll('.timeline-entry-list .timeline-list-entry')
+        .map((item) => item.attributes('data-entry-id')),
+    ).toEqual(['0', '1']);
+    const more = w.get('.timeline-lane-more');
+    expect(more.text()).toBe('+10');
+    await more.trigger('click');
+    await flushPromises();
+    expect(more.attributes('aria-expanded')).toBe('true');
     expect(
-      w.get('.timeline-list-entry[data-entry-id="11"]').classes(),
-    ).toContain('is-highlighted');
+      w.findAll('.timeline-lane-popover .timeline-list-entry'),
+    ).toHaveLength(12);
     await w
-      .get('.timeline-list-entry[data-entry-id="11"]')
+      .get('.timeline-lane-popover .timeline-list-entry[data-entry-id="11"]')
       .trigger('pointerenter');
     expect(
       w.get('.timeline-packed-item[data-entry-id="11"]').classes(),
     ).toContain('is-highlighted');
+    expect(w.get('.packed-timeline').attributes('style')).toBe(height);
+    await w.get('[aria-label="关闭轨道事项"]').trigger('click');
+    expect(document.activeElement).toBe(more.element);
+    await more.trigger('click');
+    await flushPromises();
     await w
-      .get('.timeline-packed-item[data-entry-id="11"] .gantt-bar')
+      .get(
+        '.timeline-lane-popover .timeline-list-entry[data-entry-id="11"] button',
+      )
       .trigger('click');
     expect(w.emitted('view')?.at(-1)?.[0]).toMatchObject({ id: '11' });
-    expect(w.emitted('finish')).toBeUndefined();
+    expect(w.find('.timeline-lane-popover').exists()).toBe(false);
   } finally {
     w.unmount();
-    if (width)
-      Object.defineProperty(HTMLElement.prototype, 'clientWidth', width);
-    else Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth');
     resetRecordView();
   }
 });
 
-it('brings the corresponding packed track into view from the independently scrolled list', async () => {
+it('synchronizes virtualized track scrolling and clamps both sides after filtering', async () => {
   resetRecordView();
   const entries = Array.from({ length: 20 }, (_, i) =>
     entry(String(i).padStart(2, '0'), '2026-10-01', null),
@@ -112,28 +141,25 @@ it('brings the corresponding packed track into view from the independently scrol
   try {
     await flushPromises();
     const list = w.get<HTMLElement>('.timeline-entry-list');
-    list.element.scrollTop = 15 * 56;
+    const plot = w.get<HTMLElement>('.timeline-viewport');
+    list.element.scrollTop = 19 * 56;
     await list.trigger('scroll');
-    await w
-      .get('.timeline-list-entry[data-entry-id="19"]')
-      .trigger('pointerenter');
-    expect(w.get<HTMLElement>('.timeline-viewport').element.scrollTop).toBe(
-      20 * 56 - 336,
-    );
-    expect(
-      w.get('.timeline-packed-item[data-entry-id="19"]').classes(),
-    ).toContain('is-highlighted');
+    expect(plot.element.scrollTop).toBe(20 * 56 - 336);
+    expect(list.element.scrollTop).toBe(plot.element.scrollTop);
+    plot.element.scrollTop = 168;
+    await plot.trigger('scroll');
+    expect(list.element.scrollTop).toBe(168);
     await w.setProps({ entries: entries.slice(0, 1) });
     await flushPromises();
     expect(list.element.scrollTop).toBe(0);
-    expect(w.get<HTMLElement>('.timeline-viewport').element.scrollTop).toBe(0);
+    expect(plot.element.scrollTop).toBe(0);
   } finally {
     w.unmount();
     resetRecordView();
   }
 });
 
-it('restores list and plot positions separately, clamps stale positions and clears them on identity reset', async () => {
+it('restores a single vertical position for both columns and resets stale positions', async () => {
   resetRecordView();
   recordView.timelineTop = 168;
   recordView.timelineListTop = 336;
@@ -143,19 +169,13 @@ it('restores list and plot positions separately, clamps stale positions and clea
   const w = mount(TimelineView, {
     props: { entries, focusDays: [], today, scale: 'month', anchor: today },
   });
-  try {
-    await flushPromises();
-    expect(w.get<HTMLElement>('.timeline-viewport').element.scrollTop).toBe(
-      168,
-    );
-    expect(w.get<HTMLElement>('.timeline-entry-list').element.scrollTop).toBe(
-      336,
-    );
-  } finally {
-    w.unmount();
-  }
-  expect(recordView.timelineTop).toBe(168);
-  expect(recordView.timelineListTop).toBe(336);
+  await flushPromises();
+  expect(w.get<HTMLElement>('.timeline-viewport').element.scrollTop).toBe(168);
+  expect(w.get<HTMLElement>('.timeline-entry-list').element.scrollTop).toBe(
+    168,
+  );
+  w.unmount();
+  expect(recordView.timelineListTop).toBe(168);
   const short = mount(TimelineView, {
     props: {
       entries: entries.slice(0, 1),
@@ -167,18 +187,118 @@ it('restores list and plot positions separately, clamps stale positions and clea
   });
   try {
     await flushPromises();
-    expect(short.get<HTMLElement>('.timeline-viewport').element.scrollTop).toBe(
-      0,
-    );
     expect(
       short.get<HTMLElement>('.timeline-entry-list').element.scrollTop,
     ).toBe(0);
+    expect(short.get<HTMLElement>('.timeline-viewport').element.scrollTop).toBe(
+      0,
+    );
   } finally {
     short.unmount();
     resetRecordView();
   }
-  expect(recordView.timelineTop).toBe(0);
-  expect(recordView.timelineListTop).toBe(0);
+});
+
+it('keeps viewport height and existing tracks during zoom, then preserves the visible track anchor', async () => {
+  vi.useFakeTimers();
+  resetRecordView();
+  const entries = [
+    entry('recent', '2026-10-01', null),
+    ...Array.from({ length: 10 }, (_, i) =>
+      entry(`old-${i}`, '2026-05-01', '2026-05-02'),
+    ),
+  ];
+  const month = timelineCanvasWindow(entries, today, 'month');
+  const w = mount(TimelineView, {
+    props: {
+      entries,
+      focusDays: [],
+      today,
+      scale: 'month',
+      anchor: today,
+      range: month,
+    },
+  });
+  try {
+    await flushPromises();
+    const height = w.get('.packed-timeline').attributes('style');
+    const firstTrack = w
+      .get('.timeline-list-lane')
+      .get('.timeline-list-entry')
+      .attributes('data-entry-id');
+    w.get('.timeline-viewport').element.dispatchEvent(
+      new WheelEvent('wheel', { deltaY: 100, clientX: 40, cancelable: true }),
+    );
+    await w.setProps({ range: timelineCanvasWindow(entries, today, 'year') });
+    expect(w.findAll('.timeline-lane')).toHaveLength(1);
+    expect(
+      w
+        .get('.timeline-list-lane')
+        .get('.timeline-list-entry')
+        .attributes('data-entry-id'),
+    ).toBe(firstTrack);
+    await vi.advanceTimersByTimeAsync(200);
+    await flushPromises();
+    expect(w.findAll('.timeline-lane')).toHaveLength(9);
+    expect(w.get('.packed-timeline').attributes('style')).toBe(height);
+    await w.setProps({
+      range: {
+        ...month,
+        start: dateOrdinal('2027-01-01'),
+        endExclusive: dateOrdinal('2027-02-01'),
+      },
+    });
+    await flushPromises();
+    expect(w.findAll('.timeline-lane')).toHaveLength(0);
+    expect(w.get('.packed-timeline').attributes('style')).toBe(height);
+  } finally {
+    w.unmount();
+    resetRecordView();
+    vi.useRealTimers();
+  }
+});
+
+it('preserves the top visible track when zoom reveals earlier tracks above it', async () => {
+  resetRecordView();
+  const entries = [
+    ...Array.from({ length: 10 }, (_, i) =>
+      entry(`recent-${i}`, `2026-10-${String(i + 1).padStart(2, '0')}`, null),
+    ),
+    ...Array.from({ length: 8 }, (_, i) =>
+      entry(`old-${i}`, '2026-05-01', '2026-05-10'),
+    ),
+  ];
+  const w = mount(TimelineView, {
+    props: {
+      entries,
+      focusDays: [],
+      today,
+      scale: 'month',
+      anchor: today,
+      sort: 'asc',
+      range: timelineCanvasWindow(entries, today, 'month'),
+    },
+  });
+  try {
+    await flushPromises();
+    const plot = w.get<HTMLElement>('.timeline-viewport');
+    plot.element.scrollTop = 168;
+    await plot.trigger('scroll');
+    await w.setProps({ range: timelineCanvasWindow(entries, today, 'year') });
+    await flushPromises();
+    expect(plot.element.scrollTop).toBe(11 * 56);
+    expect(w.get<HTMLElement>('.timeline-entry-list').element.scrollTop).toBe(
+      11 * 56,
+    );
+    expect(
+      w
+        .get('.timeline-list-lane[data-lane="11"] [data-entry-id]')
+        .attributes('data-entry-id'),
+    ).toBe('recent-3');
+  } finally {
+    w.unmount();
+    resetRecordView();
+  }
 });
 
 it('shows a compact read-only date range and metrics with an explicit edit action only when allowed', async () => {

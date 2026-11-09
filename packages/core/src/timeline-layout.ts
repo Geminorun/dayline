@@ -1,5 +1,5 @@
 import { MinPriorityQueue } from '@datastructures-js/priority-queue';
-import { entryStatus } from './index.js';
+import { dateOrdinal, entryStatus } from './index.js';
 import { timelineBar } from './views.js';
 import type { TimelineFocusGroup, TimelineWindow, ViewEntry } from './views.js';
 
@@ -56,6 +56,16 @@ export function packTimelineLanes<T extends ViewEntry>(
       groups: marks,
     });
   }
+  return partitionIntervals(placements, today, previous);
+}
+
+function partitionIntervals<
+  T extends { entry: ViewEntry; lane: number; left: number; right: number },
+>(
+  placements: T[],
+  today: string,
+  previous: ReadonlyMap<string, number>,
+): T[][] {
   placements.sort(
     (a, b) =>
       a.left - b.left ||
@@ -70,7 +80,7 @@ export function packTimelineLanes<T extends ViewEntry>(
   const free = new MinPriorityQueue<number>();
   const available = new Set<number>();
   const ongoingLanes = new Set<number>();
-  const lanes: TimelinePlacement<T>[][] = [];
+  const lanes: T[][] = [];
   for (const placement of placements) {
     // End dates are inclusive in timelineBar; touching pixel edges may share a lane.
     // Subpixel arithmetic can put mathematically touching edges a few ulps apart.
@@ -104,4 +114,77 @@ export function packTimelineLanes<T extends ViewEntry>(
     active.enqueue({ right: placement.right, lane });
   }
   return lanes;
+}
+
+/** Camera-independent membership: ongoing entries own a track; history reuses dates. */
+export function timelineEntryLanes<T extends ViewEntry>(
+  entries: readonly T[],
+  today: string,
+): T[][] {
+  const intervals = entries
+    .filter((entry) => !entry.deletedAt)
+    .map((entry) => ({
+      entry,
+      lane: 0,
+      left: dateOrdinal(entry.startDate),
+      right:
+        Math.max(
+          dateOrdinal(entry.startDate),
+          dateOrdinal(entry.endDate ?? today),
+        ) + 1,
+    }));
+  const ongoing = intervals
+    .filter(({ entry }) => entryStatus(entry, today) === 'ongoing')
+    .sort((a, b) => a.left - b.left || a.entry.id.localeCompare(b.entry.id))
+    .map(({ entry }) => [entry]);
+  const history = partitionIntervals(
+    intervals.filter(({ entry }) => entryStatus(entry, today) === 'ended'),
+    today,
+    new Map(),
+  ).map((lane) => lane.map(({ entry }) => entry));
+  return [...ongoing, ...history];
+}
+
+/** Project stable tracks without expanding short spans into neighboring entries. */
+export function projectTimelineLanes<T extends ViewEntry>(
+  lanes: readonly (readonly T[])[],
+  today: string,
+  window: TimelineWindow,
+  groups: readonly TimelineFocusGroup[] = [],
+): TimelinePlacement<T>[][] {
+  const byEntry = new Map<string, TimelineFocusGroup[]>();
+  for (const group of groups) {
+    const marks = byEntry.get(group.entryId) ?? [];
+    marks.push(group);
+    byEntry.set(group.entryId, marks);
+  }
+  return lanes.map((entries, lane) =>
+    entries.flatMap((entry) => {
+      const bar = timelineBar(entry, today, window);
+      if (!bar) return [];
+      const end =
+        Math.max(
+          dateOrdinal(entry.startDate),
+          dateOrdinal(entry.endDate ?? today),
+        ) + 1;
+      const right = Math.min(
+        window.width,
+        (Math.min(end, window.endExclusive) - window.start) *
+          window.pixelsPerDay,
+      );
+      const projectedBar = { ...bar, width: Math.max(0, right - bar.left) };
+      return [
+        {
+          entry,
+          lane,
+          left: bar.left,
+          right,
+          bar: projectedBar,
+          hitLeft: bar.left,
+          hitWidth: projectedBar.width,
+          groups: byEntry.get(entry.id) ?? [],
+        },
+      ];
+    }),
+  );
 }

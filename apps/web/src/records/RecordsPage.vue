@@ -793,7 +793,7 @@ const recent = computed(
           <TimelineView
             v-if="isCalendarDate(anchor)"
             ref="timeline"
-            :entries="visible"
+            :entries="filtered"
             :range="range"
             :focus-days="snapshot.focusDays"
             :categories="snapshot.categories"
@@ -807,14 +807,13 @@ const recent = computed(
             @camera="updateCamera"
             @finish="finishEntry"
             @day="(date) => router.push({ path: '/day', query: { date } })"
-          />
-          <div v-if="!visible.length" class="timeline-empty">
-            {{
+          >
+            <template #empty>{{
               hasFilter
                 ? tr('records.thereAreNoMatchingRecordsHereTry')
                 : tr('records.theTimelineIsStillEmptyLetS')
-            }}
-          </div>
+            }}</template>
+          </TimelineView>
           <footer class="timeline-footer">
             <span
               ><i></i

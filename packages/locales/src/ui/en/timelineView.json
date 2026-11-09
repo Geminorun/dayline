@@ -11,5 +11,8 @@
   "timelineView.focusDays2": "{value0} focus days",
   "timelineView.focusDatesDays": "focus dates · {value0} days",
   "timelineView.theDateContainedInTheCurrentMark": "Select a focus date to open its daily review.",
-  "timelineView.review": "Review {value0}"
+  "timelineView.review": "Review {value0}",
+  "timelineView.moreEntries": "Show {count} more entries on this track",
+  "timelineView.trackEntries": "Track entries · {count}",
+  "timelineView.closeTrackEntries": "Close track entries"
 }

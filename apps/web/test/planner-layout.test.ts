@@ -131,7 +131,7 @@ it('connects the reference calendar, modal editor, daily focus, categories and t
     .setValue('不存在的筛选词');
   await flushPromises();
   await vi.waitFor(() =>
-    expect(wrapper?.get('.timeline-empty').text()).toContain(
+    expect(wrapper?.get('.timeline-empty-overlay').text()).toContain(
       '还没有匹配的记录',
     ),
   );

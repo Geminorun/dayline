@@ -4,6 +4,8 @@ import {
   ordinalDate,
   packTimelineLanes,
   timelineCanvasWindow,
+  timelineEntryLanes,
+  projectTimelineLanes,
 } from '../src/index.js';
 import type { ViewEntry } from '../src/index.js';
 
@@ -24,6 +26,63 @@ const range = {
   todayX: null,
   focusUnit: 'day' as const,
 };
+
+it('keeps date tracks unchanged across zoom widths, clipping and focus hit sizes', () => {
+  const entries = Array.from({ length: 100 }, (_, i) =>
+    entry(
+      String(i),
+      ordinalDate(range.start + i),
+      ordinalDate(range.start + i),
+    ),
+  );
+  const lanes = timelineEntryLanes(entries, '2027-12-31');
+  expect(lanes).toHaveLength(1);
+  expect(lanes[0]).toHaveLength(100);
+  for (const width of [80, 240, 930]) {
+    const window = {
+      ...range,
+      endExclusive: range.start + 366,
+      width,
+      pixelsPerDay: width / 366,
+    };
+    const projected = projectTimelineLanes(lanes, '2027-12-31', window, [
+      { entryId: '0', key: 'focus', left: 0, dates: ['2026-10-01'] },
+    ]);
+    expect(projected).toHaveLength(1);
+    expect(projected.flat()).toHaveLength(100);
+    for (let i = 1; i < (projected[0]?.length ?? 0); i++)
+      expect(projected[0]?.[i - 1]?.right ?? 0).toBeLessThanOrEqual(
+        (projected[0]?.[i]?.left ?? 0) + 1e-7,
+      );
+    expect(timelineEntryLanes([...entries].reverse(), '2027-12-31')).toEqual(
+      lanes,
+    );
+  }
+});
+
+it('reserves whole date tracks for ongoing entries and only packs ended history together', () => {
+  const lanes = timelineEntryLanes(
+    [
+      entry('ongoing', '2026-10-20', null),
+      entry('planned', '2026-11-01', '2026-11-02'),
+      entry('history-a', '2026-10-01', '2026-10-03'),
+      entry('history-b', '2026-10-04', '2026-10-05'),
+      { ...entry('deleted', '2026-10-01', null), deletedAt: today },
+    ],
+    today,
+  );
+  expect(lanes.map((lane) => lane.map((item) => item.id))).toEqual([
+    ['ongoing'],
+    ['planned'],
+    ['history-a', 'history-b'],
+  ]);
+  const projected = projectTimelineLanes(lanes, today, range);
+  expect(projected.map((lane) => lane.map((item) => item.entry.id))).toEqual([
+    ['ongoing'],
+    [],
+    ['history-a', 'history-b'],
+  ]);
+});
 
 it('reuses tracks after inclusive end dates, but keeps same-day overlaps apart', () => {
   const result = packTimelineLanes(

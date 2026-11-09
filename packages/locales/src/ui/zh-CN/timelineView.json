@@ -11,5 +11,8 @@
   "timelineView.focusDays2": "{value0} 个重点日",
   "timelineView.focusDatesDays": "重点日期 · {value0} 天",
   "timelineView.theDateContainedInTheCurrentMark": "当前标记包含的日期，点击进入每日回看。",
-  "timelineView.review": "回看 {value0}"
+  "timelineView.review": "回看 {value0}",
+  "timelineView.moreEntries": "查看本轨道其余 {count} 个事项",
+  "timelineView.trackEntries": "本轨道事项 · {count}",
+  "timelineView.closeTrackEntries": "关闭轨道事项"
 }

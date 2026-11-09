@@ -11,13 +11,13 @@ import {
   useId,
 } from 'vue';
 import {
-  packTimelineLanes,
+  timelineEntryLanes,
+  projectTimelineLanes,
   timelineFocusGroups,
   validFocusDays,
   timelineCanvasWindow,
   TIMELINE_RECENT_POSITION,
   visibleRows,
-  durationDays,
   entryStatus,
   ordinalDate,
   dateOrdinal,
@@ -26,6 +26,7 @@ import { recordView } from './view-state';
 import { focusHeatLevel } from './focus-heat';
 import IconButton from '../components/IconButton.vue';
 import PlannerIcon from '../components/PlannerIcon.vue';
+import TimelineEntryLabel from './TimelineEntryLabel.vue';
 import type {
   TimelineCanvasWindow,
   TimelineScale,
@@ -56,10 +57,11 @@ const viewport = ref<HTMLElement | null>(null),
   scrollTop = ref(0),
   selection = ref<string | null>(null);
 const listViewport = ref<HTMLElement | null>(null);
-const listScrollTop = ref(0);
 const highlighted = ref<string | null>(null);
-const laneHeight = 56,
-  listRowHeight = 56;
+const laneHeight = 56;
+const bodyHeight = ref(336);
+const navigating = ref(false);
+const navigationTracks = ref<string[]>([]);
 const panelId = useId();
 const focusPanel = ref<HTMLElement | null>(null);
 const focusOpen = ref(false);
@@ -108,6 +110,24 @@ function measure() {
   const el = viewport.value;
   if (!el) return;
   plotWidth.value = Math.max(80, el.clientWidth);
+  bodyHeight.value = Math.max(
+    168,
+    Math.min(
+      336,
+      Math.floor((globalThis.innerHeight * 0.45) / laneHeight) * laneHeight,
+    ),
+  );
+}
+function beginNavigation() {
+  if (!navigating.value)
+    navigationTracks.value = tracks.value.map((track) => track.key);
+  navigating.value = true;
+  clearTimeout(wheelTimer);
+}
+function finishNavigation() {
+  clearTimeout(wheelTimer);
+  wheelDelta = 0;
+  navigating.value = false;
 }
 function camera(start: number, days: number) {
   emit('camera', { day: start + days * TIMELINE_RECENT_POSITION, days });
@@ -146,11 +166,9 @@ function wheel(event: WheelEvent) {
   );
   wheelDelta = 0;
   if (Math.abs(days - nextDays) < 0.001) return;
+  beginNavigation();
   camera(current.start + ratio * (days - nextDays), nextDays);
-  clearTimeout(wheelTimer);
-  wheelTimer = setTimeout(() => {
-    wheelDelta = 0;
-  }, 150);
+  wheelTimer = setTimeout(finishNavigation, 180);
 }
 function pointerDown(event: PointerEvent) {
   suppressClick = false;
@@ -174,6 +192,7 @@ function pointerMove(event: PointerEvent) {
   if (!drag || event.pointerId !== drag.pointer) return;
   const delta = event.clientX - drag.x;
   if (!drag.moved && Math.abs(delta) < 4) return;
+  beginNavigation();
   drag.moved = true;
   dragging.value = true;
   camera(drag.start - (delta / plotWidth.value) * drag.days, drag.days);
@@ -186,6 +205,7 @@ function pointerEnd(event: PointerEvent) {
     viewport.value.releasePointerCapture(event.pointerId);
   drag = null;
   dragging.value = false;
+  finishNavigation();
 }
 function click(event: MouseEvent) {
   if (suppressClick) {
@@ -246,31 +266,43 @@ const groups = computed(() =>
     { minimumDistance: 28, position: 'dates-center' },
   ),
 );
-let previousLanes: ReadonlyMap<string, number> = new Map();
-const lanes = computed(() =>
-  packTimelineLanes(
-    props.entries,
+const entryLanes = computed(() =>
+  timelineEntryLanes(props.entries, props.today).sort((a, b) => {
+    const first = props.sort === 'asc' ? a[0] : a.at(-1);
+    const second = props.sort === 'asc' ? b[0] : b.at(-1);
+    return (
+      (props.sort === 'asc' ? 1 : -1) *
+        (first?.startDate ?? '').localeCompare(second?.startDate ?? '') ||
+      (first?.id ?? '').localeCompare(second?.id ?? '')
+    );
+  }),
+);
+const projected = computed(() =>
+  projectTimelineLanes(
+    entryLanes.value,
     props.today,
     window.value,
     groups.value,
-    previousLanes,
   ),
 );
-watch(
-  lanes,
-  (value) => {
-    previousLanes = new Map(
-      value.flatMap((lane) => lane.map((p) => [p.entry.id, p.lane])),
-    );
-  },
-  { immediate: true },
+const visibleEntryCount = computed(() =>
+  projected.value.reduce((count, lane) => count + lane.length, 0),
 );
-const bodyHeight = computed(() =>
-  Math.min(336, Math.max(168, lanes.value.length * laneHeight)),
-);
+const tracks = computed(() => {
+  const all = entryLanes.value.map((entries, index) => ({
+    key: entries[0]?.id ?? String(index),
+    items: projected.value[index] ?? [],
+  }));
+  if (!navigating.value) return all.filter((track) => track.items.length);
+  const byKey = new Map(all.map((track) => [track.key, track]));
+  return navigationTracks.value.flatMap((key) => {
+    const track = byKey.get(key);
+    return track ? [track] : [];
+  });
+});
 const rows = computed(() =>
   visibleRows(
-    lanes.value.length,
+    tracks.value.length,
     scrollTop.value,
     bodyHeight.value,
     laneHeight,
@@ -278,48 +310,61 @@ const rows = computed(() =>
   ),
 );
 const visibleLanes = computed(() =>
-  lanes.value.slice(rows.value.start, rows.value.end),
+  tracks.value.slice(rows.value.start, rows.value.end),
 );
-const listRows = computed(() =>
-  visibleRows(
-    props.entries.length,
-    listScrollTop.value,
-    bodyHeight.value,
-    listRowHeight,
-    3,
-  ),
-);
-const visibleEntries = computed(() =>
-  props.entries.slice(listRows.value.start, listRows.value.end),
-);
-const placementsById = computed(
-  () =>
-    new Map(lanes.value.flatMap((lane) => lane.map((p) => [p.entry.id, p]))),
-);
-const listIndices = computed(
-  () => new Map(props.entries.map((entry, index) => [entry.id, index])),
-);
-function highlight(id: string, source: 'list' | 'plot') {
+function highlight(id: string) {
   highlighted.value = id;
-  const el = source === 'list' ? viewport.value : listViewport.value;
-  const index =
-    source === 'list'
-      ? placementsById.value.get(id)?.lane
-      : listIndices.value.get(id);
-  if (!el || index === undefined) return;
-  const height = source === 'list' ? laneHeight : listRowHeight;
-  const top = index * height;
-  const current = source === 'list' ? scrollTop.value : listScrollTop.value;
-  const next =
-    top < current
-      ? top
-      : top + height > current + bodyHeight.value
-        ? top + height - bodyHeight.value
-        : current;
-  if (next === current) return;
-  el.scrollTop = next;
-  if (source === 'list') scrollTop.value = next;
-  else listScrollTop.value = next;
+}
+const lanePanelId = panelId + '-lane';
+const lanePanel = ref<HTMLElement | null>(null);
+const expandedLane = ref<string | null>(null);
+const lanePosition = ref({ left: '0px', top: '0px' });
+const expandedItems = computed(
+  () =>
+    tracks.value.find((track) => track.key === expandedLane.value)?.items ?? [],
+);
+let laneTrigger: HTMLButtonElement | null = null;
+async function openLane(key: string, event: MouseEvent) {
+  if (!(event.currentTarget instanceof HTMLButtonElement)) return;
+  closeFocus();
+  laneTrigger = event.currentTarget;
+  expandedLane.value = key;
+  const rect = laneTrigger.getBoundingClientRect();
+  lanePosition.value = panelPosition(
+    rect,
+    Math.min(320, globalThis.innerWidth - 24),
+    300,
+  );
+  await nextTick();
+  if (expandedLane.value !== key || !laneTrigger.isConnected) return;
+  lanePanel.value?.showPopover?.();
+  lanePosition.value = panelPosition(
+    rect,
+    Math.min(320, globalThis.innerWidth - 24),
+    lanePanel.value?.getBoundingClientRect().height || 300,
+  );
+  lanePanel.value
+    ?.querySelector<HTMLButtonElement>('.timeline-list-entry button')
+    ?.focus({ preventScroll: true });
+}
+function closeLane(returnFocus = false) {
+  lanePanel.value?.hidePopover?.();
+  expandedLane.value = null;
+  if (returnFocus && laneTrigger?.isConnected)
+    laneTrigger.focus({ preventScroll: true });
+}
+function laneToggle(event: Event) {
+  if (
+    event.currentTarget instanceof HTMLElement &&
+    event.currentTarget === lanePanel.value &&
+    typeof event.currentTarget.showPopover === 'function' &&
+    !event.currentTarget.matches(':popover-open')
+  )
+    expandedLane.value = null;
+}
+function viewFromLane(entry: EntryDto) {
+  closeLane();
+  emit('view', entry);
 }
 const focusTotals = computed(() => {
   const counts = new Map<string, number>();
@@ -351,6 +396,7 @@ function focusLabel(group: TimelineFocusGroup) {
 async function openFocus(group: TimelineFocusGroup, event: MouseEvent) {
   if (!(event.currentTarget instanceof HTMLButtonElement)) return;
   hideTip();
+  closeLane();
   focusTrigger = event.currentTarget;
   selection.value = group.key;
   detailOffset.value = 0;
@@ -451,12 +497,20 @@ watch(
     () => window.value.width,
     () => scrollTop.value,
   ],
-  () => closeFocus(),
+  () => {
+    closeFocus();
+    closeLane();
+  },
 );
 watch(
   () =>
-    lanes.value.map((lane) => lane.map((p) => p.entry.id).join('|')).join(';'),
-  () => closeFocus(),
+    tracks.value
+      .map((track) => track.items.map((p) => p.entry.id).join('|'))
+      .join(';'),
+  () => {
+    closeFocus();
+    closeLane();
+  },
 );
 watch(
   () => details.value?.dates.join('|'),
@@ -487,9 +541,33 @@ function barStyle(placement: TimelinePlacement<EntryDto>) {
     borderColor: color(entry),
   };
 }
+function markerStyle(
+  group: TimelineFocusGroup,
+  placement: TimelinePlacement<EntryDto>,
+) {
+  const width = Math.min(28, placement.hitWidth);
+  const left = Math.max(
+    placement.left + width / 2,
+    Math.min(group.left, placement.right - width / 2),
+  );
+  return {
+    left: left - placement.left + 'px',
+    width: width + 'px',
+    '--focus-cell-width': Math.min(10, width) + 'px',
+  };
+}
+function setScrollTop(value: number) {
+  const top = Math.max(
+    0,
+    Math.min(value, tracks.value.length * laneHeight - bodyHeight.value),
+  );
+  scrollTop.value = top;
+  for (const el of [viewport.value, listViewport.value]) {
+    if (el && el.scrollTop !== top) el.scrollTop = top;
+  }
+}
 function scroll(event: Event) {
-  if (event.target instanceof HTMLElement)
-    scrollTop.value = event.target.scrollTop;
+  if (event.target instanceof HTMLElement) setScrollTop(event.target.scrollTop);
 }
 function locateToday() {
   const el = viewport.value;
@@ -503,29 +581,25 @@ function locateToday() {
     );
 }
 watch(
-  [() => lanes.value.length, () => props.entries.length, bodyHeight],
-  async () => {
-    const top = Math.max(
+  () => tracks.value.map((track) => track.key),
+  async (keys, previous) => {
+    const previousIndex = Math.floor(scrollTop.value / laneHeight);
+    const nextKeys = new Set(keys);
+    const anchor = previous
+      ?.slice(previousIndex)
+      .find((key) => nextKeys.has(key));
+    const top = anchor
+      ? keys.indexOf(anchor) * laneHeight + (scrollTop.value % laneHeight)
+      : scrollTop.value;
+    scrollTop.value = Math.max(
       0,
-      Math.min(
-        scrollTop.value,
-        lanes.value.length * laneHeight - bodyHeight.value,
-      ),
+      Math.min(top, tracks.value.length * laneHeight - bodyHeight.value),
     );
-    const listTop = Math.max(
-      0,
-      Math.min(
-        listScrollTop.value,
-        props.entries.length * listRowHeight - bodyHeight.value,
-      ),
-    );
-    scrollTop.value = top;
-    listScrollTop.value = listTop;
     await nextTick();
-    if (viewport.value) viewport.value.scrollTop = top;
-    if (listViewport.value) listViewport.value.scrollTop = listTop;
+    setScrollTop(scrollTop.value);
   },
 );
+watch(bodyHeight, () => setScrollTop(scrollTop.value));
 onMounted(() => {
   measure();
   if (typeof ResizeObserver !== 'undefined' && viewport.value) {
@@ -533,44 +607,37 @@ onMounted(() => {
     observer.observe(viewport.value);
   }
   viewport.value?.addEventListener('wheel', wheel, { passive: false });
+  globalThis.addEventListener('resize', measure);
   globalThis.addEventListener('resize', dismissFocus);
   globalThis.addEventListener('keydown', dismissTipKey);
   globalThis.addEventListener('scroll', dismissFocus, true);
-  if (viewport.value) {
-    const top = Math.max(
-      0,
-      Math.min(
-        recordView.timelineTop,
-        lanes.value.length * laneHeight - bodyHeight.value,
-      ),
-    );
-    viewport.value.scrollTop = top;
-    scrollTop.value = top;
-  }
-  if (listViewport.value) {
-    const top = Math.max(
-      0,
-      Math.min(
-        recordView.timelineListTop,
-        props.entries.length * listRowHeight - bodyHeight.value,
-      ),
-    );
-    listViewport.value.scrollTop = top;
-    listScrollTop.value = top;
-  }
+  setScrollTop(recordView.timelineTop);
 });
 function dismissFocus(event: Event) {
-  // Scrolling the independent list does not move a marker's plot anchor.
-  if (event.type === 'scroll' && event.target === listViewport.value) return;
+  if (
+    event.type === 'scroll' &&
+    (event.target === listViewport.value || event.target === viewport.value)
+  )
+    return;
+  if (
+    !(event.target instanceof Node) ||
+    !lanePanel.value?.contains(event.target)
+  )
+    closeLane();
   if (event.target instanceof Node && focusPanel.value?.contains(event.target))
     return;
   closeFocus();
 }
 function dismissTipKey(event: KeyboardEvent) {
-  if (event.key === 'Escape') hideTip();
+  if (event.key === 'Escape') {
+    hideTip();
+    closeLane(true);
+  }
 }
 onBeforeUnmount(() => {
   hideTip();
+  closeLane();
+  globalThis.removeEventListener('resize', measure);
   globalThis.removeEventListener('resize', dismissFocus);
   globalThis.removeEventListener('keydown', dismissTipKey);
   globalThis.removeEventListener('scroll', dismissFocus, true);
@@ -594,7 +661,7 @@ defineExpose({ locateToday });
     >
       <div class="gantt-heading-label">
         <strong
-          >{{ tr('common.entry') }}<span>{{ entries.length }}</span></strong
+          >{{ tr('common.entry') }}<span>{{ visibleEntryCount }}</span></strong
         >
         <small>{{
           tr('timelineView.currentScopeByStartDate', {
@@ -610,60 +677,54 @@ defineExpose({ locateToday });
         class="timeline-entry-list"
         tabindex="0"
         :aria-label="tr('common.scrollThroughEntryList')"
-        @scroll="listScrollTop = listViewport?.scrollTop ?? 0"
+        @scroll="scroll"
       >
-        <div :style="{ height: listRows.before + 'px' }"></div>
+        <div :style="{ height: rows.before + 'px' }"></div>
         <div
-          v-for="entry in visibleEntries"
-          :key="entry.id"
-          class="gantt-row-label timeline-list-entry"
-          :class="{ 'is-highlighted': highlighted === entry.id }"
-          :data-entry-id="entry.id"
-          :style="{ '--category-color': color(entry) }"
-          @pointerenter="highlight(entry.id, 'list')"
-          @focusin="highlight(entry.id, 'list')"
+          v-for="(track, index) in visibleLanes"
+          :key="track.key"
+          class="timeline-list-lane"
+          :class="{
+            'is-highlighted': track.items.some(
+              (item) => item.entry.id === highlighted,
+            ),
+            'has-many': track.items.length > 2,
+          }"
+          :data-lane="rows.start + index"
         >
-          <div class="gantt-row-title">
-            <i class="category-dot"></i>
-            <button :title="entry.title" @click="emit('view', entry)">
-              {{ entry.title }}
-            </button>
-            <button
-              v-if="
-                !readonly &&
-                entry.startDate <= today &&
-                entryStatus(entry, today) === 'ongoing'
-              "
-              class="gantt-finish icon-btn"
-              :disabled="busy"
-              :aria-label="tr('timelineView.end', { value0: entry.title })"
-              :title="tr('common.endsToday')"
-              @click="emit('finish', entry)"
-            >
-              <PlannerIcon name="check" />
-            </button>
-          </div>
-          <div class="gantt-row-meta">
-            <span class="event-status">{{
-              entryStatus(entry, today) === 'ongoing'
-                ? tr('common.ongoing')
-                : tr('common.ended')
-            }}</span>
-            <span>{{
-              tr('data.days', { value0: durationDays(entry, today) })
-            }}</span>
-            <span
-              class="gantt-focus-total"
-              :class="{ 'has-focus': focusTotals.get(entry.id) }"
-              >{{
-                tr('timelineView.cumulativeFocusDays', {
-                  value0: focusTotals.get(entry.id) ?? 0,
-                })
-              }}</span
-            >
-          </div>
+          <TimelineEntryLabel
+            v-for="placement in track.items.slice(0, 2)"
+            :key="placement.entry.id"
+            :entry="placement.entry"
+            :today="today"
+            :color="color(placement.entry)"
+            :focus-total="focusTotals.get(placement.entry.id) ?? 0"
+            :compact="track.items.length > 1"
+            :highlighted="highlighted === placement.entry.id"
+            :readonly="readonly"
+            :busy="busy"
+            @highlight="highlight"
+            @view="emit('view', $event)"
+            @finish="emit('finish', $event)"
+          />
+          <button
+            v-if="track.items.length > 2"
+            type="button"
+            class="timeline-lane-more"
+            :aria-label="
+              tr('timelineView.moreEntries', { count: track.items.length - 2 })
+            "
+            :title="
+              tr('timelineView.moreEntries', { count: track.items.length - 2 })
+            "
+            :aria-controls="lanePanelId"
+            :aria-expanded="expandedLane === track.key"
+            @click="openLane(track.key, $event)"
+          >
+            +{{ track.items.length - 2 }}
+          </button>
         </div>
-        <div :style="{ height: listRows.after + 'px' }"></div>
+        <div :style="{ height: rows.after + 'px' }"></div>
       </div>
     </aside>
     <div
@@ -737,13 +798,13 @@ defineExpose({ locateToday });
           ></span>
           <div :style="{ height: rows.before + 'px' }"></div>
           <div
-            v-for="(lane, index) in visibleLanes"
-            :key="rows.start + index"
+            v-for="(track, index) in visibleLanes"
+            :key="track.key"
             class="timeline-row timeline-track timeline-lane"
             :data-lane="rows.start + index"
           >
             <div
-              v-for="placement in lane"
+              v-for="placement in track.items"
               :key="placement.entry.id"
               class="timeline-packed-item"
               :data-entry-id="placement.entry.id"
@@ -752,8 +813,8 @@ defineExpose({ locateToday });
                 left: placement.left + 'px',
                 width: placement.right - placement.left + 'px',
               }"
-              @pointerenter="highlight(placement.entry.id, 'plot')"
-              @focusin="highlight(placement.entry.id, 'plot')"
+              @pointerenter="highlight(placement.entry.id)"
+              @focusin="highlight(placement.entry.id)"
             >
               <button
                 class="timeline-bar gantt-bar"
@@ -795,7 +856,7 @@ defineExpose({ locateToday });
                 :key="group.key"
                 type="button"
                 class="focus-marker timeline-focus-marker"
-                :style="{ left: group.left - placement.left + 'px' }"
+                :style="markerStyle(group, placement)"
                 :aria-label="focusLabel(group)"
                 :aria-describedby="tipKey === group.key ? tipId : undefined"
                 :aria-controls="panelId"
@@ -819,8 +880,50 @@ defineExpose({ locateToday });
         </div>
       </div>
     </div>
+    <div v-if="!visibleEntryCount" class="timeline-empty-overlay">
+      <slot name="empty"></slot>
+    </div>
   </div>
   <Teleport to="body">
+    <div
+      v-if="expandedLane && expandedItems.length"
+      :id="lanePanelId"
+      ref="lanePanel"
+      popover="auto"
+      class="timeline-focus-popover timeline-lane-popover"
+      :style="lanePosition"
+      role="dialog"
+      :aria-labelledby="lanePanelId + '-heading'"
+      @toggle="laneToggle"
+      @keydown.esc="closeLane(true)"
+    >
+      <div class="focus-popover-heading">
+        <h2 :id="lanePanelId + '-heading'">
+          {{ tr('timelineView.trackEntries', { count: expandedItems.length }) }}
+        </h2>
+        <IconButton
+          icon="close"
+          :label="tr('timelineView.closeTrackEntries')"
+          @click="closeLane(true)"
+        />
+      </div>
+      <div class="timeline-lane-entry-list">
+        <TimelineEntryLabel
+          v-for="placement in expandedItems"
+          :key="placement.entry.id"
+          :entry="placement.entry"
+          :today="today"
+          :color="color(placement.entry)"
+          :focus-total="focusTotals.get(placement.entry.id) ?? 0"
+          :highlighted="highlighted === placement.entry.id"
+          :readonly="readonly"
+          :busy="busy"
+          @highlight="highlight"
+          @view="viewFromLane"
+          @finish="emit('finish', $event)"
+        />
+      </div>
+    </div>
     <div
       v-if="tipGroup"
       :id="tipId"
