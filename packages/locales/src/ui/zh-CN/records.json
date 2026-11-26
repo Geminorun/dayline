@@ -7,7 +7,7 @@
   "records.item": "{value0} 项",
   "records.itemsItemsFocus": "{value0}项，{value1}项重点",
   "records.everyExperienceHasItsOwnSpan": "每一段经历，都有自己的跨度",
-  "records.scrollEntryOnTheLeftZoomAnd": "左侧滚动事项 · 右侧缩放与拖动 · 点击事项查看",
+  "records.scrollEntryOnTheLeftZoomAnd": "左侧分类位置固定；右侧缩放与拖动，点击事项查看",
   "records.thereAreNoMatchingRecordsHereTry": "这里还没有匹配的记录，试试其他分类、状态或关键词。",
   "records.theTimelineIsStillEmptyLetS": "时间轴还空着，记录第一段经历吧。",
   "records.theUnfinishedEntryIsAutomaticallyExtendedTo": "未结束事项自动延伸到今天",

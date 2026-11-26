@@ -79,7 +79,10 @@ it('shows uniform contribution cells and opens only the selected exact dates', a
   });
   try {
     await flushPromises();
+    await w.get('.timeline-category-button').trigger('click');
+    await flushPromises();
     expect(w.get('.gantt-focus-total').text()).toBe('重点 4 天');
+    await w.get('[aria-label="关闭分类事项"]').trigger('click');
     expect(w.findAll('.timeline-focus-marker')).toHaveLength(2);
     const cluster = w
       .findAll('.timeline-focus-marker')

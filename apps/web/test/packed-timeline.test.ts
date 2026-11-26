@@ -4,7 +4,7 @@ import TimelineView from '../src/records/TimelineView.vue';
 import EntryDetails from '../src/records/EntryDetails.vue';
 import { recordView, resetRecordView } from '../src/records/view-state';
 import { dateOrdinal, timelineCanvasWindow } from '@dayline/core';
-import type { EntryDto } from '@dayline/contracts';
+import type { CategoryDto, EntryDto } from '@dayline/contracts';
 import { changeLanguage } from '../src/i18n';
 const laneHeight = 72;
 const today = '2026-10-29',
@@ -27,7 +27,103 @@ const entry = (
   updatedAt: now,
 });
 
-it('uses matching track cells for single entries regardless of input order', async () => {
+const category = (id: string, name: string): CategoryDto => ({
+  id,
+  name,
+  color: '#7195c2',
+  seedKey: null,
+  version: 1,
+  createdAt: now,
+  updatedAt: now,
+});
+
+it('keeps empty categories and overlapping subtracks in sidebar order across filters and camera changes', async () => {
+  resetRecordView();
+  const categories = [
+    category('reading', '阅读'),
+    category('games', '游戏'),
+    category('empty', '其他'),
+  ];
+  const entries = [
+    { ...entry('book', '2026-10-01', '2026-10-10'), categoryId: 'reading' },
+    { ...entry('game-a', '2026-10-01', null), categoryId: 'games' },
+    { ...entry('game-b', '2026-10-02', null), categoryId: 'games' },
+  ];
+  const range = timelineCanvasWindow(entries, today, 'month');
+  const w = mount(TimelineView, {
+    props: {
+      entries,
+      layoutEntries: entries,
+      categories,
+      focusDays: [],
+      today,
+      scale: 'month',
+      anchor: today,
+      range,
+    },
+  });
+  try {
+    await flushPromises();
+    const rows = () =>
+      w
+        .findAll('.timeline-list-lane')
+        .map((row) => [
+          row.attributes('data-category-id'),
+          row.attributes('data-lane'),
+        ]);
+    const baseline = rows();
+    expect(
+      w
+        .get('.timeline-category-label[data-category-id="games"]')
+        .attributes('style'),
+    ).toBe('top: 108px;');
+    expect(baseline).toEqual([
+      ['reading', '0'],
+      ['games', '1'],
+      ['games', '2'],
+      ['empty', '3'],
+    ]);
+    const gameLane = () =>
+      w
+        .get('.timeline-packed-item[data-entry-id="game-a"]')
+        .element.closest('.timeline-lane')
+        ?.getAttribute('data-lane');
+    expect(gameLane()).toBe('1');
+    await w.setProps({
+      entries: [entries[1], entries[2]].filter((e): e is EntryDto => !!e),
+    });
+    expect(rows()).toEqual(baseline);
+    expect(gameLane()).toBe('1');
+    expect(w.get('.timeline-category-button').text()).toContain('筛选内 0 项');
+    await w.setProps({
+      range: {
+        ...range,
+        start: dateOrdinal('2030-01-01'),
+        endExclusive: dateOrdinal('2030-02-01'),
+      },
+    });
+    expect(rows()).toEqual(baseline);
+    expect(w.findAll('.timeline-packed-item')).toHaveLength(0);
+    await w.setProps({ range, categoryId: 'games' });
+    expect(rows().map((row) => row[0])).toEqual(['games', 'games']);
+    await w.setProps({
+      entries,
+      categoryId: '',
+      categories: [...categories].reverse(),
+    });
+    expect(rows().map((row) => row[0])).toEqual([
+      'empty',
+      'games',
+      'games',
+      'reading',
+    ]);
+  } finally {
+    w.unmount();
+    resetRecordView();
+  }
+});
+
+it('keeps category labels aligned with their corresponding plot lanes', async () => {
   resetRecordView();
   const entries = [
     entry('middle', '2026-10-15', null),
@@ -40,22 +136,27 @@ it('uses matching track cells for single entries regardless of input order', asy
   try {
     await flushPromises();
     for (const cell of w.findAll('.timeline-list-lane')) {
-      const id = cell.get('.timeline-list-entry').attributes('data-entry-id');
       const lane = w.get(
         `.timeline-lane[data-lane="${cell.attributes('data-lane')}"]`,
       );
-      expect(
-        lane
-          .findAll('.timeline-packed-item')
-          .map((item) => item.attributes('data-entry-id')),
-      ).toEqual([id]);
+      expect(lane.attributes('data-category-id')).toBe(
+        cell.attributes('data-category-id'),
+      );
     }
+    expect(w.findAll('.timeline-entry-list .timeline-list-entry')).toHaveLength(
+      0,
+    );
     await w
       .get('.timeline-packed-item[data-entry-id="middle"]')
       .trigger('pointerenter');
+    expect(w.get('.packed-timeline').classes()).toContain('is-inspecting');
     expect(
-      w.get('.timeline-list-entry[data-entry-id="middle"]').classes(),
+      w.get('.timeline-packed-item[data-entry-id="middle"]').classes(),
     ).toContain('is-highlighted');
+    await w
+      .get('.timeline-packed-item[data-entry-id="middle"] .timeline-bar')
+      .trigger('click');
+    expect(w.emitted('view')?.at(-1)?.[0]).toMatchObject({ id: 'middle' });
   } finally {
     w.unmount();
     resetRecordView();
@@ -78,10 +179,13 @@ it('keeps status, duration and focus summaries for each packed entry and localiz
       scale: 'month',
       anchor: today,
     },
+    global: { stubs: { Teleport: true } },
   });
   try {
     await flushPromises();
     expect(w.findAll('.timeline-list-lane')).toHaveLength(1);
+    await w.get('.timeline-category-button').trigger('click');
+    await flushPromises();
     const first = w.get('.timeline-list-entry[data-entry-id="first"]');
     const second = w.get('.timeline-list-entry[data-entry-id="second"]');
     expect(first.get('.event-status').text()).toBe('已结束');
@@ -94,15 +198,20 @@ it('keeps status, duration and focus summaries for each packed entry and localiz
     );
     changeLanguage('en', false);
     await flushPromises();
-    expect(first.get('.event-status').text()).toBe('Ended');
-    expect(first.get('.timeline-entry-duration').text()).toBe('5 days');
-    expect(first.get('.gantt-focus-total').text()).toBe('1 focus day');
-    await first.trigger('pointerenter');
+    const translated = w.get('.timeline-list-entry[data-entry-id="first"]');
+    expect(translated.get('.event-status').text()).toBe('Ended');
+    expect(translated.get('.timeline-entry-duration').text()).toBe('5 days');
+    expect(translated.get('.gantt-focus-total').text()).toBe('1 focus day');
+    await translated.trigger('pointerenter');
     expect(
       w.get('.timeline-packed-item[data-entry-id="first"]').classes(),
     ).toContain('is-highlighted');
     expect(second.classes()).not.toContain('is-highlighted');
-    await first.get('.gantt-row-title button').trigger('click');
+    await w
+      .get(
+        '.timeline-list-entry[data-entry-id="first"] .gantt-row-title button',
+      )
+      .trigger('click');
     expect(w.emitted('view')?.at(-1)?.[0]).toMatchObject({ id: 'first' });
   } finally {
     w.unmount();
@@ -111,7 +220,7 @@ it('keeps status, duration and focus summaries for each packed entry and localiz
   }
 });
 
-it('packs unlimited ended entries into one matching cell and exposes collapsed entries without expanding the track', async () => {
+it('opens the full category list without expanding the track', async () => {
   resetRecordView();
   const entries = Array.from({ length: 12 }, (_, i) =>
     entry(
@@ -148,9 +257,9 @@ it('packs unlimited ended entries into one matching cell and exposes collapsed e
       w
         .findAll('.timeline-entry-list .timeline-list-entry')
         .map((item) => item.attributes('data-entry-id')),
-    ).toEqual(['0', '1']);
-    const more = w.get('.timeline-lane-more');
-    expect(more.text()).toBe('+10');
+    ).toEqual([]);
+    const more = w.get('.timeline-category-button');
+    expect(more.text()).toContain('筛选内 12 项');
     await more.trigger('click');
     await flushPromises();
     expect(more.attributes('aria-expanded')).toBe('true');
@@ -164,7 +273,7 @@ it('packs unlimited ended entries into one matching cell and exposes collapsed e
       w.get('.timeline-packed-item[data-entry-id="11"]').classes(),
     ).toContain('is-highlighted');
     expect(w.get('.packed-timeline').attributes('style')).toBe(height);
-    await w.get('[aria-label="关闭轨道事项"]').trigger('click');
+    await w.get('[aria-label="关闭分类事项"]').trigger('click');
     expect(document.activeElement).toBe(more.element);
     await more.trigger('click');
     await flushPromises();
@@ -205,6 +314,10 @@ it('synchronizes virtualized track scrolling and clamps both sides after filteri
     plot.element.scrollTop = 168;
     await plot.trigger('scroll');
     expect(list.element.scrollTop).toBe(168);
+    const centered = w.get<HTMLElement>('.timeline-category-label');
+    expect(centered.element.style.top).toBe(
+      `${168 + (height - laneHeight) / 2}px`,
+    );
     await w.setProps({ entries: entries.slice(0, 1) });
     await flushPromises();
     expect(list.element.scrollTop).toBe(0);
@@ -255,7 +368,7 @@ it('restores a single vertical position for both columns and resets stale positi
   }
 });
 
-it('keeps viewport height and existing tracks during zoom, then preserves the visible track anchor', async () => {
+it('keeps every track and its vertical position after zooming and panning into empty dates', async () => {
   vi.useFakeTimers();
   resetRecordView();
   const entries = [
@@ -278,25 +391,23 @@ it('keeps viewport height and existing tracks during zoom, then preserves the vi
   try {
     await flushPromises();
     const height = w.get('.packed-timeline').attributes('style');
-    const firstTrack = w
-      .get('.timeline-list-lane')
-      .get('.timeline-list-entry')
-      .attributes('data-entry-id');
-    w.get('.timeline-viewport').element.dispatchEvent(
+    const keys = () =>
+      w
+        .findAll('.timeline-list-lane')
+        .map((cell) => cell.attributes('data-lane'));
+    const before = keys();
+    const plot = w.get<HTMLElement>('.timeline-viewport');
+    plot.element.scrollTop = 3 * laneHeight;
+    await plot.trigger('scroll');
+    const scrolled = keys();
+    plot.element.dispatchEvent(
       new WheelEvent('wheel', { deltaY: 100, clientX: 40, cancelable: true }),
     );
     await w.setProps({ range: timelineCanvasWindow(entries, today, 'year') });
-    expect(w.findAll('.timeline-lane')).toHaveLength(1);
-    expect(
-      w
-        .get('.timeline-list-lane')
-        .get('.timeline-list-entry')
-        .attributes('data-entry-id'),
-    ).toBe(firstTrack);
     await vi.advanceTimersByTimeAsync(200);
     await flushPromises();
-    expect(w.findAll('.timeline-lane').length).toBeGreaterThan(1);
-    expect(w.get('.packed-timeline').attributes('style')).toBe(height);
+    expect(keys()).toEqual(scrolled);
+    expect(plot.element.scrollTop).toBe(3 * laneHeight);
     await w.setProps({
       range: {
         ...month,
@@ -305,55 +416,16 @@ it('keeps viewport height and existing tracks during zoom, then preserves the vi
       },
     });
     await flushPromises();
-    expect(w.findAll('.timeline-lane')).toHaveLength(0);
+    expect(keys()).toEqual(scrolled);
+    expect(w.findAll('.timeline-packed-item')).toHaveLength(0);
     expect(w.get('.packed-timeline').attributes('style')).toBe(height);
+    plot.element.scrollTop = 0;
+    await plot.trigger('scroll');
+    expect(keys()).toEqual(before);
   } finally {
     w.unmount();
     resetRecordView();
     vi.useRealTimers();
-  }
-});
-
-it('preserves the top visible track when zoom reveals earlier tracks above it', async () => {
-  resetRecordView();
-  const entries = [
-    ...Array.from({ length: 10 }, (_, i) =>
-      entry(`recent-${i}`, `2026-10-${String(i + 1).padStart(2, '0')}`, null),
-    ),
-    ...Array.from({ length: 8 }, (_, i) =>
-      entry(`old-${i}`, '2026-05-01', '2026-05-10'),
-    ),
-  ];
-  const w = mount(TimelineView, {
-    props: {
-      entries,
-      focusDays: [],
-      today,
-      scale: 'month',
-      anchor: today,
-      sort: 'asc',
-      range: timelineCanvasWindow(entries, today, 'month'),
-    },
-  });
-  try {
-    await flushPromises();
-    const plot = w.get<HTMLElement>('.timeline-viewport');
-    plot.element.scrollTop = 3 * laneHeight;
-    await plot.trigger('scroll');
-    await w.setProps({ range: timelineCanvasWindow(entries, today, 'year') });
-    await flushPromises();
-    expect(plot.element.scrollTop).toBe(11 * laneHeight);
-    expect(w.get<HTMLElement>('.timeline-entry-list').element.scrollTop).toBe(
-      11 * laneHeight,
-    );
-    expect(
-      w
-        .get('.timeline-list-lane[data-lane="11"] [data-entry-id]')
-        .attributes('data-entry-id'),
-    ).toBe('recent-3');
-  } finally {
-    w.unmount();
-    resetRecordView();
   }
 });
 
