@@ -340,6 +340,39 @@ const rows = computed(() =>
 const visibleLanes = computed(() =>
   tracks.value.slice(rows.value.start, rows.value.end),
 );
+interface CategoryLabel {
+  categoryId: string;
+  name: string;
+  color: string;
+  count: number;
+  top: number;
+  bottom: number;
+}
+const categoryLabels = computed(() => {
+  const labels: CategoryLabel[] = [];
+  tracks.value.forEach((track, index) => {
+    if (track.laneIndex === 0)
+      labels.push({
+        categoryId: track.categoryId,
+        name: track.name,
+        color: track.color,
+        count: track.count,
+        top: index * laneHeight,
+        bottom: (index + 1) * laneHeight,
+      });
+    else {
+      const current = labels.at(-1);
+      if (current) current.bottom = (index + 1) * laneHeight;
+    }
+  });
+  return labels.flatMap((label) => {
+    const top = Math.max(label.top, scrollTop.value);
+    const bottom = Math.min(label.bottom, scrollTop.value + bodyHeight.value);
+    // Center within the visible group, keeping a full label inside its bounds.
+    if (bottom - top < 60) return [];
+    return [{ ...label, labelTop: (top + bottom - laneHeight) / 2 }];
+  });
+});
 function highlight(id: string) {
   highlighted.value = id;
 }
@@ -712,40 +745,43 @@ defineExpose({ locateToday });
           :style="{ '--category-color': track.color }"
           :data-lane="rows.start + index"
           :data-category-id="track.categoryId"
+        ></div>
+        <div :style="{ height: rows.after + 'px' }"></div>
+        <div
+          v-for="category in categoryLabels"
+          :key="category.categoryId"
+          class="timeline-category-label"
+          :data-category-id="category.categoryId"
+          :style="{ top: category.labelTop + 'px' }"
         >
           <button
-            v-if="
-              track.laneIndex === 0 ||
-              rows.start + index === Math.ceil(scrollTop / laneHeight)
-            "
             type="button"
             class="timeline-category-button"
-            :disabled="!track.count"
-            :title="track.name"
+            :disabled="!category.count"
+            :title="category.name"
             :aria-label="
               tr('timelineView.categoryEntries', {
-                category: track.name,
-                count: track.count,
+                category: category.name,
+                count: category.count,
               })
             "
             :aria-controls="categoryPanelId"
-            :aria-expanded="expandedCategory === track.categoryId"
-            @click="openCategory(track.categoryId, $event)"
+            :aria-expanded="expandedCategory === category.categoryId"
+            @click="openCategory(category.categoryId, $event)"
           >
             <span class="timeline-category-title">
               <span
                 class="category-dot"
-                :style="{ background: track.color }"
+                :style="{ background: category.color }"
                 aria-hidden="true"
               ></span>
-              <span>{{ track.name }}</span>
+              <span>{{ category.name }}</span>
             </span>
             <small>{{
-              tr('timelineView.entryCount', { count: track.count })
+              tr('timelineView.entryCount', { count: category.count })
             }}</small>
           </button>
         </div>
-        <div :style="{ height: rows.after + 'px' }"></div>
       </div>
     </aside>
     <div

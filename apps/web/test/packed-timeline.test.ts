@@ -72,6 +72,11 @@ it('keeps empty categories and overlapping subtracks in sidebar order across fil
           row.attributes('data-lane'),
         ]);
     const baseline = rows();
+    expect(
+      w
+        .get('.timeline-category-label[data-category-id="games"]')
+        .attributes('style'),
+    ).toBe('top: 108px;');
     expect(baseline).toEqual([
       ['reading', '0'],
       ['games', '1'],
@@ -309,11 +314,10 @@ it('synchronizes virtualized track scrolling and clamps both sides after filteri
     plot.element.scrollTop = 168;
     await plot.trigger('scroll');
     expect(list.element.scrollTop).toBe(168);
-    expect(
-      w
-        .find('.timeline-list-lane[data-lane="3"] .timeline-category-button')
-        .exists(),
-    ).toBe(true);
+    const centered = w.get<HTMLElement>('.timeline-category-label');
+    expect(centered.element.style.top).toBe(
+      `${168 + (height - laneHeight) / 2}px`,
+    );
     await w.setProps({ entries: entries.slice(0, 1) });
     await flushPromises();
     expect(list.element.scrollTop).toBe(0);

@@ -2039,6 +2039,7 @@ dd {
   font-size: 10px;
 }
 .timeline-entry-list {
+  position: relative;
   height: var(--timeline-body-height);
   overflow: auto;
   overscroll-behavior: contain;
@@ -2087,6 +2088,16 @@ dd {
   color: var(--ink);
   text-align: left;
   cursor: pointer;
+  pointer-events: auto;
+}
+.timeline-category-label {
+  position: absolute;
+  inset-inline: 6px;
+  z-index: 1;
+  height: var(--timeline-lane-height);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
 }
 .timeline-category-button:hover:not(:disabled),
 .timeline-category-button[aria-expanded='true'] {
@@ -2112,6 +2123,10 @@ dd {
 .timeline-category-button small {
   color: var(--muted);
   font-size: 11px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .timeline-list-lane.is-category-start,
 .packed-timeline .timeline-lane.is-category-start {
