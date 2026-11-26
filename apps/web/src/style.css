@@ -2049,11 +2049,30 @@ dd {
 .timeline-list-lane {
   position: relative;
   height: var(--timeline-lane-height);
-  border-bottom: 1px solid var(--timeline-divider);
+  border-bottom: 0;
   display: flex;
   flex-direction: column;
   justify-content: center;
   padding: 3px 6px;
+  background: color-mix(in srgb, var(--category-color) 6%, var(--surface));
+}
+.timeline-list-lane::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--category-color);
+  pointer-events: none;
+}
+.timeline-list-lane.is-category-start::before {
+  top: 9px;
+  border-start-start-radius: 3px;
+  border-start-end-radius: 3px;
+}
+.timeline-list-lane.is-category-end::before {
+  bottom: 9px;
+  border-end-start-radius: 3px;
+  border-end-end-radius: 3px;
 }
 .timeline-category-button {
   display: flex;
@@ -2090,13 +2109,9 @@ dd {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.timeline-category-button small,
-.timeline-category-continuation {
+.timeline-category-button small {
   color: var(--muted);
   font-size: 11px;
-}
-.timeline-category-continuation {
-  padding-inline: 10px;
 }
 .timeline-list-lane.is-category-start,
 .packed-timeline .timeline-lane.is-category-start {
@@ -2278,8 +2293,9 @@ dd {
 }
 .packed-timeline .timeline-lane {
   height: var(--timeline-lane-height);
-  border-bottom: 1px solid var(--timeline-divider);
+  border-bottom: 0;
   position: relative;
+  background: color-mix(in srgb, var(--category-color) 3%, var(--surface));
 }
 .timeline-packed-item {
   position: absolute;

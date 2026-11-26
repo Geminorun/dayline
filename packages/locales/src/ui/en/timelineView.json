@@ -21,7 +21,6 @@
   "timelineView.categories": "Categories",
   "timelineView.fixedCategoryOrder": "Fixed category order",
   "timelineView.entryCount": "{count} matching entries",
-  "timelineView.categorySubtrack": "Track {index}",
   "timelineView.categoryEntries": "{category} · {count} entries",
   "timelineView.closeCategoryEntries": "Close category entries"
 }

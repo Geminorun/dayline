@@ -21,7 +21,6 @@
   "timelineView.categories": "事项分类",
   "timelineView.fixedCategoryOrder": "分类顺序固定",
   "timelineView.entryCount": "筛选内 {count} 项",
-  "timelineView.categorySubtrack": "并行 · 第 {index} 行",
   "timelineView.categoryEntries": "{category} · {count} 个事项",
   "timelineView.closeCategoryEntries": "关闭分类事项"
 }

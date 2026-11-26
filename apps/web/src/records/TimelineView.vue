@@ -314,6 +314,7 @@ const tracks = computed(() =>
     key: `${lane.categoryId}:${lane.index}`,
     categoryId: lane.categoryId,
     laneIndex: lane.index,
+    categoryEnd: entryLanes.value[index + 1]?.categoryId !== lane.categoryId,
     name:
       categoryMetadata.value.get(lane.categoryId)?.name ??
       tr('common.categoryHasChanged'),
@@ -704,7 +705,11 @@ defineExpose({ locateToday });
           v-for="(track, index) in visibleLanes"
           :key="track.key"
           class="timeline-list-lane"
-          :class="{ 'is-category-start': track.laneIndex === 0 }"
+          :class="{
+            'is-category-start': track.laneIndex === 0,
+            'is-category-end': track.categoryEnd,
+          }"
+          :style="{ '--category-color': track.color }"
           :data-lane="rows.start + index"
           :data-category-id="track.categoryId"
         >
@@ -739,13 +744,6 @@ defineExpose({ locateToday });
               tr('timelineView.entryCount', { count: track.count })
             }}</small>
           </button>
-          <small v-else class="timeline-category-continuation">
-            {{
-              tr('timelineView.categorySubtrack', {
-                index: track.laneIndex + 1,
-              })
-            }}
-          </small>
         </div>
         <div :style="{ height: rows.after + 'px' }"></div>
       </div>
@@ -833,7 +831,11 @@ defineExpose({ locateToday });
             v-for="(track, index) in visibleLanes"
             :key="track.key"
             class="timeline-row timeline-track timeline-lane"
-            :class="{ 'is-category-start': track.laneIndex === 0 }"
+            :class="{
+              'is-category-start': track.laneIndex === 0,
+              'is-category-end': track.categoryEnd,
+            }"
+            :style="{ '--category-color': track.color }"
             :data-category-id="track.categoryId"
             :data-lane="rows.start + index"
           >
