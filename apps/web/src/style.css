@@ -2014,7 +2014,7 @@ dd {
 }
 
 .packed-timeline {
-  --timeline-label-width: 260px;
+  --timeline-label-width: 180px;
   --timeline-divider: color-mix(in srgb, var(--line) 65%, var(--surface));
   position: relative;
   display: grid;
@@ -2054,6 +2054,53 @@ dd {
   flex-direction: column;
   justify-content: center;
   padding: 3px 6px;
+}
+.timeline-category-button {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.timeline-category-button:hover:not(:disabled),
+.timeline-category-button[aria-expanded='true'] {
+  background: var(--surface-subtle);
+}
+.timeline-category-button:disabled {
+  cursor: default;
+  opacity: 1;
+}
+.timeline-category-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.timeline-category-title > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.timeline-category-button small,
+.timeline-category-continuation {
+  color: var(--muted);
+  font-size: 11px;
+}
+.timeline-category-continuation {
+  padding-inline: 10px;
+}
+.timeline-list-lane.is-category-start,
+.packed-timeline .timeline-lane.is-category-start {
+  border-top: 1px solid var(--line);
 }
 .timeline-list-entry.gantt-row-label {
   position: relative;
@@ -2297,7 +2344,7 @@ dd {
 }
 @media (max-width: 600px) {
   .packed-timeline {
-    --timeline-label-width: 180px;
+    --timeline-label-width: 120px;
   }
   .timeline-entry-column .gantt-heading-label {
     padding-inline: 10px;

@@ -158,7 +158,7 @@ it('zooms around the pointer and allows an item click immediately after panning'
       bubbles: true,
       cancelable: true,
     });
-    w.get('.gantt-row-label').element.dispatchEvent(leftWheel);
+    w.get('.timeline-category-button').element.dispatchEvent(leftWheel);
     expect(leftWheel.defaultPrevented).toBe(false);
     expect(w.emitted('camera')).toHaveLength(1);
     function pointer(target: Element, type: string, x: number, id = 1) {
@@ -174,7 +174,7 @@ it('zooms around the pointer and allows an item click immediately after panning'
     pointer(viewport.element, 'pointermove', 60);
     expect(w.emitted('camera')).toHaveLength(2);
     pointer(viewport.element, 'pointerup', 60);
-    const item = w.get('.gantt-row-title button');
+    const item = w.get('.timeline-packed-item .timeline-bar');
     pointer(item.element, 'pointerdown', 60, 2);
     await item.trigger('click');
     expect(w.emitted('view')?.[0]?.[0]).toEqual(entry);

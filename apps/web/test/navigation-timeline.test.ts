@@ -133,6 +133,8 @@ describe('routed auth and complete timeline accessibility', () => {
     const first = wrapper.findAll('.date-list button')[0];
     await first?.trigger('click');
     expect(wrapper.emitted('day')?.[0]?.[0]).toBe(focusDays[0]?.date);
+    await wrapper.get('.timeline-category-button').trigger('click');
+    await flushPromises();
     await wrapper.get('.timeline-list-entry button').trigger('click');
     expect(wrapper.emitted('view')?.[0]?.[0]).toMatchObject({ id: '0' });
     const viewport = wrapper.get('.timeline-viewport');

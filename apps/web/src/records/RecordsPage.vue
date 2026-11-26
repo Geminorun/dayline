@@ -720,10 +720,6 @@ const recent = computed(
               <p>{{ tr('records.scrollEntryOnTheLeftZoomAnd') }}</p>
             </div>
             <div class="timeline-controls">
-              <select v-model="filter.sort" :aria-label="tr('common.sortBy')">
-                <option value="asc">{{ tr('common.startDate2') }}</option>
-                <option value="desc">{{ tr('common.startDate3') }}</option>
-              </select>
               <select
                 :value="scale"
                 :aria-label="tr('common.timelineRange')"
@@ -794,13 +790,14 @@ const recent = computed(
             v-if="isCalendarDate(anchor)"
             ref="timeline"
             :entries="filtered"
+            :layout-entries="snapshot.entries"
+            :category-id="filter.categoryId"
             :range="range"
             :focus-days="snapshot.focusDays"
             :categories="snapshot.categories"
             :today="today"
             :scale="scale"
             :anchor="anchor"
-            :sort="filter.sort"
             :readonly="readonly"
             :busy="busy"
             @view="(entry) => open(entry, false)"

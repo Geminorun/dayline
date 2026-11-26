@@ -17,5 +17,11 @@
   "timelineView.review": "Review {value0}",
   "timelineView.moreEntries": "Show {count} more entries on this track",
   "timelineView.trackEntries": "Track entries · {count}",
-  "timelineView.closeTrackEntries": "Close track entries"
+  "timelineView.closeTrackEntries": "Close track entries",
+  "timelineView.categories": "Categories",
+  "timelineView.fixedCategoryOrder": "Fixed category order",
+  "timelineView.entryCount": "{count} matching entries",
+  "timelineView.categorySubtrack": "Track {index}",
+  "timelineView.categoryEntries": "{category} · {count} entries",
+  "timelineView.closeCategoryEntries": "Close category entries"
 }

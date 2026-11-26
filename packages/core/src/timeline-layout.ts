@@ -145,6 +145,38 @@ export function timelineEntryLanes<T extends ViewEntry>(
   return [...ongoing, ...history];
 }
 
+export interface TimelineCategoryLane<T extends ViewEntry = ViewEntry> {
+  categoryId: string;
+  index: number;
+  entries: T[];
+}
+
+/** Keep category slots, including empty categories, independent of the camera and filters. */
+export function timelineCategoryLanes<T extends ViewEntry>(
+  entries: readonly T[],
+  categories: readonly { id: string }[],
+  today: string,
+): TimelineCategoryLane<T>[] {
+  const byCategory = new Map<string, T[]>();
+  for (const entry of entries) {
+    if (entry.deletedAt) continue;
+    const category = byCategory.get(entry.categoryId) ?? [];
+    category.push(entry);
+    byCategory.set(entry.categoryId, category);
+  }
+  const ids = new Set(categories.map((category) => category.id));
+  // Keep incomplete metadata deterministic without losing orphaned entries.
+  for (const id of [...byCategory.keys()].sort()) ids.add(id);
+  return [...ids].flatMap((categoryId) => {
+    const lanes = timelineEntryLanes(byCategory.get(categoryId) ?? [], today);
+    return (lanes.length ? lanes : [[]]).map((lane, index) => ({
+      categoryId,
+      index,
+      entries: lane,
+    }));
+  });
+}
+
 /** Project stable tracks without expanding short spans into neighboring entries. */
 export function projectTimelineLanes<T extends ViewEntry>(
   lanes: readonly (readonly T[])[],
