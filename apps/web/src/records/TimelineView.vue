@@ -37,7 +37,6 @@ import type { CategoryDto, EntryDto, FocusDayDto } from '@dayline/contracts';
 const props = defineProps<{
   categories?: CategoryDto[];
   entries: EntryDto[];
-  layoutEntries?: EntryDto[];
   categoryId?: string;
   focusDays: FocusDayDto[];
   today: string;
@@ -80,11 +79,7 @@ const plotWidth = ref(900);
 const sourceWindow = computed(
   () =>
     props.range ??
-    timelineCanvasWindow(
-      props.layoutEntries ?? props.entries,
-      props.today,
-      props.scale,
-    ),
+    timelineCanvasWindow(props.entries, props.today, props.scale),
 );
 const window = computed(() => {
   const source = sourceWindow.value,
@@ -267,13 +262,10 @@ const groups = computed(() =>
 );
 const entryLanes = computed(() =>
   timelineCategoryLanes(
-    props.layoutEntries ?? props.entries,
+    props.entries,
     props.categories ?? [],
     props.today,
   ).filter((lane) => !props.categoryId || lane.categoryId === props.categoryId),
-);
-const displayedIds = computed(
-  () => new Set(props.entries.map((entry) => entry.id)),
 );
 const categoryEntries = computed(() => {
   const categories = new Map<string, EntryDto[]>();
@@ -298,9 +290,7 @@ const categoryMetadata = computed(
 );
 const projected = computed(() =>
   projectTimelineLanes(
-    entryLanes.value.map((lane) =>
-      lane.entries.filter((entry) => displayedIds.value.has(entry.id)),
-    ),
+    entryLanes.value.map((lane) => lane.entries),
     props.today,
     window.value,
     groups.value,

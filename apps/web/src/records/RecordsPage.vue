@@ -790,7 +790,6 @@ const recent = computed(
             v-if="isCalendarDate(anchor)"
             ref="timeline"
             :entries="filtered"
-            :layout-entries="snapshot.entries"
             :category-id="filter.categoryId"
             :range="range"
             :focus-days="snapshot.focusDays"
@@ -806,7 +805,7 @@ const recent = computed(
             @day="(date) => router.push({ path: '/day', query: { date } })"
           >
             <template #empty>{{
-              hasFilter
+              snapshot.entries.some((entry) => !entry.deletedAt)
                 ? tr('records.thereAreNoMatchingRecordsHereTry')
                 : tr('records.theTimelineIsStillEmptyLetS')
             }}</template>

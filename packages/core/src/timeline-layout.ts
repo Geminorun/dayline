@@ -65,6 +65,7 @@ function partitionIntervals<
   placements: T[],
   today: string,
   previous: ReadonlyMap<string, number>,
+  reserveOngoing = true,
 ): T[][] {
   placements.sort(
     (a, b) =>
@@ -107,7 +108,7 @@ function partitionIntervals<
       lanes.push([]);
     }
     // Each ongoing entry keeps its own lane, including future-starting entries.
-    if (entryStatus(placement.entry, today) === 'ongoing')
+    if (reserveOngoing && entryStatus(placement.entry, today) === 'ongoing')
       ongoingLanes.add(lane);
     placement.lane = lane;
     lanes[lane]?.push(placement);
@@ -116,12 +117,11 @@ function partitionIntervals<
   return lanes;
 }
 
-/** Camera-independent membership: ongoing entries own a track; history reuses dates. */
-export function timelineEntryLanes<T extends ViewEntry>(
+function entryIntervals<T extends ViewEntry>(
   entries: readonly T[],
   today: string,
-): T[][] {
-  const intervals = entries
+) {
+  return entries
     .filter((entry) => !entry.deletedAt)
     .map((entry) => ({
       entry,
@@ -133,6 +133,14 @@ export function timelineEntryLanes<T extends ViewEntry>(
           dateOrdinal(entry.endDate ?? today),
         ) + 1,
     }));
+}
+
+/** Camera-independent membership: ongoing entries own a track; history reuses dates. */
+export function timelineEntryLanes<T extends ViewEntry>(
+  entries: readonly T[],
+  today: string,
+): T[][] {
+  const intervals = entryIntervals(entries, today);
   const ongoing = intervals
     .filter(({ entry }) => entryStatus(entry, today) === 'ongoing')
     .sort((a, b) => a.left - b.left || a.entry.id.localeCompare(b.entry.id))
@@ -151,7 +159,7 @@ export interface TimelineCategoryLane<T extends ViewEntry = ViewEntry> {
   entries: T[];
 }
 
-/** Keep category slots, including empty categories, independent of the camera and filters. */
+/** Compact matching entries by category and real dates, independently of the camera. */
 export function timelineCategoryLanes<T extends ViewEntry>(
   entries: readonly T[],
   categories: readonly { id: string }[],
@@ -168,11 +176,16 @@ export function timelineCategoryLanes<T extends ViewEntry>(
   // Keep incomplete metadata deterministic without losing orphaned entries.
   for (const id of [...byCategory.keys()].sort()) ids.add(id);
   return [...ids].flatMap((categoryId) => {
-    const lanes = timelineEntryLanes(byCategory.get(categoryId) ?? [], today);
-    return (lanes.length ? lanes : [[]]).map((lane, index) => ({
+    const lanes = partitionIntervals(
+      entryIntervals(byCategory.get(categoryId) ?? [], today),
+      today,
+      new Map(),
+      false,
+    );
+    return lanes.map((lane, index) => ({
       categoryId,
       index,
-      entries: lane,
+      entries: lane.map(({ entry }) => entry),
     }));
   });
 }

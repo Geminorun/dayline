@@ -37,7 +37,7 @@ const category = (id: string, name: string): CategoryDto => ({
   updatedAt: now,
 });
 
-it('keeps empty categories and overlapping subtracks in sidebar order across filters and camera changes', async () => {
+it('compacts explicit filters while preserving category order and camera-independent tracks', async () => {
   resetRecordView();
   const categories = [
     category('reading', '阅读'),
@@ -53,7 +53,6 @@ it('keeps empty categories and overlapping subtracks in sidebar order across fil
   const w = mount(TimelineView, {
     props: {
       entries,
-      layoutEntries: entries,
       categories,
       focusDays: [],
       today,
@@ -81,7 +80,6 @@ it('keeps empty categories and overlapping subtracks in sidebar order across fil
       ['reading', '0'],
       ['games', '1'],
       ['games', '2'],
-      ['empty', '3'],
     ]);
     const gameLane = () =>
       w
@@ -92,9 +90,15 @@ it('keeps empty categories and overlapping subtracks in sidebar order across fil
     await w.setProps({
       entries: [entries[1], entries[2]].filter((e): e is EntryDto => !!e),
     });
-    expect(rows()).toEqual(baseline);
-    expect(gameLane()).toBe('1');
-    expect(w.get('.timeline-category-button').text()).toContain('筛选内 0 项');
+    const filteredRows = [
+      ['games', '0'],
+      ['games', '1'],
+    ];
+    expect(rows()).toEqual(filteredRows);
+    expect(gameLane()).toBe('0');
+    expect(
+      w.find('.timeline-category-label[data-category-id="reading"]').exists(),
+    ).toBe(false);
     await w.setProps({
       range: {
         ...range,
@@ -102,7 +106,7 @@ it('keeps empty categories and overlapping subtracks in sidebar order across fil
         endExclusive: dateOrdinal('2030-02-01'),
       },
     });
-    expect(rows()).toEqual(baseline);
+    expect(rows()).toEqual(filteredRows);
     expect(w.findAll('.timeline-packed-item')).toHaveLength(0);
     await w.setProps({ range, categoryId: 'games' });
     expect(rows().map((row) => row[0])).toEqual(['games', 'games']);
@@ -111,12 +115,10 @@ it('keeps empty categories and overlapping subtracks in sidebar order across fil
       categoryId: '',
       categories: [...categories].reverse(),
     });
-    expect(rows().map((row) => row[0])).toEqual([
-      'empty',
-      'games',
-      'games',
-      'reading',
-    ]);
+    expect(rows().map((row) => row[0])).toEqual(['games', 'games', 'reading']);
+    await w.setProps({ entries: [] });
+    expect(rows()).toEqual([]);
+    expect(w.findAll('.timeline-category-label')).toHaveLength(0);
   } finally {
     w.unmount();
     resetRecordView();
