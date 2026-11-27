@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import {
   dateOrdinal,
+  ordinalDate,
   projectTimelineLanes,
   timelineCategoryLanes,
 } from '../src/index.js';
@@ -20,7 +21,7 @@ const entry = (
   endDate,
 });
 
-it('uses the supplied category order and reserves one slot for empty categories', () => {
+it('uses the supplied category order and omits empty categories', () => {
   const categories = [{ id: 'reading' }, { id: 'games' }, { id: 'other' }];
   const entries = [
     entry('game', 'games', '2026-01-01', '2026-01-02'),
@@ -36,7 +37,6 @@ it('uses the supplied category order and reserves one slot for empty categories'
   ).toEqual([
     ['reading', 0, ['book']],
     ['games', 0, ['game']],
-    ['other', 0, []],
   ]);
   expect(
     timelineCategoryLanes([...entries].reverse(), categories, today),
@@ -45,7 +45,7 @@ it('uses the supplied category order and reserves one slot for empty categories'
     timelineCategoryLanes(entries, [...categories].reverse(), today).map(
       (lane) => lane.categoryId,
     ),
-  ).toEqual(['other', 'games', 'reading']);
+  ).toEqual(['games', 'reading']);
 });
 
 it('only reuses ended intervals within their own category and keeps inclusive overlaps separate', () => {
@@ -93,15 +93,13 @@ it('keeps all slots across camera changes and excludes deleted entries from allo
       todayX: null,
       focusUnit: 'day',
     });
-    expect(projected).toHaveLength(3);
+    expect(projected).toHaveLength(1);
     expect(projected.flat().some((item) => item.entry.id === 'deleted')).toBe(
       false,
     );
   }
   expect(lanes.map((lane) => lane.entries.map((e) => e.id))).toEqual([
-    ['ongoing'],
-    ['old'],
-    [],
+    ['old', 'ongoing'],
   ]);
 });
 
@@ -116,5 +114,84 @@ it('does not lose entries when category metadata is incomplete', () => {
       [{ id: 'known' }, { id: 'known' }],
       today,
     ).map((lane) => lane.categoryId),
-  ).toEqual(['known', 'a', 'b']);
+  ).toEqual(['a', 'b']);
+});
+
+it('packs historical, ongoing and planned entries together when their true dates do not overlap', () => {
+  const entries = [
+    entry('past', 'work', '2026-10-01', '2026-10-05'),
+    entry('past-next', 'work', '2026-10-06', '2026-10-10'),
+    entry('ongoing', 'work', '2026-11-10', null),
+    entry('planned', 'work', '2026-12-01', '2026-12-10'),
+    entry('future-open', 'work', '2026-12-11', null),
+  ];
+  const lanes = timelineCategoryLanes(entries, [{ id: 'work' }], today);
+  expect(lanes).toHaveLength(1);
+  expect(lanes[0]?.entries.map((e) => e.id)).toEqual([
+    'past',
+    'past-next',
+    'ongoing',
+    'planned',
+    'future-open',
+  ]);
+  expect(
+    timelineCategoryLanes([...entries].reverse(), [{ id: 'work' }], today),
+  ).toEqual(lanes);
+});
+
+it('only separates actual overlapping dates and compacts again after an explicit status filter', () => {
+  const entries = [
+    entry('a', 'work', '2026-10-01', '2026-10-05'),
+    entry('b', 'work', '2026-10-03', '2026-10-05'),
+    entry('c', 'work', '2026-10-05', '2026-10-08'),
+    entry('ongoing', 'work', '2026-11-01', null),
+  ];
+  const categories = [{ id: 'work' }, { id: 'empty' }];
+  expect(timelineCategoryLanes(entries, categories, today)).toHaveLength(3);
+  const ongoing = entries.filter((entry) => entry.endDate === null);
+  expect(timelineCategoryLanes(ongoing, categories, today)).toHaveLength(1);
+  expect(timelineCategoryLanes([], categories, today)).toEqual([]);
+});
+
+it('uses exactly the maximum concurrent interval count for mixed-status categories', () => {
+  const firstDay = dateOrdinal('2026-10-01');
+  const entries = Array.from({ length: 200 }, (_, index) => {
+    const start = firstDay + ((index * 17) % 80);
+    return entry(
+      String(index),
+      'work',
+      ordinalDate(start),
+      index % 4 ? ordinalDate(start + (index % 13)) : null,
+    );
+  });
+  const events = new Map<number, number>();
+  for (const item of entries) {
+    const start = dateOrdinal(item.startDate);
+    const end = Math.max(start, dateOrdinal(item.endDate ?? today)) + 1;
+    events.set(start, (events.get(start) ?? 0) + 1);
+    events.set(end, (events.get(end) ?? 0) - 1);
+  }
+  let concurrent = 0,
+    peak = 0;
+  for (const [, delta] of [...events].sort((a, b) => a[0] - b[0])) {
+    concurrent += delta;
+    peak = Math.max(peak, concurrent);
+  }
+  const lanes = timelineCategoryLanes(entries, [{ id: 'work' }], today);
+  expect(lanes).toHaveLength(peak);
+  for (const lane of lanes)
+    for (let index = 1; index < lane.entries.length; index++) {
+      const previous = lane.entries[index - 1];
+      const next = lane.entries[index];
+      if (!previous || !next) throw new Error('Missing lane entry');
+      expect(
+        Math.max(
+          dateOrdinal(previous.startDate),
+          dateOrdinal(previous.endDate ?? today),
+        ),
+      ).toBeLessThan(dateOrdinal(next.startDate));
+    }
+  expect(
+    timelineCategoryLanes([...entries].reverse(), [{ id: 'work' }], today),
+  ).toEqual(lanes);
 });

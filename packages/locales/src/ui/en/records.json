@@ -7,7 +7,7 @@
   "records.item": "{value0} item",
   "records.itemsItemsFocus": "Entries: {value0}; focused: {value1}.",
   "records.everyExperienceHasItsOwnSpan": "Every experience has its own span",
-  "records.scrollEntryOnTheLeftZoomAnd": "Categories stay in place. Zoom or drag the timeline; select an entry for details.",
+  "records.scrollEntryOnTheLeftZoomAnd": "Grouped by category. Zoom or drag the timeline; select an entry for details.",
   "records.thereAreNoMatchingRecordsHereTry": "There are no matching records here. Try other categories, statuses or keywords.",
   "records.theTimelineIsStillEmptyLetS": "The timeline is still empty, let’s record the first experience.",
   "records.theUnfinishedEntryIsAutomaticallyExtendedTo": "Ongoing entries extend to today",
